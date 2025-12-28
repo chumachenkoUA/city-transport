@@ -1,4 +1,11 @@
-import { bigint, bigserial, foreignKey, numeric, pgTable, unique } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  foreignKey,
+  numeric,
+  pgTable,
+  unique,
+} from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 
 export const routePoints = pgTable(

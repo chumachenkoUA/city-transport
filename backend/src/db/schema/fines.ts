@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { trips } from './trips';
 import { users } from './users';
 

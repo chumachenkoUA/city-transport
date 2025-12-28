@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { fines } from './fines';
 
 export const fineAppeals = pgTable(
@@ -17,7 +24,9 @@ export const fineAppeals = pgTable(
   () => ({
     fineAppealsStatusCheck: check(
       'fine_appeals_status_check',
-      sql.raw(`"status" in ('Подано', 'Перевіряється', 'Відхилено', 'Прийнято')`),
+      sql.raw(
+        `"status" in ('Подано', 'Перевіряється', 'Відхилено', 'Прийнято')`,
+      ),
     ),
   }),
 );

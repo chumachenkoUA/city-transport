@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, integer, pgTable, time } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  integer,
+  pgTable,
+  time,
+} from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 
 export const schedules = pgTable(

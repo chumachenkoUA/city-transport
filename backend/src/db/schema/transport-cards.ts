@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, numeric, pgTable, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  numeric,
+  pgTable,
+  text,
+} from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const transportCards = pgTable(

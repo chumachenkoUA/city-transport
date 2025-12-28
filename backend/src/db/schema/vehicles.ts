@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, integer, pgTable, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  integer,
+  pgTable,
+  text,
+} from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 import { transportTypes } from './transport-types';
 

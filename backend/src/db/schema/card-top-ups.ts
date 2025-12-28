@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, numeric, pgTable, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  numeric,
+  pgTable,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { transportCards } from './transport-cards';
 
 export const cardTopUps = pgTable(

@@ -1,4 +1,10 @@
-import { bigint, bigserial, numeric, pgTable, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  numeric,
+  pgTable,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const userGpsLogs = pgTable('user_gps_logs', {
