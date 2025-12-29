@@ -2,26 +2,27 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { CardTopUpsModule } from './card-top-ups/card-top-ups.module';
-import { ComplaintsSuggestionsModule } from './complaints-suggestions/complaints-suggestions.module';
 import { DbModule } from './db/db.module';
-import { DriverVehicleAssignmentsModule } from './driver-vehicle-assignments/driver-vehicle-assignments.module';
-import { DriversModule } from './drivers/drivers.module';
-import { FineAppealsModule } from './fine-appeals/fine-appeals.module';
-import { FinesModule } from './fines/fines.module';
-import { RoutePointsModule } from './route-points/route-points.module';
-import { RouteStopsModule } from './route-stops/route-stops.module';
-import { RoutesModule } from './routes/routes.module';
-import { SchedulesModule } from './schedules/schedules.module';
-import { StopsModule } from './stops/stops.module';
-import { TicketsModule } from './tickets/tickets.module';
-import { TransportCardsModule } from './transport-cards/transport-cards.module';
-import { TransportTypesModule } from './transport-types/transport-types.module';
-import { TripsModule } from './trips/trips.module';
-import { UserGpsLogsModule } from './user-gps-logs/user-gps-logs.module';
-import { UsersModule } from './users/users.module';
-import { VehicleGpsLogsModule } from './vehicle-gps-logs/vehicle-gps-logs.module';
-import { VehiclesModule } from './vehicles/vehicles.module';
+import { CardTopUpsModule } from './modules/card-top-ups/card-top-ups.module';
+import { ComplaintsSuggestionsModule } from './modules/complaints-suggestions/complaints-suggestions.module';
+import { DriverVehicleAssignmentsModule } from './modules/driver-vehicle-assignments/driver-vehicle-assignments.module';
+import { DriversModule } from './modules/drivers/drivers.module';
+import { FineAppealsModule } from './modules/fine-appeals/fine-appeals.module';
+import { FinesModule } from './modules/fines/fines.module';
+import { RoutePointsModule } from './modules/route-points/route-points.module';
+import { RouteStopsModule } from './modules/route-stops/route-stops.module';
+import { RoutesModule } from './modules/routes/routes.module';
+import { SchedulesModule } from './modules/schedules/schedules.module';
+import { StopsModule } from './modules/stops/stops.module';
+import { TicketsModule } from './modules/tickets/tickets.module';
+import { TransportCardsModule } from './modules/transport-cards/transport-cards.module';
+import { TransportTypesModule } from './modules/transport-types/transport-types.module';
+import { TripsModule } from './modules/trips/trips.module';
+import { UserGpsLogsModule } from './modules/user-gps-logs/user-gps-logs.module';
+import { UsersModule } from './modules/users/users.module';
+import { VehicleGpsLogsModule } from './modules/vehicle-gps-logs/vehicle-gps-logs.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { CtControllerModule } from './roles/ct-controller/ct-controller.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     ComplaintsSuggestionsModule,
     UserGpsLogsModule,
     VehicleGpsLogsModule,
+    CtControllerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
