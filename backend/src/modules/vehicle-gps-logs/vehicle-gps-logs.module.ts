@@ -7,5 +7,6 @@ import { VehicleGpsLogsService } from './vehicle-gps-logs.service';
   imports: [DbModule],
   controllers: [VehicleGpsLogsController],
   providers: [VehicleGpsLogsService],
+  exports: [VehicleGpsLogsService],
 })
 export class VehicleGpsLogsModule {}

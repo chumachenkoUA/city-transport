@@ -7,5 +7,6 @@ import { FineAppealsService } from './fine-appeals.service';
   imports: [DbModule],
   controllers: [FineAppealsController],
   providers: [FineAppealsService],
+  exports: [FineAppealsService],
 })
 export class FineAppealsModule {}

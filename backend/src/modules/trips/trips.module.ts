@@ -7,5 +7,6 @@ import { TripsService } from './trips.service';
   imports: [DbModule],
   controllers: [TripsController],
   providers: [TripsService],
+  exports: [TripsService],
 })
 export class TripsModule {}

@@ -7,5 +7,6 @@ import { VehiclesService } from './vehicles.service';
   imports: [DbModule],
   controllers: [VehiclesController],
   providers: [VehiclesService],
+  exports: [VehiclesService],
 })
 export class VehiclesModule {}

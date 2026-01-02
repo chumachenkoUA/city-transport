@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { driverVehicleAssignments } from '../../db/schema';
 import { CreateDriverVehicleAssignmentDto } from './dto/create-driver-vehicle-assignment.dto';
@@ -24,6 +24,17 @@ export class DriverVehicleAssignmentsService {
     }
 
     return assignment;
+  }
+
+  async findLatestByDriverId(driverId: number) {
+    const [assignment] = await this.dbService.db
+      .select()
+      .from(driverVehicleAssignments)
+      .where(eq(driverVehicleAssignments.driverId, driverId))
+      .orderBy(desc(driverVehicleAssignments.assignedAt))
+      .limit(1);
+
+    return assignment ?? null;
   }
 
   async create(payload: CreateDriverVehicleAssignmentDto) {

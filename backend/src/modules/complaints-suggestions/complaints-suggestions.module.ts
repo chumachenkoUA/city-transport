@@ -7,5 +7,6 @@ import { ComplaintsSuggestionsService } from './complaints-suggestions.service';
   imports: [DbModule],
   controllers: [ComplaintsSuggestionsController],
   providers: [ComplaintsSuggestionsService],
+  exports: [ComplaintsSuggestionsService],
 })
 export class ComplaintsSuggestionsModule {}

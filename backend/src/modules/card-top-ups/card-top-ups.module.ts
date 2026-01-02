@@ -7,5 +7,6 @@ import { CardTopUpsService } from './card-top-ups.service';
   imports: [DbModule],
   controllers: [CardTopUpsController],
   providers: [CardTopUpsService],
+  exports: [CardTopUpsService],
 })
 export class CardTopUpsModule {}

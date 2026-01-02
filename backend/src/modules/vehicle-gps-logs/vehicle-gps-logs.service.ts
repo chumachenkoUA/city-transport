@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { vehicleGpsLogs } from '../../db/schema';
 import { CreateVehicleGpsLogDto } from './dto/create-vehicle-gps-log.dto';
@@ -24,6 +24,17 @@ export class VehicleGpsLogsService {
     }
 
     return log;
+  }
+
+  async findLatestByVehicleId(vehicleId: number) {
+    const [log] = await this.dbService.db
+      .select()
+      .from(vehicleGpsLogs)
+      .where(eq(vehicleGpsLogs.vehicleId, vehicleId))
+      .orderBy(desc(vehicleGpsLogs.recordedAt))
+      .limit(1);
+
+    return log ?? null;
   }
 
   async create(payload: CreateVehicleGpsLogDto) {

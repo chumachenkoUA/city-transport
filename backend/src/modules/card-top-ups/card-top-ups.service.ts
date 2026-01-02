@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { cardTopUps } from '../../db/schema';
 import { CreateCardTopUpDto } from './dto/create-card-top-up.dto';
@@ -24,6 +24,29 @@ export class CardTopUpsService {
     }
 
     return topUp;
+  }
+
+  async findLatestByCardId(cardId: number) {
+    const [topUp] = await this.dbService.db
+      .select()
+      .from(cardTopUps)
+      .where(eq(cardTopUps.cardId, cardId))
+      .orderBy(desc(cardTopUps.toppedUpAt))
+      .limit(1);
+
+    return topUp ?? null;
+  }
+
+  async sumByPeriod(from: Date, to: Date) {
+    const result = (await this.dbService.db.execute(sql`
+      select coalesce(sum(amount), 0) as total
+      from card_top_ups
+      where topped_up_at >= ${from} and topped_up_at <= ${to}
+    `)) as unknown as {
+      rows: Array<{ total: string }>;
+    };
+
+    return result.rows[0]?.total ?? '0';
   }
 
   async create(payload: CreateCardTopUpDto) {

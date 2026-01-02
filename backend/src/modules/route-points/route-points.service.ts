@@ -26,6 +26,42 @@ export class RoutePointsService {
     return routePoint;
   }
 
+  async findByRouteId(routeId: number) {
+    const rows = await this.dbService.db
+      .select()
+      .from(routePoints)
+      .where(eq(routePoints.routeId, routeId));
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRoutePointId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: typeof rows = [];
+    const visited = new Set<number>();
+    let current: (typeof rows)[number] | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRoutePointId
+        ? byId.get(current.nextRoutePointId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
+  }
+
   async create(payload: CreateRoutePointDto) {
     const [created] = await this.dbService.db
       .insert(routePoints)

@@ -30,10 +30,12 @@ export class DriversService {
     const [created] = await this.dbService.db
       .insert(drivers)
       .values({
+        login: payload.login,
         email: payload.email,
         phone: payload.phone,
         fullName: payload.fullName,
         driverLicenseNumber: payload.driverLicenseNumber,
+        licenseCategories: payload.licenseCategories,
         passportData: payload.passportData,
       })
       .returning();
@@ -47,6 +49,9 @@ export class DriversService {
     if (payload.email !== undefined) {
       updates.email = payload.email;
     }
+    if (payload.login !== undefined) {
+      updates.login = payload.login;
+    }
     if (payload.phone !== undefined) {
       updates.phone = payload.phone;
     }
@@ -55,6 +60,9 @@ export class DriversService {
     }
     if (payload.driverLicenseNumber !== undefined) {
       updates.driverLicenseNumber = payload.driverLicenseNumber;
+    }
+    if (payload.licenseCategories !== undefined) {
+      updates.licenseCategories = payload.licenseCategories;
     }
     if (payload.passportData !== undefined) {
       updates.passportData = payload.passportData;

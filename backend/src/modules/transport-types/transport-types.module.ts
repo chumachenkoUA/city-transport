@@ -7,5 +7,6 @@ import { TransportTypesService } from './transport-types.service';
   imports: [DbModule],
   controllers: [TransportTypesController],
   providers: [TransportTypesService],
+  exports: [TransportTypesService],
 })
 export class TransportTypesModule {}

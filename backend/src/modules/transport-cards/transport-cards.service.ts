@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
-import { transportCards } from '../../db/schema';
+import { cardTopUps, transportCards } from '../../db/schema';
 import { CreateTransportCardDto } from './dto/create-transport-card.dto';
 import { UpdateTransportCardDto } from './dto/update-transport-card.dto';
 
@@ -26,6 +26,15 @@ export class TransportCardsService {
     return card;
   }
 
+  async findByUserId(userId: number) {
+    const [card] = await this.dbService.db
+      .select()
+      .from(transportCards)
+      .where(eq(transportCards.userId, userId));
+
+    return card ?? null;
+  }
+
   async findByCardNumber(cardNumber: string) {
     const [card] = await this.dbService.db
       .select()
@@ -33,6 +42,42 @@ export class TransportCardsService {
       .where(eq(transportCards.cardNumber, cardNumber));
 
     return card ?? null;
+  }
+
+  async topUpByCardNumber(
+    cardNumber: string,
+    amount: number,
+    toppedUpAt?: Date,
+  ) {
+    return this.dbService.db.transaction(async (tx) => {
+      const [card] = await tx
+        .select()
+        .from(transportCards)
+        .where(eq(transportCards.cardNumber, cardNumber));
+
+      if (!card) {
+        throw new NotFoundException(`Transport card ${cardNumber} not found`);
+      }
+
+      const [updatedCard] = await tx
+        .update(transportCards)
+        .set({
+          balance: sql`${transportCards.balance} + ${amount}`,
+        })
+        .where(eq(transportCards.id, card.id))
+        .returning();
+
+      const [topUp] = await tx
+        .insert(cardTopUps)
+        .values({
+          cardId: card.id,
+          amount: amount.toString(),
+          toppedUpAt,
+        })
+        .returning();
+
+      return { card: updatedCard, topUp };
+    });
   }
 
   async create(payload: CreateTransportCardDto) {

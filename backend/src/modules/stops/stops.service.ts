@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { stops } from '../../db/schema';
 import { CreateStopDto } from './dto/create-stop.dto';
@@ -11,6 +11,48 @@ export class StopsService {
 
   async findAll() {
     return this.dbService.db.select().from(stops);
+  }
+
+  async findNearby(
+    lon: number,
+    lat: number,
+    radiusMeters = 500,
+    limit = 10,
+  ) {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id,
+        name,
+        lon,
+        lat,
+        ST_Distance(
+          geom,
+          ST_SetSRID(ST_MakePoint(${lon}::double precision, ${lat}::double precision), 4326)::geography
+        ) as distance_m
+      from stops
+      where ST_DWithin(
+        geom,
+        ST_SetSRID(ST_MakePoint(${lon}::double precision, ${lat}::double precision), 4326)::geography,
+        ${radiusMeters}
+      )
+      order by distance_m
+      limit ${limit}
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        name: string;
+        lon: string;
+        lat: string;
+        distance_m: number;
+      }>;
+    };
+
+    return result.rows;
+  }
+
+  async findNearest(lon: number, lat: number, radiusMeters = 500) {
+    const [nearest] = await this.findNearby(lon, lat, radiusMeters, 1);
+    return nearest ?? null;
   }
 
   async findOne(id: number) {

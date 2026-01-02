@@ -7,5 +7,6 @@ import { StopsService } from './stops.service';
   imports: [DbModule],
   controllers: [StopsController],
   providers: [StopsService],
+  exports: [StopsService],
 })
 export class StopsModule {}

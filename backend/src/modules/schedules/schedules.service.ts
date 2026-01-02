@@ -26,6 +26,15 @@ export class SchedulesService {
     return schedule;
   }
 
+  async findByRouteId(routeId: number) {
+    const [schedule] = await this.dbService.db
+      .select()
+      .from(schedules)
+      .where(eq(schedules.routeId, routeId));
+
+    return schedule ?? null;
+  }
+
   async create(payload: CreateScheduleDto) {
     const [created] = await this.dbService.db
       .insert(schedules)

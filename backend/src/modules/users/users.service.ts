@@ -30,6 +30,7 @@ export class UsersService {
     const [created] = await this.dbService.db
       .insert(users)
       .values({
+        login: payload.login,
         email: payload.email,
         phone: payload.phone,
         fullName: payload.fullName,
@@ -44,6 +45,9 @@ export class UsersService {
 
     if (payload.email !== undefined) {
       updates.email = payload.email;
+    }
+    if (payload.login !== undefined) {
+      updates.login = payload.login;
     }
     if (payload.phone !== undefined) {
       updates.phone = payload.phone;

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEmail,
   IsOptional,
   IsString,
@@ -9,6 +10,11 @@ import {
 import { PassportDataDto } from './passport-data.dto';
 
 export class UpdateDriverDto {
+  @IsString()
+  @IsOptional()
+  @Matches(/^[a-zA-Z0-9._-]{3,32}$/)
+  login?: string;
+
   @IsEmail()
   @IsOptional()
   email?: string;
@@ -25,6 +31,11 @@ export class UpdateDriverDto {
   @IsString()
   @IsOptional()
   driverLicenseNumber?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  licenseCategories?: string[];
 
   @ValidateNested()
   @Type(() => PassportDataDto)

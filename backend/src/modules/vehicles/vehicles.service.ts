@@ -26,6 +26,22 @@ export class VehiclesService {
     return vehicle;
   }
 
+  async findByFleetNumber(fleetNumber: string) {
+    const [vehicle] = await this.dbService.db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.fleetNumber, fleetNumber));
+
+    return vehicle ?? null;
+  }
+
+  async findByRouteId(routeId: number) {
+    return this.dbService.db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.routeId, routeId));
+  }
+
   async create(payload: CreateVehicleDto) {
     const [created] = await this.dbService.db
       .insert(vehicles)

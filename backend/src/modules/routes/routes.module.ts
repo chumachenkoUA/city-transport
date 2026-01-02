@@ -7,5 +7,6 @@ import { RoutesService } from './routes.service';
   imports: [DbModule],
   controllers: [RoutesController],
   providers: [RoutesService],
+  exports: [RoutesService],
 })
 export class RoutesModule {}

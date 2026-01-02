@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import {
   routes,
@@ -55,6 +55,40 @@ export class TicketsService {
       .limit(1);
 
     return lastTrip ?? null;
+  }
+
+  async findTripsByUserId(userId: number) {
+    return this.dbService.db
+      .select({
+        ticketId: tickets.id,
+        purchasedAt: tickets.purchasedAt,
+        price: tickets.price,
+        tripId: trips.id,
+        startsAt: trips.startsAt,
+        endsAt: trips.endsAt,
+        routeId: routes.id,
+        routeNumber: routes.number,
+        transportType: transportTypes.name,
+      })
+      .from(transportCards)
+      .innerJoin(tickets, eq(tickets.cardId, transportCards.id))
+      .innerJoin(trips, eq(trips.id, tickets.tripId))
+      .innerJoin(routes, eq(routes.id, trips.routeId))
+      .innerJoin(transportTypes, eq(transportTypes.id, routes.transportTypeId))
+      .where(eq(transportCards.userId, userId))
+      .orderBy(desc(tickets.purchasedAt));
+  }
+
+  async sumByPeriod(from: Date, to: Date) {
+    const result = (await this.dbService.db.execute(sql`
+      select coalesce(sum(price), 0) as total
+      from tickets
+      where purchased_at >= ${from} and purchased_at <= ${to}
+    `)) as unknown as {
+      rows: Array<{ total: string }>;
+    };
+
+    return result.rows[0]?.total ?? '0';
   }
 
   async create(payload: CreateTicketDto) {

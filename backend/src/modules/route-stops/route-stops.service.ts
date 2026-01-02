@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
-import { routeStops } from '../../db/schema';
+import { routeStops, routes, stops, transportTypes } from '../../db/schema';
 import { CreateRouteStopDto } from './dto/create-route-stop.dto';
 import { UpdateRouteStopDto } from './dto/update-route-stop.dto';
 
@@ -24,6 +24,68 @@ export class RouteStopsService {
     }
 
     return routeStop;
+  }
+
+  async findStopsByRouteId(routeId: number) {
+    const rows = await this.dbService.db
+      .select({
+        id: routeStops.id,
+        routeId: routeStops.routeId,
+        stopId: routeStops.stopId,
+        prevRouteStopId: routeStops.prevRouteStopId,
+        nextRouteStopId: routeStops.nextRouteStopId,
+        distanceToNextKm: routeStops.distanceToNextKm,
+        stopName: stops.name,
+        lon: stops.lon,
+        lat: stops.lat,
+      })
+      .from(routeStops)
+      .innerJoin(stops, eq(routeStops.stopId, stops.id))
+      .where(eq(routeStops.routeId, routeId));
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRouteStopId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: typeof rows = [];
+    const visited = new Set<number>();
+    let current: (typeof rows)[number] | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRouteStopId
+        ? byId.get(current.nextRouteStopId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
+  }
+
+  async findRoutesByStopId(stopId: number) {
+    return this.dbService.db
+      .select({
+        routeId: routeStops.routeId,
+        routeNumber: routes.number,
+        transportTypeId: routes.transportTypeId,
+        direction: routes.direction,
+        transportTypeName: transportTypes.name,
+      })
+      .from(routeStops)
+      .innerJoin(routes, eq(routeStops.routeId, routes.id))
+      .innerJoin(transportTypes, eq(routes.transportTypeId, transportTypes.id))
+      .where(eq(routeStops.stopId, stopId));
   }
 
   async create(payload: CreateRouteStopDto) {

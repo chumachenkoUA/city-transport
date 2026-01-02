@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { fines } from '../../db/schema';
 import { CreateFineDto } from './dto/create-fine.dto';
@@ -13,6 +13,25 @@ export class FinesService {
     return this.dbService.db.select().from(fines);
   }
 
+  async findByUserId(userId: number) {
+    return this.dbService.db
+      .select()
+      .from(fines)
+      .where(eq(fines.userId, userId));
+  }
+
+  async sumPaidByPeriod(from: Date, to: Date) {
+    const result = (await this.dbService.db.execute(sql`
+      select coalesce(sum(amount), 0) as total
+      from fines
+      where status = 'Оплачено' and issued_at >= ${from} and issued_at <= ${to}
+    `)) as unknown as {
+      rows: Array<{ total: string }>;
+    };
+
+    return result.rows[0]?.total ?? '0';
+  }
+
   async findOne(id: number) {
     const [fine] = await this.dbService.db
       .select()
@@ -24,6 +43,15 @@ export class FinesService {
     }
 
     return fine;
+  }
+
+  async findOneByUserId(userId: number, fineId: number) {
+    const [fine] = await this.dbService.db
+      .select()
+      .from(fines)
+      .where(and(eq(fines.id, fineId), eq(fines.userId, userId)));
+
+    return fine ?? null;
   }
 
   async create(payload: CreateFineDto) {

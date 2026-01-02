@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { routes } from '../../db/schema';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -24,6 +24,36 @@ export class RoutesService {
     }
 
     return route;
+  }
+
+  async findByNumberAndType(
+    number: string,
+    transportTypeId: number,
+    direction: 'forward' | 'reverse' = 'forward',
+  ) {
+    const [route] = await this.dbService.db
+      .select()
+      .from(routes)
+      .where(
+        and(
+          eq(routes.number, number),
+          eq(routes.transportTypeId, transportTypeId),
+          eq(routes.direction, direction),
+        ),
+      );
+
+    return route ?? null;
+  }
+
+  async findByNumber(number: string) {
+    const [route] = await this.dbService.db
+      .select()
+      .from(routes)
+      .where(eq(routes.number, number))
+      .orderBy(asc(routes.id))
+      .limit(1);
+
+    return route ?? null;
   }
 
   async create(payload: CreateRouteDto) {

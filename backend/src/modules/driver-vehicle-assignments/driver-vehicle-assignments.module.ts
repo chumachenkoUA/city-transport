@@ -7,5 +7,6 @@ import { DriverVehicleAssignmentsService } from './driver-vehicle-assignments.se
   imports: [DbModule],
   controllers: [DriverVehicleAssignmentsController],
   providers: [DriverVehicleAssignmentsService],
+  exports: [DriverVehicleAssignmentsService],
 })
 export class DriverVehicleAssignmentsModule {}

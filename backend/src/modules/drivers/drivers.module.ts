@@ -7,5 +7,6 @@ import { DriversService } from './drivers.service';
   imports: [DbModule],
   controllers: [DriversController],
   providers: [DriversService],
+  exports: [DriversService],
 })
 export class DriversModule {}

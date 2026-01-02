@@ -7,5 +7,6 @@ import { SchedulesService } from './schedules.service';
   imports: [DbModule],
   controllers: [SchedulesController],
   providers: [SchedulesService],
+  exports: [SchedulesService],
 })
 export class SchedulesModule {}

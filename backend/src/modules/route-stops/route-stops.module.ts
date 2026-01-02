@@ -7,5 +7,6 @@ import { RouteStopsService } from './route-stops.service';
   imports: [DbModule],
   controllers: [RouteStopsController],
   providers: [RouteStopsService],
+  exports: [RouteStopsService],
 })
 export class RouteStopsModule {}
