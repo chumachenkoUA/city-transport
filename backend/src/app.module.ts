@@ -3,15 +3,18 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DbModule } from './db/db.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
 import { CardTopUpsModule } from './modules/card-top-ups/card-top-ups.module';
 import { ComplaintsSuggestionsModule } from './modules/complaints-suggestions/complaints-suggestions.module';
 import { DriverVehicleAssignmentsModule } from './modules/driver-vehicle-assignments/driver-vehicle-assignments.module';
 import { DriversModule } from './modules/drivers/drivers.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FineAppealsModule } from './modules/fine-appeals/fine-appeals.module';
 import { FinesModule } from './modules/fines/fines.module';
 import { RoutePointsModule } from './modules/route-points/route-points.module';
 import { RouteStopsModule } from './modules/route-stops/route-stops.module';
 import { RoutesModule } from './modules/routes/routes.module';
+import { SalaryPaymentsModule } from './modules/salary-payments/salary-payments.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { StopsModule } from './modules/stops/stops.module';
 import { TicketsModule } from './modules/tickets/tickets.module';
@@ -22,12 +25,21 @@ import { UserGpsLogsModule } from './modules/user-gps-logs/user-gps-logs.module'
 import { UsersModule } from './modules/users/users.module';
 import { VehicleGpsLogsModule } from './modules/vehicle-gps-logs/vehicle-gps-logs.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { CtAdminModule } from './roles/ct-admin/ct-admin.module';
 import { CtControllerModule } from './roles/ct-controller/ct-controller.module';
+import { CtAccountantModule } from './roles/ct-accountant/ct-accountant.module';
+import { CtDispatcherModule } from './roles/ct-dispatcher/ct-dispatcher.module';
+import { CtDriverModule } from './roles/ct-driver/ct-driver.module';
+import { CtGuestModule } from './roles/ct-guest/ct-guest.module';
+import { CtManagerModule } from './roles/ct-manager/ct-manager.module';
+import { CtMunicipalityModule } from './roles/ct-municipality/ct-municipality.module';
+import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DbModule,
+    BudgetsModule,
     UsersModule,
     TransportTypesModule,
     StopsModule,
@@ -38,7 +50,9 @@ import { CtControllerModule } from './roles/ct-controller/ct-controller.module';
     RoutePointsModule,
     DriverVehicleAssignmentsModule,
     SchedulesModule,
+    ExpensesModule,
     TripsModule,
+    SalaryPaymentsModule,
     TransportCardsModule,
     CardTopUpsModule,
     TicketsModule,
@@ -47,7 +61,15 @@ import { CtControllerModule } from './roles/ct-controller/ct-controller.module';
     ComplaintsSuggestionsModule,
     UserGpsLogsModule,
     VehicleGpsLogsModule,
+    CtAdminModule,
     CtControllerModule,
+    CtAccountantModule,
+    CtDispatcherModule,
+    CtDriverModule,
+    CtGuestModule,
+    CtManagerModule,
+    CtMunicipalityModule,
+    CtPassengerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
