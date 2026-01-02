@@ -72,26 +72,32 @@ async function main() {
         .values([
           {
             id: 1,
+            login: 'driver1',
             email: 'driver1@example.com',
             phone: '+380971112233',
             fullName: 'Сидоренко Петро Іванович',
             driverLicenseNumber: 'KP123456',
+            licenseCategories: ['B', 'C'],
             passportData: { number: '123456', series: 'AB' },
           },
           {
             id: 2,
+            login: 'driver2',
             email: 'driver2@example.com',
             phone: '+380972223344',
             fullName: 'Коваль Андрій Петрович',
             driverLicenseNumber: 'KP654321',
+            licenseCategories: ['B', 'D'],
             passportData: { number: '654321', series: 'AB' },
           },
           {
             id: 3,
+            login: 'driver3',
             email: 'driver3@example.com',
             phone: '+380973334455',
             fullName: 'Мельник Ігор Васильович',
             driverLicenseNumber: 'KP777888',
+            licenseCategories: ['C', 'D'],
             passportData: { number: '777888', series: 'BC' },
           },
         ])
@@ -410,6 +416,7 @@ async function main() {
         .values([
           {
             id: 1,
+            login: 'pupkin',
             email: 'pupkin@example.com',
             phone: '+380991112233',
             fullName: 'Пупкін Василь Олександрович',
@@ -417,6 +424,7 @@ async function main() {
           },
           {
             id: 2,
+            login: 'ivanova',
             email: 'ivanova@example.com',
             phone: '+380992223344',
             fullName: 'Іванова Марія Сергіївна',
@@ -424,6 +432,7 @@ async function main() {
           },
           {
             id: 3,
+            login: 'bondar',
             email: 'bondar@example.com',
             phone: '+380993334455',
             fullName: 'Бондар Олег Ігорович',
@@ -431,6 +440,7 @@ async function main() {
           },
           {
             id: 4,
+            login: 'shevchenko',
             email: 'shevchenko@example.com',
             phone: '+380994445566',
             fullName: 'Шевченко Олена Петрівна',
