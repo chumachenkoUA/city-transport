@@ -40,9 +40,7 @@ export class CtDispatcherService {
       );
 
       if (!vehicle) {
-        throw new NotFoundException(
-          `Vehicle ${payload.fleetNumber} not found`,
-        );
+        throw new NotFoundException(`Vehicle ${payload.fleetNumber} not found`);
       }
 
       if (vehicle.routeId !== routeId) {

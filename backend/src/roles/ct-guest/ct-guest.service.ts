@@ -46,7 +46,9 @@ export class CtGuestService {
     const scheduleByRoute = new Map<number, number | null>();
     await Promise.all(
       routes.map(async (route) => {
-        const schedule = await this.schedulesService.findByRouteId(route.routeId);
+        const schedule = await this.schedulesService.findByRouteId(
+          route.routeId,
+        );
         scheduleByRoute.set(route.routeId, schedule?.intervalMin ?? null);
       }),
     );
@@ -90,9 +92,7 @@ export class CtGuestService {
     const routesA = await this.routeStopsService.findRoutesByStopId(stopA.id);
     const routesB = await this.routeStopsService.findRoutesByStopId(stopB.id);
 
-    const routesMap = new Map(
-      routesA.map((route) => [route.routeId, route]),
-    );
+    const routesMap = new Map(routesA.map((route) => [route.routeId, route]));
 
     const candidates = routesB
       .map((route) => routesMap.get(route.routeId))
@@ -134,9 +134,7 @@ export class CtGuestService {
           (sum, stop) => sum + Number(stop.distanceToNextKm),
           0,
         );
-        travelMinutes = this.roundTo1(
-          (distanceKm / AVERAGE_SPEED_KMH) * 60,
-        );
+        travelMinutes = this.roundTo1((distanceKm / AVERAGE_SPEED_KMH) * 60);
       }
 
       results.push({

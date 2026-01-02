@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { trips } from '../../db/schema';
 import { CreateTripDto } from './dto/create-trip.dto';
@@ -42,6 +42,10 @@ export class TripsService {
     vehicleId: number,
     date: string,
   ) {
+    const startOfDay = new Date(`${date}T00:00:00`);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
     const [trip] = await this.dbService.db
       .select()
       .from(trips)
@@ -49,7 +53,8 @@ export class TripsService {
         and(
           eq(trips.driverId, driverId),
           eq(trips.vehicleId, vehicleId),
-          sql`date(${trips.startsAt}) = ${date}`,
+          gte(trips.startsAt, startOfDay),
+          lt(trips.startsAt, endOfDay),
         ),
       )
       .orderBy(desc(trips.startsAt))
@@ -64,10 +69,7 @@ export class TripsService {
     routeNumber?: string,
     transportTypeId?: number,
   ) {
-    const conditions = [
-      sql`t.starts_at >= ${from}`,
-      sql`t.starts_at <= ${to}`,
-    ];
+    const conditions = [sql`t.starts_at >= ${from}`, sql`t.starts_at <= ${to}`];
 
     if (routeNumber) {
       conditions.push(sql`r.number = ${routeNumber}`);
@@ -76,7 +78,7 @@ export class TripsService {
       conditions.push(sql`r.transport_type_id = ${transportTypeId}`);
     }
 
-    const whereClause = sql.join(conditions, sql` and `);
+    const whereClause = sql.join(conditions, sql.raw(' and '));
 
     const result = (await this.dbService.db.execute(sql`
       select

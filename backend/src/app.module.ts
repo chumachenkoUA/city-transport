@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DbModule } from './db/db.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { CardTopUpsModule } from './modules/card-top-ups/card-top-ups.module';
 import { ComplaintsSuggestionsModule } from './modules/complaints-suggestions/complaints-suggestions.module';
@@ -39,6 +40,7 @@ import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DbModule,
+    AuthModule,
     BudgetsModule,
     UsersModule,
     TransportTypesModule,

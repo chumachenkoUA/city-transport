@@ -34,11 +34,12 @@ export class CtDriverService {
   async getSchedule(driverId: number) {
     await this.driversService.findOne(driverId);
 
-    const assignment = await this.assignmentsService.findLatestByDriverId(
-      driverId,
-    );
+    const assignment =
+      await this.assignmentsService.findLatestByDriverId(driverId);
     if (!assignment) {
-      throw new NotFoundException(`No assignments found for driver ${driverId}`);
+      throw new NotFoundException(
+        `No assignments found for driver ${driverId}`,
+      );
     }
 
     const vehicle = await this.vehiclesService.findOne(assignment.vehicleId);
@@ -173,9 +174,7 @@ export class CtDriverService {
     }
 
     if (!payload.routeNumber) {
-      throw new BadRequestException(
-        'routeId or routeNumber is required',
-      );
+      throw new BadRequestException('routeId or routeNumber is required');
     }
 
     const route = payload.transportTypeId

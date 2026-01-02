@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, check, numeric, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  check,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 
 export const expenses = pgTable(
   'expenses',
@@ -12,6 +19,9 @@ export const expenses = pgTable(
     documentRef: text('document_ref'),
   },
   () => ({
-    expensesAmountCheck: check('expenses_amount_check', sql.raw('"amount" > 0')),
+    expensesAmountCheck: check(
+      'expenses_amount_check',
+      sql.raw('"amount" > 0'),
+    ),
   }),
 );

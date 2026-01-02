@@ -9,13 +9,22 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(private readonly dbService: DbService) {}
 
+  private readonly userSelect = {
+    id: users.id,
+    login: users.login,
+    email: users.email,
+    phone: users.phone,
+    fullName: users.fullName,
+    registeredAt: users.registeredAt,
+  };
+
   async findAll() {
-    return this.dbService.db.select().from(users);
+    return this.dbService.db.select(this.userSelect).from(users);
   }
 
   async findOne(id: number) {
     const [user] = await this.dbService.db
-      .select()
+      .select(this.userSelect)
       .from(users)
       .where(eq(users.id, id));
 
@@ -35,7 +44,7 @@ export class UsersService {
         phone: payload.phone,
         fullName: payload.fullName,
       })
-      .returning();
+      .returning(this.userSelect);
 
     return created;
   }
@@ -64,7 +73,7 @@ export class UsersService {
       .update(users)
       .set(updates)
       .where(eq(users.id, id))
-      .returning();
+      .returning(this.userSelect);
 
     if (!updated) {
       throw new NotFoundException(`User ${id} not found`);

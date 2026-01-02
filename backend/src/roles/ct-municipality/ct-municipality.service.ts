@@ -147,7 +147,11 @@ export class CtMunicipalityService {
       return stopInput.stopId;
     }
 
-    if (!stopInput.name || stopInput.lon === undefined || stopInput.lat === undefined) {
+    if (
+      !stopInput.name ||
+      stopInput.lon === undefined ||
+      stopInput.lat === undefined
+    ) {
       throw new BadRequestException(
         'stopId or stop details (name, lon, lat) are required',
       );

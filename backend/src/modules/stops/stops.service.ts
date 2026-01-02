@@ -13,12 +13,7 @@ export class StopsService {
     return this.dbService.db.select().from(stops);
   }
 
-  async findNearby(
-    lon: number,
-    lat: number,
-    radiusMeters = 500,
-    limit = 10,
-  ) {
+  async findNearby(lon: number, lat: number, radiusMeters = 500, limit = 10) {
     const result = (await this.dbService.db.execute(sql`
       select
         id,

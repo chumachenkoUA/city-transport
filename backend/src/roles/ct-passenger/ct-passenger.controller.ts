@@ -70,10 +70,7 @@ export class CtPassengerController {
   }
 
   @Get(':userId/fines/:fineId')
-  getFine(
-    @Param('userId') userId: string,
-    @Param('fineId') fineId: string,
-  ) {
+  getFine(@Param('userId') userId: string, @Param('fineId') fineId: string) {
     return this.ctPassengerService.getFine(Number(userId), Number(fineId));
   }
 

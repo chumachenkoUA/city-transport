@@ -65,10 +65,12 @@ export class CtAccountantService {
       this.salaryPaymentsService.sumByPeriod(from, to),
     ]);
 
-    const incomeSum = this.toNumber(income.topUpsTotal)
-      + this.toNumber(income.ticketsTotal)
-      + this.toNumber(income.finesTotal);
-    const expensesSum = this.toNumber(expensesTotal) + this.toNumber(salariesTotal);
+    const incomeSum =
+      this.toNumber(income.topUpsTotal) +
+      this.toNumber(income.ticketsTotal) +
+      this.toNumber(income.finesTotal);
+    const expensesSum =
+      this.toNumber(expensesTotal) + this.toNumber(salariesTotal);
 
     return {
       from,

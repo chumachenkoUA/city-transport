@@ -63,7 +63,9 @@ export class CtPassengerService {
     const card = await this.transportCardsService.findByUserId(userId);
 
     if (!card) {
-      throw new NotFoundException(`Transport card for user ${userId} not found`);
+      throw new NotFoundException(
+        `Transport card for user ${userId} not found`,
+      );
     }
 
     const lastTopUp = await this.cardTopUpsService.findLatestByCardId(card.id);
@@ -102,7 +104,9 @@ export class CtPassengerService {
     const fine = await this.finesService.findOneByUserId(userId, fineId);
 
     if (!fine) {
-      throw new NotFoundException(`Fine ${fineId} not found for user ${userId}`);
+      throw new NotFoundException(
+        `Fine ${fineId} not found for user ${userId}`,
+      );
     }
 
     return fine;
@@ -112,7 +116,9 @@ export class CtPassengerService {
     const fine = await this.finesService.findOneByUserId(userId, fineId);
 
     if (!fine) {
-      throw new NotFoundException(`Fine ${fineId} not found for user ${userId}`);
+      throw new NotFoundException(
+        `Fine ${fineId} not found for user ${userId}`,
+      );
     }
 
     return this.fineAppealsService.create({
