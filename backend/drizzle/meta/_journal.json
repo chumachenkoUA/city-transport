@@ -22,6 +22,34 @@
       "when": 1767046356535,
       "tag": "0002_add-fines-fields",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767133473172,
+      "tag": "0003_add-driver-license-categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1767300000000,
+      "tag": "0004_add-accounting-tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767301000000,
+      "tag": "0005_add-complaints-created-at",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767400000000,
+      "tag": "0006_add-logins",
+      "breakpoints": true
     }
   ]
 }
