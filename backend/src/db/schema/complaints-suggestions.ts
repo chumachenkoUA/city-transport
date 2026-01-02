@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, check, pgTable, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  check,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { trips } from './trips';
 import { users } from './users';
 
@@ -14,6 +21,7 @@ export const complaintsSuggestions = pgTable(
     message: text('message').notNull(),
     tripId: bigint('trip_id', { mode: 'number' }).references(() => trips.id),
     status: text('status').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   () => ({
     complaintsSuggestionsStatusCheck: check(
