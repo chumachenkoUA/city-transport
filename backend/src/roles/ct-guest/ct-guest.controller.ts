@@ -1,13 +1,24 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CtGuestService } from './ct-guest.service';
-import { CreateGuestComplaintDto } from './dto/create-complaint.dto';
 import { RouteLookupDto } from './dto/route-lookup.dto';
+import { RoutesListDto } from './dto/routes-list.dto';
 import { RoutesBetweenDto } from './dto/routes-between.dto';
+import { RouteScheduleDto } from './dto/route-schedule.dto';
 import { StopsNearDto } from './dto/stops-near.dto';
 
 @Controller('guest')
 export class CtGuestController {
   constructor(private readonly ctGuestService: CtGuestService) {}
+
+  @Get('transport-types')
+  listTransportTypes() {
+    return this.ctGuestService.listTransportTypes();
+  }
+
+  @Get('routes')
+  listRoutes(@Query() query: RoutesListDto) {
+    return this.ctGuestService.listRoutes(query.transportTypeId);
+  }
 
   @Get('stops/near')
   getStopsNear(@Query() query: StopsNearDto) {
@@ -35,12 +46,7 @@ export class CtGuestController {
   }
 
   @Get('routes/schedule')
-  getSchedule(@Query() query: RouteLookupDto) {
+  getSchedule(@Query() query: RouteScheduleDto) {
     return this.ctGuestService.getSchedule(query);
-  }
-
-  @Post('complaints')
-  createComplaint(@Body() payload: CreateGuestComplaintDto) {
-    return this.ctGuestService.createComplaint(payload);
   }
 }

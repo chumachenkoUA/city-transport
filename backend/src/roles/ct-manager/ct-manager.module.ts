@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { DriversModule } from '../../modules/drivers/drivers.module';
-import { VehiclesModule } from '../../modules/vehicles/vehicles.module';
+import { DbModule } from '../../db/db.module';
 import { CtManagerController } from './ct-manager.controller';
 import { CtManagerService } from './ct-manager.service';
 
 @Module({
-  imports: [DriversModule, VehiclesModule],
+  imports: [DbModule],
   controllers: [CtManagerController],
   providers: [CtManagerService],
 })
