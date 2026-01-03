@@ -79,6 +79,7 @@ BEGIN
     'ct_driver_role',
     'ct_passenger_role',
     'ct_guest_role',
+    'ct_manager_role',
     'ct_municipality_role'
   ]
   LOOP
@@ -136,6 +137,7 @@ BEGIN
     'ct_accountant',
     'ct_dispatcher',
     'ct_controller',
+    'ct_manager',
     'ct_municipality'
   ]
   LOOP
@@ -149,6 +151,7 @@ GRANT ct_admin_role TO ct_admin;
 GRANT ct_accountant_role TO ct_accountant;
 GRANT ct_dispatcher_role TO ct_dispatcher;
 GRANT ct_controller_role TO ct_controller;
+GRANT ct_manager_role TO ct_manager;
 GRANT ct_municipality_role TO ct_municipality;
 
 -- -------------------------
@@ -215,7 +218,7 @@ DECLARE
   db_name text := current_database();
 BEGIN
   EXECUTE format(
-    'GRANT CONNECT ON DATABASE %I TO ct_admin_role, ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_municipality_role',
+    'GRANT CONNECT ON DATABASE %I TO ct_admin_role, ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_manager_role, ct_municipality_role',
     db_name
   );
 END $$;
@@ -228,6 +231,7 @@ BEGIN
     'public',
     'auth',
     'guest_api',
+    'manager_api',
     'passenger_api',
     'controller_api',
     'dispatcher_api',
@@ -239,7 +243,7 @@ BEGIN
   LOOP
     IF to_regnamespace(schema_name) IS NOT NULL THEN
       EXECUTE format(
-        'GRANT USAGE ON SCHEMA %I TO ct_admin_role, ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_municipality_role',
+        'GRANT USAGE ON SCHEMA %I TO ct_admin_role, ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_manager_role, ct_municipality_role',
         schema_name
       );
     END IF;
@@ -258,6 +262,7 @@ BEGIN
     'ct_driver_role',
     'ct_passenger_role',
     'ct_guest_role',
+    'ct_manager_role',
     'ct_municipality_role'
   ]
   LOOP
@@ -273,7 +278,16 @@ END $$;
 DO $$
 BEGIN
   IF to_regnamespace('guest_api') IS NOT NULL THEN
-    EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA guest_api TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role';
+    EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA guest_api TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role';
+  END IF;
+END $$;
+
+-- Manager API
+DO $$
+BEGIN
+  IF to_regnamespace('manager_api') IS NOT NULL THEN
+    EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA manager_api TO ct_manager_role';
+    EXECUTE 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA manager_api TO ct_manager_role';
   END IF;
 END $$;
 
