@@ -141,6 +141,20 @@
       "when": 1767512000000,
       "tag": "0019_dispatcher_api",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1767513000000,
+      "tag": "0020_dispatcher_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1767514000000,
+      "tag": "0021_relax_force_rls_trips",
+      "breakpoints": true
     }
   ]
 }
