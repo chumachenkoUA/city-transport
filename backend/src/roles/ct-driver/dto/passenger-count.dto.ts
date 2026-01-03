@@ -11,11 +11,6 @@ export class PassengerCountDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  driverId!: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
   @IsOptional()
   vehicleId?: number;
 

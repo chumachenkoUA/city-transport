@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 const FINE_STATUSES = [
@@ -23,10 +24,26 @@ export class IssueFineDto {
   @IsNotEmpty()
   cardNumber!: string;
 
+  @ValidateIf((value: IssueFineDto) => !value.tripId)
+  @IsString()
+  @IsNotEmpty()
+  fleetNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  routeNumber?: string;
+
   @Type(() => Number)
+  @ValidateIf((value: IssueFineDto) => !value.fleetNumber)
   @IsInt()
   @Min(1)
-  tripId!: number;
+  tripId?: number;
+
+  @Type(() => Date)
+  @IsDate()
+  @IsOptional()
+  checkedAt?: Date;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

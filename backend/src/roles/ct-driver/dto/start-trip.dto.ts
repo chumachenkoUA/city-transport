@@ -1,12 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDate,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class StartTripDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  driverId!: number;
-
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -21,4 +23,9 @@ export class StartTripDto {
   @IsDate()
   @IsOptional()
   startedAt?: Date;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['forward', 'reverse'])
+  direction?: string;
 }

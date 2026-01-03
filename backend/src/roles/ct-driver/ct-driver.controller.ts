@@ -2,11 +2,11 @@ import {
   Body,
   Controller,
   Get,
-  Param,
-  ParseIntPipe,
   Post,
   Query,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { RequestContextService } from '../../common/session/request-context.service';
 import { CtDriverService } from './ct-driver.service';
 import { FinishTripDto } from './dto/finish-trip.dto';
 import { PassengerCountDto } from './dto/passenger-count.dto';
@@ -15,11 +15,24 @@ import { StartTripDto } from './dto/start-trip.dto';
 
 @Controller('driver')
 export class CtDriverController {
-  constructor(private readonly ctDriverService: CtDriverService) {}
+  constructor(
+    private readonly ctDriverService: CtDriverService,
+    private readonly contextService: RequestContextService,
+  ) {}
 
-  @Get(':driverId/schedule')
-  getSchedule(@Param('driverId', ParseIntPipe) driverId: number) {
-    return this.ctDriverService.getSchedule(driverId);
+  @Get('me')
+  getProfile() {
+    return this.ctDriverService.getProfile(this.requireLogin());
+  }
+
+  @Get('schedule')
+  getScheduleByDate(@Query('date') date?: string) {
+    return this.ctDriverService.getScheduleByLogin(this.requireLogin(), date);
+  }
+
+  @Get('active-trip')
+  getActiveTrip() {
+    return this.ctDriverService.getActiveTripByLogin(this.requireLogin());
   }
 
   @Get('routes/stops')
@@ -34,16 +47,24 @@ export class CtDriverController {
 
   @Post('trips/start')
   startTrip(@Body() payload: StartTripDto) {
-    return this.ctDriverService.startTrip(payload);
+    return this.ctDriverService.startTrip(this.requireLogin(), payload);
   }
 
   @Post('trips/finish')
   finishTrip(@Body() payload: FinishTripDto) {
-    return this.ctDriverService.finishTrip(payload);
+    return this.ctDriverService.finishTrip(this.requireLogin(), payload);
   }
 
   @Post('trips/passengers')
   setPassengerCount(@Body() payload: PassengerCountDto) {
-    return this.ctDriverService.setPassengerCount(payload);
+    return this.ctDriverService.setPassengerCount(this.requireLogin(), payload);
+  }
+
+  private requireLogin() {
+    const session = this.contextService.get();
+    if (!session?.login) {
+      throw new UnauthorizedException('Missing auth session');
+    }
+    return session.login;
   }
 }

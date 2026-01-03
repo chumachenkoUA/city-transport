@@ -3,14 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DriverVehicleAssignmentsService } from '../../modules/driver-vehicle-assignments/driver-vehicle-assignments.service';
-import { DriversService } from '../../modules/drivers/drivers.service';
-import { RoutePointsService } from '../../modules/route-points/route-points.service';
-import { RouteStopsService } from '../../modules/route-stops/route-stops.service';
-import { RoutesService } from '../../modules/routes/routes.service';
-import { SchedulesService } from '../../modules/schedules/schedules.service';
-import { TripsService } from '../../modules/trips/trips.service';
-import { VehiclesService } from '../../modules/vehicles/vehicles.service';
+import { sql } from 'drizzle-orm';
+import { DbService } from '../../db/db.service';
 import { FinishTripDto } from './dto/finish-trip.dto';
 import { PassengerCountDto } from './dto/passenger-count.dto';
 import { RouteLookupDto } from './dto/route-lookup.dto';
@@ -18,154 +12,315 @@ import { StartTripDto } from './dto/start-trip.dto';
 
 const AVERAGE_SPEED_KMH = 25;
 
+type DriverProfileRow = {
+  id: number;
+  login: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  driverLicenseNumber: string;
+  licenseCategories: unknown;
+};
+
+type DriverScheduleRow = {
+  id: number;
+  startsAt: Date;
+  endsAt: Date | null;
+  routeId: number;
+  routeNumber: string;
+  routeDirection: string;
+  transportTypeId: number;
+  transportTypeName: string;
+  vehicleId: number;
+  fleetNumber: string;
+};
+
+type RouteStopRow = {
+  stopId: number;
+  stopName: string;
+  lon: string;
+  lat: string;
+  distanceToNextKm: string | null;
+};
+
+type ScheduleRow = {
+  workStartTime: string;
+  workEndTime: string;
+  intervalMin: number;
+};
+
+type ActiveTripRow = {
+  id: number;
+  startsAt: Date;
+  endsAt: Date | null;
+  routeId: number;
+  routeNumber: string;
+  routeDirection: string;
+  transportTypeId: number;
+  transportTypeName: string;
+  vehicleId: number;
+  fleetNumber: string;
+};
+
+type RoutePointRow = {
+  id: number;
+  routeId: number;
+  lon: string;
+  lat: string;
+  prevRoutePointId: number | null;
+  nextRoutePointId: number | null;
+};
+
 @Injectable()
 export class CtDriverService {
-  constructor(
-    private readonly driversService: DriversService,
-    private readonly assignmentsService: DriverVehicleAssignmentsService,
-    private readonly vehiclesService: VehiclesService,
-    private readonly routesService: RoutesService,
-    private readonly schedulesService: SchedulesService,
-    private readonly routeStopsService: RouteStopsService,
-    private readonly routePointsService: RoutePointsService,
-    private readonly tripsService: TripsService,
-  ) {}
+  constructor(private readonly dbService: DbService) {}
 
-  async getSchedule(driverId: number) {
-    await this.driversService.findOne(driverId);
+  async getProfile(_login: string) {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        login as "login",
+        full_name as "fullName",
+        email as "email",
+        phone as "phone",
+        driver_license_number as "driverLicenseNumber",
+        license_categories as "licenseCategories"
+      from driver_api.v_profile
+      limit 1
+    `)) as unknown as { rows: DriverProfileRow[] };
 
-    const assignment =
-      await this.assignmentsService.findLatestByDriverId(driverId);
-    if (!assignment) {
-      throw new NotFoundException(
-        `No assignments found for driver ${driverId}`,
-      );
+    const driver = result.rows[0];
+    if (!driver) {
+      throw new NotFoundException('Driver profile not found');
     }
 
-    const vehicle = await this.vehiclesService.findOne(assignment.vehicleId);
-    const route = await this.routesService.findOne(vehicle.routeId);
-    const schedule = await this.schedulesService.findByRouteId(route.id);
+    return driver;
+  }
 
-    if (!schedule) {
-      throw new NotFoundException(`Schedule for route ${route.id} not found`);
+  async getScheduleByLogin(_login: string, date?: string) {
+    const driver = await this.getProfile(_login);
+    const targetDate = this.parseDate(date);
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    const tripsResult = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        starts_at as "startsAt",
+        ends_at as "endsAt",
+        route_id as "routeId",
+        route_number as "routeNumber",
+        direction as "routeDirection",
+        transport_type_id as "transportTypeId",
+        transport_type as "transportTypeName",
+        vehicle_id as "vehicleId",
+        fleet_number as "fleetNumber"
+      from driver_api.v_my_schedule
+      where starts_at >= ${startOfDay} and starts_at < ${endOfDay}
+      order by starts_at
+    `)) as unknown as { rows: DriverScheduleRow[] };
+
+    const trips = tripsResult.rows;
+    const routeIds = Array.from(new Set(trips.map((trip) => trip.routeId)));
+    const stopsByRouteId = new Map<number, RouteStopRow[]>();
+
+    for (const routeId of routeIds) {
+      const stopsResult = (await this.dbService.db.execute(sql`
+        select
+          stop_id as "stopId",
+          stop_name as "stopName",
+          lon as "lon",
+          lat as "lat",
+          distance_to_next_km as "distanceToNextKm"
+        from guest_api.v_route_stops
+        where route_id = ${routeId}
+        order by id
+      `)) as unknown as { rows: RouteStopRow[] };
+
+      stopsByRouteId.set(routeId, stopsResult.rows);
     }
 
-    const stops = await this.routeStopsService.findStopsByRouteId(route.id);
-    const stopsWithIntervals = stops.map((stop) => {
-      const distanceKm = stop.distanceToNextKm
-        ? Number(stop.distanceToNextKm)
-        : null;
-      const minutesToNextStop =
-        distanceKm !== null
-          ? this.roundTo1((distanceKm / AVERAGE_SPEED_KMH) * 60)
+    const tripsWithStops = trips.map((trip) => {
+      const stops = stopsByRouteId.get(trip.routeId) ?? [];
+      const stopsWithIntervals = stops.map((stop) => {
+        const distanceKm = stop.distanceToNextKm
+          ? Number(stop.distanceToNextKm)
           : null;
+        const minutesToNextStop =
+          distanceKm !== null
+            ? this.roundTo1((distanceKm / AVERAGE_SPEED_KMH) * 60)
+            : null;
+
+        return {
+          id: stop.stopId,
+          name: stop.stopName,
+          lon: stop.lon,
+          lat: stop.lat,
+          distanceToNextKm: distanceKm,
+          minutesToNextStop,
+        };
+      });
 
       return {
-        id: stop.stopId,
-        name: stop.stopName,
-        lon: stop.lon,
-        lat: stop.lat,
-        distanceToNextKm: distanceKm,
-        minutesToNextStop,
+        id: trip.id,
+        startsAt: trip.startsAt instanceof Date ? trip.startsAt.toISOString() : trip.startsAt,
+        endsAt: trip.endsAt instanceof Date ? trip.endsAt.toISOString() : trip.endsAt,
+        route: {
+          id: trip.routeId,
+          number: trip.routeNumber,
+          transportTypeId: trip.transportTypeId,
+          direction: trip.routeDirection,
+        },
+        vehicle: {
+          id: trip.vehicleId,
+          fleetNumber: trip.fleetNumber,
+        },
+        transportType: {
+          id: trip.transportTypeId,
+          name: trip.transportTypeName,
+        },
+        stops: stopsWithIntervals,
       };
     });
 
+    const primaryTrip = tripsWithStops[0];
+    const scheduleRow = primaryTrip
+      ? await this.findScheduleByRouteId(primaryTrip.route.id)
+      : null;
+
     return {
-      driverId,
-      vehicle: {
-        id: vehicle.id,
-        fleetNumber: vehicle.fleetNumber,
-      },
+      driver,
+      date: this.toDateString(targetDate),
+      assigned: tripsWithStops.length > 0,
+      vehicle: primaryTrip?.vehicle,
+      route: primaryTrip?.route,
+      transportType: primaryTrip?.transportType,
+      schedule: scheduleRow ?? null,
+      trips: tripsWithStops,
+      stops: primaryTrip?.stops ?? [],
+    };
+  }
+
+  async getActiveTripByLogin(_login: string) {
+    const now = new Date();
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        starts_at as "startsAt",
+        ends_at as "endsAt",
+        route_id as "routeId",
+        route_number as "routeNumber",
+        direction as "routeDirection",
+        transport_type_id as "transportTypeId",
+        transport_type as "transportTypeName",
+        vehicle_id as "vehicleId",
+        fleet_number as "fleetNumber"
+      from driver_api.v_my_schedule
+      where starts_at <= ${now}
+        and (ends_at is null or ends_at >= ${now})
+      order by starts_at desc
+      limit 1
+    `)) as unknown as { rows: ActiveTripRow[] };
+
+    const activeTrip = result.rows[0];
+    if (!activeTrip) {
+      return null;
+    }
+
+    return {
+      id: activeTrip.id,
+      startsAt: activeTrip.startsAt,
+      endsAt: activeTrip.endsAt,
       route: {
-        id: route.id,
-        number: route.number,
-        transportTypeId: route.transportTypeId,
-        direction: route.direction,
+        id: activeTrip.routeId,
+        number: activeTrip.routeNumber,
+        transportTypeId: activeTrip.transportTypeId,
+        direction: activeTrip.routeDirection,
       },
-      workStartTime: schedule.workStartTime,
-      workEndTime: schedule.workEndTime,
-      intervalMin: schedule.intervalMin,
-      stops: stopsWithIntervals,
+      vehicle: {
+        id: activeTrip.vehicleId,
+        fleetNumber: activeTrip.fleetNumber,
+      },
+      transportType: {
+        id: activeTrip.transportTypeId,
+        name: activeTrip.transportTypeName,
+      },
     };
   }
 
   async getRouteStops(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
-    return this.routeStopsService.findStopsByRouteId(routeId);
+    const result = (await this.dbService.db.execute(sql`
+      select
+        route_id as "routeId",
+        stop_id as "stopId",
+        stop_name as "stopName",
+        lon as "lon",
+        lat as "lat",
+        distance_to_next_km as "distanceToNextKm",
+        prev_route_stop_id as "prevRouteStopId",
+        next_route_stop_id as "nextRouteStopId"
+      from guest_api.v_route_stops
+      where route_id = ${routeId}
+      order by id
+    `)) as unknown as { rows: Array<Record<string, unknown>> };
+
+    return result.rows;
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
-    return this.routePointsService.findByRouteId(routeId);
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        route_id as "routeId",
+        lon as "lon",
+        lat as "lat",
+        prev_route_point_id as "prevRoutePointId",
+        next_route_point_id as "nextRoutePointId"
+      from guest_api.v_route_points
+      where route_id = ${routeId}
+      order by id
+    `)) as unknown as { rows: RoutePointRow[] };
+
+    return result.rows;
   }
 
-  async startTrip(payload: StartTripDto) {
-    await this.driversService.findOne(payload.driverId);
-    const vehicle = await this.resolveVehicle(payload);
-    const startsAt = payload.startedAt ?? new Date();
-    const schedule = await this.schedulesService.findByRouteId(vehicle.routeId);
-    const estimatedMinutes = schedule ? schedule.intervalMin : 1;
-    const endsAt = new Date(startsAt.getTime() + estimatedMinutes * 60 * 1000);
+  async startTrip(_login: string, payload: StartTripDto) {
+    if (!payload.fleetNumber) {
+      throw new BadRequestException('fleetNumber is required');
+    }
 
-    return this.tripsService.create({
-      routeId: vehicle.routeId,
-      vehicleId: vehicle.id,
-      driverId: payload.driverId,
-      startsAt,
-      endsAt,
-      passengerCount: 0,
-    });
+    const startedAt = payload.startedAt ?? new Date();
+    const direction = payload.direction ?? 'forward';
+    const result = (await this.dbService.db.execute(sql`
+      select driver_api.start_trip(
+        ${payload.fleetNumber},
+        ${startedAt},
+        ${direction}
+      ) as "tripId"
+    `)) as unknown as { rows: Array<{ tripId: number }> };
+
+    return result.rows[0] ?? { tripId: null };
   }
 
-  async finishTrip(payload: FinishTripDto) {
-    await this.driversService.findOne(payload.driverId);
+  async finishTrip(_login: string, payload: FinishTripDto) {
+    const endedAt = payload.endedAt ?? new Date();
+    const result = (await this.dbService.db.execute(sql`
+      select driver_api.finish_trip(${endedAt}) as "tripId"
+    `)) as unknown as { rows: Array<{ tripId: number }> };
 
-    const trip = payload.tripId
-      ? await this.tripsService.findOne(payload.tripId)
-      : await this.findLatestTrip(payload);
-
-    if (!trip) {
-      throw new NotFoundException('No trip found to finish');
-    }
-
-    if (trip.driverId !== payload.driverId) {
-      throw new BadRequestException('Trip does not belong to this driver');
-    }
-
-    const endsAt = payload.endedAt ?? new Date();
-
-    return this.tripsService.update(trip.id, {
-      endsAt,
-    });
+    return result.rows[0] ?? { tripId: null };
   }
 
-  async setPassengerCount(payload: PassengerCountDto) {
-    await this.driversService.findOne(payload.driverId);
-    const vehicle = await this.resolveVehicle(payload);
+  async setPassengerCount(_login: string, payload: PassengerCountDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select driver_api.set_passenger_count(${payload.date}::date, ${payload.passengerCount}) as "tripId"
+    `)) as unknown as { rows: Array<{ tripId: number }> };
 
-    const trip = await this.tripsService.findLatestByDriverVehicleOnDate(
-      payload.driverId,
-      vehicle.id,
-      payload.date,
-    );
-
-    if (trip) {
-      return this.tripsService.update(trip.id, {
-        passengerCount: payload.passengerCount,
-      });
-    }
-
-    const startsAt = new Date(`${payload.date}T00:00:00`);
-    const endsAt = new Date(`${payload.date}T00:01:00`);
-
-    return this.tripsService.create({
-      routeId: vehicle.routeId,
-      vehicleId: vehicle.id,
-      driverId: payload.driverId,
-      startsAt,
-      endsAt,
-      passengerCount: payload.passengerCount,
-    });
+    return result.rows[0] ?? { tripId: null };
   }
 
   private async resolveRouteId(payload: RouteLookupDto) {
@@ -177,59 +332,67 @@ export class CtDriverService {
       throw new BadRequestException('routeId or routeNumber is required');
     }
 
-    const route = payload.transportTypeId
-      ? await this.routesService.findByNumberAndType(
-          payload.routeNumber,
-          payload.transportTypeId,
-          payload.direction ?? 'forward',
-        )
-      : await this.routesService.findByNumber(payload.routeNumber);
+    const conditions = [sql`number = ${payload.routeNumber}`];
+    if (payload.transportTypeId) {
+      conditions.push(sql`transport_type_id = ${payload.transportTypeId}`);
+    }
+    if (payload.direction) {
+      conditions.push(sql`direction = ${payload.direction}`);
+    }
+    const whereClause = sql.join(conditions, sql.raw(' and '));
 
+    const result = (await this.dbService.db.execute(sql`
+      select id
+      from guest_api.v_routes
+      where ${whereClause}
+      limit 1
+    `)) as unknown as { rows: Array<{ id: number }> };
+
+    const route = result.rows[0];
     if (!route) {
       throw new NotFoundException(
-        `Route ${payload.routeNumber} (${payload.transportTypeId}) not found`,
+        `Route ${payload.routeNumber} (${payload.transportTypeId ?? 'any'}) not found`,
       );
     }
 
     return route.id;
   }
 
-  private async resolveVehicle(payload: {
-    vehicleId?: number;
-    fleetNumber?: string;
-  }) {
-    if (payload.vehicleId) {
-      return this.vehiclesService.findOne(payload.vehicleId);
-    }
+  private async findScheduleByRouteId(routeId: number): Promise<ScheduleRow | null> {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        work_start_time as "workStartTime",
+        work_end_time as "workEndTime",
+        interval_min as "intervalMin"
+      from guest_api.v_schedules
+      where route_id = ${routeId}
+      limit 1
+    `)) as unknown as { rows: ScheduleRow[] };
 
-    if (!payload.fleetNumber) {
-      throw new BadRequestException('vehicleId or fleetNumber is required');
-    }
-
-    const vehicle = await this.vehiclesService.findByFleetNumber(
-      payload.fleetNumber,
-    );
-
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${payload.fleetNumber} not found`);
-    }
-
-    return vehicle;
-  }
-
-  private async findLatestTrip(payload: {
-    driverId: number;
-    vehicleId?: number;
-    fleetNumber?: string;
-  }) {
-    const vehicle = await this.resolveVehicle(payload);
-    return this.tripsService.findLatestByDriverAndVehicle(
-      payload.driverId,
-      vehicle.id,
-    );
+    return result.rows[0] ?? null;
   }
 
   private roundTo1(value: number) {
     return Math.round(value * 10) / 10;
+  }
+
+  private parseDate(value?: string) {
+    if (!value) {
+      return new Date();
+    }
+
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) {
+      throw new BadRequestException('Invalid date format');
+    }
+
+    return new Date(year, month - 1, day);
+  }
+
+  private toDateString(date: Date) {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

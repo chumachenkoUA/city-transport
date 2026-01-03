@@ -22,6 +22,16 @@ export class CtDispatcherController {
     return this.ctDispatcherService.createSchedule(payload);
   }
 
+  @Get('routes')
+  listRoutes() {
+    return this.ctDispatcherService.listRoutes();
+  }
+
+  @Get('schedules')
+  listSchedules() {
+    return this.ctDispatcherService.listSchedules();
+  }
+
   @Patch('schedules/:id')
   updateSchedule(
     @Param('id', ParseIntPipe) id: number,
@@ -33,6 +43,16 @@ export class CtDispatcherController {
   @Get('schedules/:id')
   getSchedule(@Param('id', ParseIntPipe) id: number) {
     return this.ctDispatcherService.getScheduleDetails(id);
+  }
+
+  @Get('drivers')
+  listDrivers() {
+    return this.ctDispatcherService.listDrivers();
+  }
+
+  @Get('vehicles')
+  listVehicles() {
+    return this.ctDispatcherService.listVehicles();
   }
 
   @Post('assignments')
