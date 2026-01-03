@@ -867,18 +867,53 @@ export async function seedDatabase() {
           ])
           .onConflictDoNothing();
 
-        await tx
-          .insert(vehicleGpsLogs)
-          .values([
-            {
-              id: 1,
-              vehicleId: 1,
-              lon: '30.528',
-              lat: '50.451',
-              recordedAt: seedTimestamp,
-            },
-          ])
-          .onConflictDoNothing();
+      await tx
+        .insert(vehicleGpsLogs)
+        .values([
+          {
+            id: 1,
+            vehicleId: 1,
+            lon: '30.528',
+            lat: '50.451',
+            recordedAt: seedTimestamp,
+          },
+          {
+            id: 2,
+            vehicleId: 2,
+            lon: '30.535',
+            lat: '50.457',
+            recordedAt: seedTimestamp,
+          },
+          {
+            id: 3,
+            vehicleId: 3,
+            lon: '30.542',
+            lat: '50.463',
+            recordedAt: seedTimestamp,
+          },
+          {
+            id: 4,
+            vehicleId: 1,
+            lon: '30.532',
+            lat: '50.455',
+            recordedAt: tsAt(today, '07:10:00'),
+          },
+          {
+            id: 5,
+            vehicleId: 1,
+            lon: '30.538',
+            lat: '50.459',
+            recordedAt: tsAt(today, '07:25:00'),
+          },
+          {
+            id: 6,
+            vehicleId: 1,
+            lon: '30.545',
+            lat: '50.463',
+            recordedAt: tsAt(today, '07:40:00'),
+          },
+        ])
+        .onConflictDoNothing();
 
         await tx
           .insert(cardTopUps)
@@ -938,6 +973,13 @@ export async function seedDatabase() {
             workStartTime: '06:30:00',
             workEndTime: '22:30:00',
             intervalMin: 12,
+          },
+          {
+            id: 3,
+            routeId: 11,
+            workStartTime: '06:00:00',
+            workEndTime: '23:00:00',
+            intervalMin: 10,
           },
         ])
         .onConflictDoNothing();
