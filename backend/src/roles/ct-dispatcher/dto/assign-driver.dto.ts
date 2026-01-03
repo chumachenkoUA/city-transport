@@ -14,7 +14,12 @@ export class AssignDriverDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  driverId!: number;
+  @IsOptional()
+  driverId?: number;
+
+  @IsString()
+  @IsOptional()
+  driverLogin?: string;
 
   @Type(() => Number)
   @IsInt()

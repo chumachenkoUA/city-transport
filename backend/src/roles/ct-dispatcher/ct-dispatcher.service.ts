@@ -160,6 +160,214 @@ export class CtDispatcherService {
     return result.rows;
   }
 
+  async listAssignments() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        driver_id as "driverId",
+        driver_name as "driverName",
+        driver_login as "driverLogin",
+        driver_phone as "driverPhone",
+        vehicle_id as "vehicleId",
+        fleet_number as "fleetNumber",
+        route_id as "routeId",
+        route_number as "routeNumber",
+        direction as "direction",
+        transport_type_id as "transportTypeId",
+        transport_type as "transportType",
+        assigned_at as "assignedAt"
+      from dispatcher_api.v_assignments
+      order by assigned_at desc
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        driverId: number;
+        driverName: string;
+        driverLogin: string;
+        driverPhone: string;
+        vehicleId: number;
+        fleetNumber: string;
+        routeId: number;
+        routeNumber: string;
+        direction: string;
+        transportTypeId: number;
+        transportType: string;
+        assignedAt: Date;
+      }>;
+    };
+
+    return result.rows;
+  }
+
+  async listActiveTrips() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        route_id as "routeId",
+        route_number as "routeNumber",
+        direction as "direction",
+        transport_type_id as "transportTypeId",
+        transport_type as "transportType",
+        vehicle_id as "vehicleId",
+        fleet_number as "fleetNumber",
+        driver_id as "driverId",
+        driver_name as "driverName",
+        driver_login as "driverLogin",
+        starts_at as "startsAt",
+        ends_at as "endsAt"
+      from dispatcher_api.v_active_trips
+      order by starts_at desc
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        routeId: number;
+        routeNumber: string;
+        direction: string;
+        transportTypeId: number;
+        transportType: string;
+        vehicleId: number;
+        fleetNumber: string;
+        driverId: number;
+        driverName: string;
+        driverLogin: string;
+        startsAt: Date;
+        endsAt: Date | null;
+      }>;
+    };
+
+    return result.rows;
+  }
+
+  async listDeviations() {
+    const activeTrips = await this.listActiveTrips();
+    const schedules = await this.listSchedules();
+    const scheduleByRouteId = new Map(
+      schedules.map((schedule) => [schedule.routeId, schedule]),
+    );
+
+    const results = [];
+    for (const trip of activeTrips) {
+      const schedule = scheduleByRouteId.get(trip.routeId);
+      if (!schedule) {
+        results.push({
+          status: 'out_of_schedule',
+          fleetNumber: trip.fleetNumber,
+          routeNumber: trip.routeNumber,
+          direction: trip.direction,
+          currentTime: this.currentTimeString(),
+          plannedTime: null,
+          deviationMin: null,
+          vehicleId: trip.vehicleId,
+          driverName: trip.driverName,
+        });
+        continue;
+      }
+
+      const currentTime = this.currentTimeString();
+      const currentMinutes = this.parseTimeToMinutes(currentTime);
+      const startMinutes = this.parseTimeToMinutes(schedule.workStartTime);
+      const endMinutes = this.parseTimeToMinutes(schedule.workEndTime);
+
+      if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+        results.push({
+          status: 'out_of_schedule',
+          fleetNumber: trip.fleetNumber,
+          routeNumber: trip.routeNumber,
+          direction: trip.direction,
+          currentTime,
+          plannedTime: null,
+          deviationMin: null,
+          vehicleId: trip.vehicleId,
+          driverName: trip.driverName,
+        });
+        continue;
+      }
+
+      const passed = currentMinutes - startMinutes;
+      const bucket = Math.floor(passed / schedule.intervalMin);
+      const plannedMinutes = startMinutes + bucket * schedule.intervalMin;
+      const deviationMin = this.roundTo1(currentMinutes - plannedMinutes);
+
+      const latestGps = await this.findLatestVehicleGps(trip.vehicleId);
+      const nearestStop = latestGps
+        ? await this.findNearestStop(trip.routeId, latestGps.lon, latestGps.lat)
+        : null;
+      const lastPoints = await this.findRecentVehicleGps(trip.vehicleId, 5);
+
+      results.push({
+        status: Math.abs(deviationMin) >= 5 ? 'late' : 'ok',
+        fleetNumber: trip.fleetNumber,
+        routeNumber: trip.routeNumber,
+        direction: trip.direction,
+        currentTime,
+        plannedTime: this.formatMinutes(plannedMinutes),
+        deviationMin,
+        vehicleId: trip.vehicleId,
+        driverName: trip.driverName,
+        lastGps: latestGps,
+        nearestStop,
+        history: lastPoints,
+      });
+    }
+
+    return results;
+  }
+
+  async getDashboard() {
+    const [activeTrips, deviations, schedules, drivers, vehicles, assignments] =
+      await Promise.all([
+        this.listActiveTrips(),
+        this.listDeviations(),
+        this.listSchedules(),
+        this.listDrivers(),
+        this.listVehicles(),
+        this.listAssignments(),
+      ]);
+
+    const assignedDrivers = new Set(assignments.map((row) => row.driverId));
+    const assignedVehicles = new Set(assignments.map((row) => row.vehicleId));
+    const unassignedDrivers = drivers.filter(
+      (driver) => !assignedDrivers.has(driver.id),
+    ).length;
+    const unassignedVehicles = vehicles.filter(
+      (vehicle) => !assignedVehicles.has(vehicle.id),
+    ).length;
+
+    const deviationCount = deviations.filter(
+      (item) => item.deviationMin !== null && Math.abs(item.deviationMin) >= 5,
+    ).length;
+
+    return {
+      activeTrips: activeTrips.length,
+      deviations: deviationCount,
+      schedulesToday: schedules.length,
+      unassignedDrivers,
+      unassignedVehicles,
+    };
+  }
+
+  async getRoutePoints(routeId: number) {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        route_id as "routeId",
+        lon as "lon",
+        lat as "lat"
+      from guest_api.v_route_points
+      where route_id = ${routeId}
+      order by id
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        routeId: number;
+        lon: string;
+        lat: string;
+      }>;
+    };
+
+    return result.rows;
+  }
+
   async updateSchedule(id: number, payload: UpdateDispatcherScheduleDto) {
     const routeId =
       payload.routeId !== undefined
@@ -240,7 +448,8 @@ export class CtDispatcherService {
   }
 
   async assignDriver(payload: AssignDriverDto) {
-    await this.findDriverById(payload.driverId);
+    const driverId = await this.resolveDriverId(payload);
+    await this.findDriverById(driverId);
     const vehicle = await this.resolveVehicle(payload);
 
     if (payload.routeNumber || payload.transportTypeId) {
@@ -259,7 +468,7 @@ export class CtDispatcherService {
         vehicle_id as "vehicleId",
         assigned_at as "assignedAt"
       from dispatcher_api.assign_driver(
-        ${payload.driverId},
+        ${driverId},
         ${vehicle.id},
         ${payload.assignedAt ?? null}::timestamp
       )
@@ -421,6 +630,33 @@ export class CtDispatcherService {
     }
 
     return vehicle;
+  }
+
+  private async resolveDriverId(payload: {
+    driverId?: number;
+    driverLogin?: string;
+  }) {
+    if (payload.driverId) {
+      return payload.driverId;
+    }
+
+    if (!payload.driverLogin) {
+      throw new BadRequestException('driverId or driverLogin is required');
+    }
+
+    const result = (await this.dbService.db.execute(sql`
+      select id
+      from dispatcher_api.v_drivers
+      where login = ${payload.driverLogin}
+      limit 1
+    `)) as unknown as { rows: Array<{ id: number }> };
+
+    const driver = result.rows[0];
+    if (!driver) {
+      throw new NotFoundException(`Driver ${payload.driverLogin} not found`);
+    }
+
+    return driver.id;
   }
 
   private parseTimeToMinutes(value: string) {
@@ -694,5 +930,55 @@ export class CtDispatcherService {
     };
 
     return result.rows[0] ?? null;
+  }
+
+  private async findRecentVehicleGps(vehicleId: number, limit: number) {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        vehicle_id as "vehicleId",
+        lon as "lon",
+        lat as "lat",
+        recorded_at as "recordedAt"
+      from dispatcher_api.v_vehicle_gps_logs
+      where vehicle_id = ${vehicleId}
+      order by recorded_at desc
+      limit ${limit}
+    `)) as unknown as {
+      rows: Array<{
+        vehicleId: number;
+        lon: string;
+        lat: string;
+        recordedAt: Date;
+      }>;
+    };
+
+    return result.rows;
+  }
+
+  private async findNearestStop(
+    routeId: number,
+    lon: string,
+    lat: string,
+  ): Promise<{ stopId: number; stopName: string } | null> {
+    const stops = await this.findStopsByRouteId(routeId);
+    if (stops.length === 0) {
+      return null;
+    }
+
+    const lonNum = Number(lon);
+    const latNum = Number(lat);
+    let nearest = stops[0];
+    let best = Number.POSITIVE_INFINITY;
+    for (const stop of stops) {
+      const dlon = lonNum - Number(stop.lon);
+      const dlat = latNum - Number(stop.lat);
+      const distance = dlon * dlon + dlat * dlat;
+      if (distance < best) {
+        best = distance;
+        nearest = stop;
+      }
+    }
+
+    return { stopId: nearest.stopId, stopName: nearest.stopName };
   }
 }

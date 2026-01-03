@@ -27,6 +27,26 @@ export class CtDispatcherController {
     return this.ctDispatcherService.listRoutes();
   }
 
+  @Get('dashboard')
+  getDashboard() {
+    return this.ctDispatcherService.getDashboard();
+  }
+
+  @Get('assignments')
+  listAssignments() {
+    return this.ctDispatcherService.listAssignments();
+  }
+
+  @Get('active-trips')
+  listActiveTrips() {
+    return this.ctDispatcherService.listActiveTrips();
+  }
+
+  @Get('deviations')
+  listDeviations() {
+    return this.ctDispatcherService.listDeviations();
+  }
+
   @Get('schedules')
   listSchedules() {
     return this.ctDispatcherService.listSchedules();
@@ -43,6 +63,11 @@ export class CtDispatcherController {
   @Get('schedules/:id')
   getSchedule(@Param('id', ParseIntPipe) id: number) {
     return this.ctDispatcherService.getScheduleDetails(id);
+  }
+
+  @Get('routes/:routeId/points')
+  getRoutePoints(@Param('routeId', ParseIntPipe) routeId: number) {
+    return this.ctDispatcherService.getRoutePoints(routeId);
   }
 
   @Get('drivers')
