@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { Client } from 'pg';
 import { DbService } from '../../db/db.service';
 import { users } from '../../db/schema';
+import { SessionService } from '../../common/session/session.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -16,6 +17,7 @@ export class AuthService {
   constructor(
     private readonly dbService: DbService,
     private readonly configService: ConfigService,
+    private readonly sessionService: SessionService,
   ) {}
 
   private readonly userSelect = {
@@ -125,13 +127,44 @@ export class AuthService {
         `,
       );
 
+      const session = await this.sessionService.createSession({
+        login: payload.login,
+        password: payload.password,
+        roles: rolesResult.rows.map((row) => row.rolname),
+        user: user
+          ? {
+              id: user.id,
+              login: user.login,
+              fullName: user.fullName,
+              email: user.email,
+              phone: user.phone,
+              registeredAt: user.registeredAt.toISOString(),
+            }
+          : null,
+      });
+
       return {
         ok: true,
         user,
         roles: rolesResult.rows.map((row) => row.rolname),
+        token: session.token,
+        expiresIn: session.expiresIn,
       };
     } finally {
       await client.end().catch(() => undefined);
     }
+  }
+
+  async logout(token?: string) {
+    if (!token) {
+      return { ok: true };
+    }
+
+    const session = await this.sessionService.getSession(token);
+    await this.sessionService.deleteSession(token);
+    if (session?.login) {
+      await this.dbService.closeUserPool(session.login);
+    }
+    return { ok: true };
   }
 }

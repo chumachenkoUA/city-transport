@@ -26,7 +26,7 @@ export const trips = pgTable(
       .notNull()
       .references(() => drivers.id),
     startsAt: timestamp('starts_at').notNull(),
-    endsAt: timestamp('ends_at').notNull(),
+    endsAt: timestamp('ends_at'),
     passengerCount: integer('passenger_count').notNull().default(0),
   },
   (table) => ({
@@ -37,7 +37,7 @@ export const trips = pgTable(
     ),
     tripsEndsAfterStartsCheck: check(
       'trips_ends_after_starts_check',
-      sql.raw('"ends_at" > "starts_at"'),
+      sql.raw('"ends_at" is null or "ends_at" > "starts_at"'),
     ),
     tripsPassengerCountCheck: check(
       'trips_passenger_count_check',

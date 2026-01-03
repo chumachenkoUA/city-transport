@@ -7,6 +7,7 @@ import {
   transportCards,
   transportTypes,
   trips,
+  vehicles,
 } from '../../db/schema';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -42,12 +43,14 @@ export class TicketsService {
         routeId: trips.routeId,
         routeNumber: routes.number,
         transportType: transportTypes.name,
+        fleetNumber: vehicles.fleetNumber,
         vehicleId: trips.vehicleId,
         driverId: trips.driverId,
       })
       .from(tickets)
       .innerJoin(transportCards, eq(transportCards.id, tickets.cardId))
       .innerJoin(trips, eq(trips.id, tickets.tripId))
+      .innerJoin(vehicles, eq(vehicles.id, trips.vehicleId))
       .innerJoin(routes, eq(routes.id, trips.routeId))
       .innerJoin(transportTypes, eq(transportTypes.id, routes.transportTypeId))
       .where(eq(tickets.cardId, cardId))

@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -15,5 +15,13 @@ export class AuthController {
   @Post('login')
   login(@Body() payload: LoginDto) {
     return this.authService.login(payload);
+  }
+
+  @Post('logout')
+  logout(@Headers('authorization') authorization?: string) {
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length).trim()
+      : '';
+    return this.authService.logout(token);
   }
 }

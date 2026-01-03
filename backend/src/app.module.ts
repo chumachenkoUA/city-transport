@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthSessionMiddleware } from './common/session/auth-session.middleware';
+import { SessionModule } from './common/session/session.module';
 import { DbModule } from './db/db.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
@@ -39,6 +41,7 @@ import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    SessionModule,
     DbModule,
     AuthModule,
     BudgetsModule,
@@ -76,4 +79,8 @@ import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AuthSessionMiddleware).forRoutes('*');
+  }
+}

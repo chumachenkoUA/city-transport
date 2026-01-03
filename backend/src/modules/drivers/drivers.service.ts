@@ -26,6 +26,19 @@ export class DriversService {
     return driver;
   }
 
+  async findByLogin(login: string) {
+    const [driver] = await this.dbService.db
+      .select()
+      .from(drivers)
+      .where(eq(drivers.login, login));
+
+    if (!driver) {
+      throw new NotFoundException(`Driver ${login} not found`);
+    }
+
+    return driver;
+  }
+
   async create(payload: CreateDriverDto) {
     const [created] = await this.dbService.db
       .insert(drivers)

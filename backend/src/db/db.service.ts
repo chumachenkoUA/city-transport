@@ -8,30 +8,111 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { join } from 'node:path';
 import { Pool } from 'pg';
+import { RequestContextService } from '../common/session/request-context.service';
 import * as schema from './schema';
 
 @Injectable()
 export class DbService implements OnApplicationShutdown, OnModuleInit {
-  readonly db: NodePgDatabase<typeof schema>;
-  private readonly pool: Pool;
+  private readonly baseDb: NodePgDatabase<typeof schema>;
+  private readonly basePool: Pool;
+  private readonly baseConfig: {
+    host: string;
+    port: number;
+    database: string;
+  };
+  private readonly userPoolMax: number;
+  private readonly userPoolIdleMs: number;
+  private readonly userPools = new Map<
+    string,
+    { pool: Pool; db: NodePgDatabase<typeof schema>; password: string }
+  >();
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly contextService: RequestContextService,
+  ) {
     const connectionString = this.config.get<string>('DATABASE_URL');
     if (!connectionString) {
       throw new Error('DATABASE_URL is not set');
     }
 
-    this.pool = new Pool({ connectionString });
-    this.db = drizzle(this.pool, { schema });
+    const url = new URL(connectionString);
+    this.baseConfig = {
+      host: url.hostname,
+      port: url.port ? Number(url.port) : 5432,
+      database: url.pathname.replace(/^\//, ''),
+    };
+    const poolMax = Number(this.config.get<string>('DB_USER_POOL_MAX'));
+    const poolIdle = Number(this.config.get<string>('DB_USER_POOL_IDLE_MS'));
+    this.userPoolMax = Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 2;
+    this.userPoolIdleMs =
+      Number.isFinite(poolIdle) && poolIdle > 0 ? poolIdle : 30000;
+
+    this.basePool = new Pool({ connectionString });
+    this.baseDb = drizzle(this.basePool, { schema });
+  }
+
+  get db(): NodePgDatabase<typeof schema> {
+    const session = this.contextService.get();
+    if (!session?.login || !session.password) {
+      return this.baseDb;
+    }
+
+    const cached = this.userPools.get(session.login);
+    if (cached && cached.password === session.password) {
+      return cached.db;
+    }
+
+    if (cached) {
+      void cached.pool.end();
+      this.userPools.delete(session.login);
+    }
+
+    const pool = new Pool({
+      host: this.baseConfig.host,
+      port: this.baseConfig.port,
+      database: this.baseConfig.database,
+      user: session.login,
+      password: session.password,
+      max: this.userPoolMax,
+      idleTimeoutMillis: this.userPoolIdleMs,
+    });
+    const db = drizzle(pool, { schema });
+    this.userPools.set(session.login, {
+      pool,
+      db,
+      password: session.password,
+    });
+
+    return db;
   }
 
   async onModuleInit(): Promise<void> {
-    await migrate(this.db, {
+    await migrate(this.baseDb, {
       migrationsFolder: join(process.cwd(), 'drizzle'),
     });
+
+    if (this.config.get<string>('SEED_ON_START') === 'true') {
+      // Use require to avoid ESM extension issues in NodeNext.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { seedDatabase } = require('../seed');
+      await seedDatabase();
+    }
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await this.pool.end();
+    await this.basePool.end();
+    for (const entry of this.userPools.values()) {
+      await entry.pool.end();
+    }
+  }
+
+  async closeUserPool(login: string): Promise<void> {
+    const entry = this.userPools.get(login);
+    if (!entry) {
+      return;
+    }
+    this.userPools.delete(login);
+    await entry.pool.end();
   }
 }
