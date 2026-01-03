@@ -57,6 +57,90 @@
       "when": 1767500000000,
       "tag": "0007_auth_register",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1767501000000,
+      "tag": "0008_driver-active-trips",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1767502000000,
+      "tag": "0009_api-schemas-views",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1767503000000,
+      "tag": "0010_api-security-hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1767504000000,
+      "tag": "0011_revoke-public-access",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1767505000000,
+      "tag": "0012_controller_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1767506000000,
+      "tag": "0013_driver_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1767507000000,
+      "tag": "0014_api_functions_row_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1767508000000,
+      "tag": "0015_rls_policies_session_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1767509000000,
+      "tag": "0016_default_privileges_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1767510000000,
+      "tag": "0017_fix_guest_route_stops",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1767511000000,
+      "tag": "0018_grant_guest_route_stops",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1767512000000,
+      "tag": "0019_dispatcher_api",
+      "breakpoints": true
     }
   ]
 }
