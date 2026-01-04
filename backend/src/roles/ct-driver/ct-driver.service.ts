@@ -6,6 +6,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { FinishTripDto } from './dto/finish-trip.dto';
+import { GpsLogDto } from './dto/gps-log.dto';
 import { PassengerCountDto } from './dto/passenger-count.dto';
 import { RouteLookupDto } from './dto/route-lookup.dto';
 import { StartTripDto } from './dto/start-trip.dto';
@@ -316,11 +317,23 @@ export class CtDriverService {
   }
 
   async setPassengerCount(_login: string, payload: PassengerCountDto) {
-    const result = (await this.dbService.db.execute(sql`
-      select driver_api.set_passenger_count(${payload.date}::date, ${payload.passengerCount}) as "tripId"
-    `)) as unknown as { rows: Array<{ tripId: number }> };
+    await this.dbService.db.execute(sql`
+      select driver_api.update_passengers(${payload.tripId}::bigint, ${payload.passengerCount}::integer)
+    `);
 
-    return result.rows[0] ?? { tripId: null };
+    return { ok: true };
+  }
+
+  async logGps(_login: string, payload: GpsLogDto) {
+    const recordedAt = payload.recordedAt ?? new Date().toISOString();
+    await this.dbService.db.execute(sql`
+      select driver_api.log_vehicle_gps(
+        ${payload.lon},
+        ${payload.lat},
+        ${recordedAt}::timestamp
+      )
+    `);
+    return { ok: true };
   }
 
   private async resolveRouteId(payload: RouteLookupDto) {

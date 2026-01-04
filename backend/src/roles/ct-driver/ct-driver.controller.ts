@@ -9,6 +9,7 @@ import {
 import { RequestContextService } from '../../common/session/request-context.service';
 import { CtDriverService } from './ct-driver.service';
 import { FinishTripDto } from './dto/finish-trip.dto';
+import { GpsLogDto } from './dto/gps-log.dto';
 import { PassengerCountDto } from './dto/passenger-count.dto';
 import { RouteLookupDto } from './dto/route-lookup.dto';
 import { StartTripDto } from './dto/start-trip.dto';
@@ -58,6 +59,11 @@ export class CtDriverController {
   @Post('trips/passengers')
   setPassengerCount(@Body() payload: PassengerCountDto) {
     return this.ctDriverService.setPassengerCount(this.requireLogin(), payload);
+  }
+
+  @Post('trips/gps')
+  sendGps(@Body() payload: GpsLogDto) {
+    return this.ctDriverService.logGps(this.requireLogin(), payload);
   }
 
   private requireLogin() {

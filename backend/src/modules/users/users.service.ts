@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { users } from '../../db/schema';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -33,20 +32,6 @@ export class UsersService {
     }
 
     return user;
-  }
-
-  async create(payload: CreateUserDto) {
-    const [created] = await this.dbService.db
-      .insert(users)
-      .values({
-        login: payload.login,
-        email: payload.email,
-        phone: payload.phone,
-        fullName: payload.fullName,
-      })
-      .returning(this.userSelect);
-
-    return created;
   }
 
   async update(id: number, payload: UpdateUserDto) {

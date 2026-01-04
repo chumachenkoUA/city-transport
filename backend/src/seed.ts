@@ -88,41 +88,72 @@ export async function seedDatabase() {
     const seedRandomEnabled = process.env.SEED_RANDOM !== 'false';
 
     await db.transaction(async (tx) => {
-      await tx
-        .insert(drivers)
-        .values([
-          {
-            id: 1,
-            login: 'driver1',
-            email: 'driver1@example.com',
-            phone: '+380971112233',
-            fullName: 'Сидоренко Петро Іванович',
-            driverLicenseNumber: 'KP123456',
-            licenseCategories: ['B', 'C'],
-            passportData: { number: '123456', series: 'AB' },
-          },
-          {
-            id: 2,
-            login: 'driver2',
-            email: 'driver2@example.com',
-            phone: '+380972223344',
-            fullName: 'Коваль Андрій Петрович',
-            driverLicenseNumber: 'KP654321',
-            licenseCategories: ['B', 'D'],
-            passportData: { number: '654321', series: 'AB' },
-          },
-          {
-            id: 3,
-            login: 'driver3',
-            email: 'driver3@example.com',
-            phone: '+380973334455',
-            fullName: 'Мельник Ігор Васильович',
-            driverLicenseNumber: 'KP777888',
-            licenseCategories: ['C', 'D'],
-            passportData: { number: '777888', series: 'BC' },
-          },
-        ])
-        .onConflictDoNothing();
+      // Seed Drivers with DB Roles
+      const driverData = [
+        {
+          id: 1,
+          login: 'driver1',
+          email: 'driver1@example.com',
+          phone: '+380971112233',
+          fullName: 'Сидоренко Петро Іванович',
+          driverLicenseNumber: 'KP123456',
+          licenseCategories: ['B', 'C'],
+          passportData: { number: '123456', series: 'AB' },
+        },
+        {
+          id: 2,
+          login: 'driver2',
+          email: 'driver2@example.com',
+          phone: '+380972223344',
+          fullName: 'Коваль Андрій Петрович',
+          driverLicenseNumber: 'KP654321',
+          licenseCategories: ['B', 'D'],
+          passportData: { number: '654321', series: 'AB' },
+        },
+        {
+          id: 3,
+          login: 'driver3',
+          email: 'driver3@example.com',
+          phone: '+380973334455',
+          fullName: 'Мельник Ігор Васильович',
+          driverLicenseNumber: 'KP777888',
+          licenseCategories: ['C', 'D'],
+          passportData: { number: '777888', series: 'BC' },
+        },
+      ];
+
+      for (const driver of driverData) {
+        // Create DB Role manually for drivers (internal staff logic)
+        await tx.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${driver.login}') THEN
+              EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', '${driver.login}', 'CHANGE_ME');
+            ELSE
+              EXECUTE format('ALTER ROLE %I WITH PASSWORD %L', '${driver.login}', 'CHANGE_ME');
+            END IF;
+          END $$;
+        `));
+        // Grant Driver Role
+        await tx.execute(sql`GRANT ct_driver_role TO ${sql.identifier(driver.login)}`);
+
+        // Insert into table
+        await tx
+          .insert(drivers)
+          .values(driver)
+          .onConflictDoUpdate({
+            target: drivers.id,
+            set: {
+              login: driver.login,
+              email: driver.email,
+              phone: driver.phone,
+              fullName: driver.fullName,
+              driverLicenseNumber: driver.driverLicenseNumber,
+              licenseCategories: driver.licenseCategories,
+              passportData: driver.passportData,
+            },
+          });
+      }
 
       await tx
         .insert(stops)
@@ -543,43 +574,76 @@ export async function seedDatabase() {
         ])
         .onConflictDoNothing();
 
-      await tx
-        .insert(users)
-        .values([
-          {
-            id: 1,
-            login: 'pupkin',
-            email: 'pupkin@example.com',
-            phone: '+380991112233',
-            fullName: 'Пупкін Василь Олександрович',
-            registeredAt: seedTimestamp,
-          },
-          {
-            id: 2,
-            login: 'ivanova',
-            email: 'ivanova@example.com',
-            phone: '+380992223344',
-            fullName: 'Іванова Марія Сергіївна',
-            registeredAt: seedTimestamp,
-          },
-          {
-            id: 3,
-            login: 'bondar',
-            email: 'bondar@example.com',
-            phone: '+380993334455',
-            fullName: 'Бондар Олег Ігорович',
-            registeredAt: seedTimestamp,
-          },
-          {
-            id: 4,
-            login: 'shevchenko',
-            email: 'shevchenko@example.com',
-            phone: '+380994445566',
-            fullName: 'Шевченко Олена Петрівна',
-            registeredAt: seedTimestamp,
-          },
-        ])
-        .onConflictDoNothing();
+      // Seed Users (Passengers) via register function
+      const passengerData = [
+        {
+          id: 1,
+          login: 'pupkin',
+          email: 'pupkin@example.com',
+          phone: '+380991112233',
+          fullName: 'Пупкін Василь Олександрович',
+          registeredAt: seedTimestamp,
+        },
+        {
+          id: 2,
+          login: 'ivanova',
+          email: 'ivanova@example.com',
+          phone: '+380992223344',
+          fullName: 'Іванова Марія Сергіївна',
+          registeredAt: seedTimestamp,
+        },
+        {
+          id: 3,
+          login: 'bondar',
+          email: 'bondar@example.com',
+          phone: '+380993334455',
+          fullName: 'Бондар Олег Ігорович',
+          registeredAt: seedTimestamp,
+        },
+        {
+          id: 4,
+          login: 'shevchenko',
+          email: 'shevchenko@example.com',
+          phone: '+380994445566',
+          fullName: 'Шевченко Олена Петрівна',
+          registeredAt: seedTimestamp,
+        },
+      ];
+
+      for (const passenger of passengerData) {
+        // Try to register (handles role creation + user insert)
+        try {
+          // Check if role exists to avoid error from register_passenger (though function handles it, this is safer for idempotency in seed)
+          const roleExists = await tx.execute(
+            sql`SELECT 1 FROM pg_roles WHERE rolname = ${passenger.login}`,
+          );
+
+          if (roleExists.rowCount === 0) {
+            await tx.execute(sql`
+              SELECT auth.register_passenger(
+                ${passenger.login},
+                'CHANGE_ME',
+                ${passenger.email},
+                ${passenger.phone},
+                ${passenger.fullName}
+              )
+            `);
+          } else {
+             // If role exists, ensure user record exists (re-runnable seed)
+             await tx.insert(users).values(passenger).onConflictDoUpdate({
+                target: users.id,
+                set: {
+                    fullName: passenger.fullName,
+                    email: passenger.email,
+                    phone: passenger.phone
+                }
+             })
+          }
+
+        } catch (e) {
+          console.log(`Skipping registration for ${passenger.login}: already exists or error`, e);
+        }
+      }
 
       await tx
         .insert(vehicles)
@@ -1172,6 +1236,29 @@ export async function seedDatabase() {
           },
         ])
         .onConflictDoNothing();
+      // Seed Operational Staff Roles
+      const staffRoles = [
+        { login: 'ct_admin', role: 'ct_admin_role' },
+        { login: 'ct_accountant', role: 'ct_accountant_role' },
+        { login: 'ct_dispatcher', role: 'ct_dispatcher_role' },
+        { login: 'ct_controller', role: 'ct_controller_role' },
+        { login: 'ct_manager', role: 'ct_manager_role' },
+        { login: 'ct_municipality', role: 'ct_municipality_role' },
+      ];
+
+      for (const staff of staffRoles) {
+        await tx.execute(sql.raw(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${staff.login}') THEN
+              EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', '${staff.login}', 'CHANGE_ME');
+            ELSE
+              EXECUTE format('ALTER ROLE %I WITH PASSWORD %L', '${staff.login}', 'CHANGE_ME');
+            END IF;
+          END $$;
+        `));
+        await tx.execute(sql`GRANT ${sql.identifier(staff.role)} TO ${sql.identifier(staff.login)}`);
+      }
     });
 
     const counts = await Promise.all([

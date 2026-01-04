@@ -1,16 +1,5 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
-import { BudgetsService } from '../../modules/budgets/budgets.service';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CreateBudgetDto } from '../../modules/budgets/dto/create-budget.dto';
-import { UpdateBudgetDto } from '../../modules/budgets/dto/update-budget.dto';
 import { CreateExpenseDto } from '../../modules/expenses/dto/create-expense.dto';
 import { CreateSalaryPaymentDto } from '../../modules/salary-payments/dto/create-salary-payment.dto';
 import { CtAccountantService } from './ct-accountant.service';
@@ -21,36 +10,16 @@ import { SalariesQueryDto } from './dto/salaries-query.dto';
 
 @Controller('accountant')
 export class CtAccountantController {
-  constructor(
-    private readonly ctAccountantService: CtAccountantService,
-    private readonly budgetsService: BudgetsService,
-  ) {}
+  constructor(private readonly ctAccountantService: CtAccountantService) {}
 
   @Get('budgets')
   getBudgets(@Query() query: BudgetQueryDto) {
-    if (query.month) {
-      return this.budgetsService.findByMonth(query.month);
-    }
-
-    return this.budgetsService.findAll();
-  }
-
-  @Get('budgets/:id')
-  getBudget(@Param('id', ParseIntPipe) id: number) {
-    return this.budgetsService.findOne(id);
+    return this.ctAccountantService.listBudgets(query);
   }
 
   @Post('budgets')
-  createBudget(@Body() payload: CreateBudgetDto) {
-    return this.budgetsService.create(payload);
-  }
-
-  @Patch('budgets/:id')
-  updateBudget(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() payload: UpdateBudgetDto,
-  ) {
-    return this.budgetsService.update(id, payload);
+  upsertBudget(@Body() payload: CreateBudgetDto) {
+    return this.ctAccountantService.upsertBudget(payload);
   }
 
   @Post('expenses')

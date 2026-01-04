@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+import { DbService } from '../../db/db.service';
 import { DriversService } from '../../modules/drivers/drivers.service';
 import { CreateDriverDto } from '../../modules/drivers/dto/create-driver.dto';
 import { UpdateDriverDto } from '../../modules/drivers/dto/update-driver.dto';
@@ -21,6 +23,7 @@ import { UpdateVehicleDto } from '../../modules/vehicles/dto/update-vehicle.dto'
 @Injectable()
 export class CtAdminService {
   constructor(
+    private readonly dbService: DbService,
     private readonly usersService: UsersService,
     private readonly driversService: DriversService,
     private readonly stopsService: StopsService,
@@ -47,8 +50,21 @@ export class CtAdminService {
     };
   }
 
-  createUser(payload: CreateUserDto) {
-    return this.usersService.create(payload);
+  async createUser(payload: CreateUserDto) {
+    const result = await this.dbService.db.execute<{
+      register_passenger: string;
+    }>(sql`
+      SELECT auth.register_passenger(
+        ${payload.login},
+        'CHANGE_ME',
+        ${payload.email},
+        ${payload.phone},
+        ${payload.fullName}
+      )
+    `);
+    
+    const userId = result.rows[0].register_passenger;
+    return this.usersService.findOne(Number(userId));
   }
 
   updateUser(id: number, payload: UpdateUserDto) {

@@ -6,9 +6,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
-  Post,
 } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
@@ -24,11 +22,6 @@ export class UsersController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
-  }
-
-  @Post()
-  create(@Body() payload: CreateUserDto) {
-    return this.usersService.create(payload);
   }
 
   @Patch(':id')
