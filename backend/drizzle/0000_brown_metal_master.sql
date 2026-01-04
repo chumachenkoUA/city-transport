@@ -1,20 +1,25 @@
 CREATE TABLE "users" (
 	"id" bigserial PRIMARY KEY NOT NULL,
+	"login" text NOT NULL,
 	"email" text NOT NULL,
 	"phone" text NOT NULL,
 	"full_name" text NOT NULL,
 	"registered_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "users_login_unique" UNIQUE("login"),
 	CONSTRAINT "users_email_unique" UNIQUE("email"),
 	CONSTRAINT "users_phone_unique" UNIQUE("phone")
 );
 --> statement-breakpoint
 CREATE TABLE "drivers" (
 	"id" bigserial PRIMARY KEY NOT NULL,
+	"login" text NOT NULL,
 	"email" text NOT NULL,
 	"phone" text NOT NULL,
 	"full_name" text NOT NULL,
 	"driver_license_number" text NOT NULL,
+	"license_categories" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"passport_data" jsonb NOT NULL,
+	CONSTRAINT "drivers_login_unique" UNIQUE("login"),
 	CONSTRAINT "drivers_email_unique" UNIQUE("email"),
 	CONSTRAINT "drivers_phone_unique" UNIQUE("phone"),
 	CONSTRAINT "drivers_driver_license_number_unique" UNIQUE("driver_license_number")
@@ -103,11 +108,47 @@ CREATE TABLE "trips" (
 	"vehicle_id" bigint NOT NULL,
 	"driver_id" bigint NOT NULL,
 	"starts_at" timestamp NOT NULL,
-	"ends_at" timestamp NOT NULL,
+	"ends_at" timestamp,
 	"passenger_count" integer DEFAULT 0 NOT NULL,
 	CONSTRAINT "trips_vehicle_time_unique" UNIQUE("vehicle_id","starts_at","ends_at"),
-	CONSTRAINT "trips_ends_after_starts_check" CHECK ("ends_at" > "starts_at"),
+	CONSTRAINT "trips_ends_after_starts_check" CHECK ("ends_at" is null or "ends_at" > "starts_at"),
 	CONSTRAINT "trips_passenger_count_check" CHECK ("passenger_count" >= 0)
+);
+--> statement-breakpoint
+CREATE TABLE "budgets" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"month" date NOT NULL,
+	"income" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"expenses" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"note" text,
+	CONSTRAINT "budgets_month_unique" UNIQUE("month"),
+	CONSTRAINT "budgets_income_check" CHECK ("income" >= 0),
+	CONSTRAINT "budgets_expenses_check" CHECK ("expenses" >= 0)
+);
+--> statement-breakpoint
+CREATE TABLE "expenses" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"category" text NOT NULL,
+	"amount" numeric(12, 2) NOT NULL,
+	"description" text,
+	"occurred_at" timestamp DEFAULT now() NOT NULL,
+	"document_ref" text,
+	CONSTRAINT "expenses_amount_check" CHECK ("amount" > 0)
+);
+--> statement-breakpoint
+CREATE TABLE "salary_payments" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"driver_id" bigint,
+	"employee_name" text,
+	"employee_role" text,
+	"rate" numeric(12, 2),
+	"units" integer,
+	"total" numeric(12, 2) NOT NULL,
+	"paid_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "salary_payments_total_check" CHECK ("total" > 0),
+	CONSTRAINT "salary_payments_rate_check" CHECK ("rate" is null or "rate" > 0),
+	CONSTRAINT "salary_payments_units_check" CHECK ("units" is null or "units" > 0),
+	CONSTRAINT "salary_payments_employee_check" CHECK ("driver_id" is not null or "employee_name" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "transport_cards" (
@@ -141,9 +182,13 @@ CREATE TABLE "fines" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
 	"status" text NOT NULL,
+	"amount" numeric(12, 2) NOT NULL,
+	"reason" text NOT NULL,
+	"issued_by" text DEFAULT current_user NOT NULL,
 	"trip_id" bigint NOT NULL,
 	"issued_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "fines_status_check" CHECK ("status" in ('В процесі', 'Оплачено', 'Відмінено', 'Прострочено'))
+	CONSTRAINT "fines_amount_check" CHECK ("amount" > 0),
+	CONSTRAINT "fines_status_check" CHECK ("status" in ('Очікує сплати', 'В процесі', 'Оплачено', 'Відмінено', 'Прострочено'))
 );
 --> statement-breakpoint
 CREATE TABLE "fine_appeals" (
@@ -163,6 +208,7 @@ CREATE TABLE "complaints_suggestions" (
 	"message" text NOT NULL,
 	"trip_id" bigint,
 	"status" text NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "complaints_suggestions_status_check" CHECK ("status" in ('Подано', 'Розглядається', 'Розглянуто'))
 );
 --> statement-breakpoint
@@ -198,6 +244,7 @@ ALTER TABLE "schedules" ADD CONSTRAINT "schedules_route_id_routes_id_fk" FOREIGN
 ALTER TABLE "trips" ADD CONSTRAINT "trips_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trips" ADD CONSTRAINT "trips_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trips" ADD CONSTRAINT "trips_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "salary_payments" ADD CONSTRAINT "salary_payments_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transport_cards" ADD CONSTRAINT "transport_cards_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "card_top_ups" ADD CONSTRAINT "card_top_ups_card_id_transport_cards_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tickets" ADD CONSTRAINT "tickets_trip_id_trips_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

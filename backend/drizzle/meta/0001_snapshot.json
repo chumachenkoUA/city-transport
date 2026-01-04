@@ -1,6 +1,6 @@
 {
-  "id": "05edd3a8-21dd-4d88-88b3-09ad9cc1b33e",
-  "prevId": "11b6405a-2e36-4bcb-9f8b-8bc8df8ed33c",
+  "id": "07d5811e-c0d7-4f58-8524-655e1d894918",
+  "prevId": "0658f2c5-30d2-489a-989a-e62cf3735e63",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -12,6 +12,12 @@
           "name": "id",
           "type": "bigserial",
           "primaryKey": true,
+          "notNull": true
+        },
+        "login": {
+          "name": "login",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
         },
         "email": {
@@ -44,6 +50,13 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
+        "users_login_unique": {
+          "name": "users_login_unique",
+          "columns": [
+            "login"
+          ],
+          "nullsNotDistinct": false
+        },
         "users_email_unique": {
           "name": "users_email_unique",
           "columns": [
@@ -73,6 +86,12 @@
           "primaryKey": true,
           "notNull": true
         },
+        "login": {
+          "name": "login",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "email": {
           "name": "email",
           "type": "text",
@@ -97,6 +116,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "license_categories": {
+          "name": "license_categories",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
         "passport_data": {
           "name": "passport_data",
           "type": "jsonb",
@@ -108,6 +134,13 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
+        "drivers_login_unique": {
+          "name": "drivers_login_unique",
+          "columns": [
+            "login"
+          ],
+          "nullsNotDistinct": false
+        },
         "drivers_email_unique": {
           "name": "drivers_email_unique",
           "columns": [
@@ -796,7 +829,7 @@
           "name": "ends_at",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "passenger_count": {
           "name": "passenger_count",
@@ -864,11 +897,221 @@
       "checkConstraints": {
         "trips_ends_after_starts_check": {
           "name": "trips_ends_after_starts_check",
-          "value": "\"ends_at\" > \"starts_at\""
+          "value": "\"ends_at\" is null or \"ends_at\" > \"starts_at\""
         },
         "trips_passenger_count_check": {
           "name": "trips_passenger_count_check",
           "value": "\"passenger_count\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.budgets": {
+      "name": "budgets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "month": {
+          "name": "month",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "income": {
+          "name": "income",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "expenses": {
+          "name": "expenses",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "budgets_month_unique": {
+          "name": "budgets_month_unique",
+          "columns": [
+            "month"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "budgets_income_check": {
+          "name": "budgets_income_check",
+          "value": "\"income\" >= 0"
+        },
+        "budgets_expenses_check": {
+          "name": "budgets_expenses_check",
+          "value": "\"expenses\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.expenses": {
+      "name": "expenses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "document_ref": {
+          "name": "document_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "expenses_amount_check": {
+          "name": "expenses_amount_check",
+          "value": "\"amount\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.salary_payments": {
+      "name": "salary_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "driver_id": {
+          "name": "driver_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "employee_name": {
+          "name": "employee_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "employee_role": {
+          "name": "employee_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate": {
+          "name": "rate",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "units": {
+          "name": "units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total": {
+          "name": "total",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "salary_payments_driver_id_drivers_id_fk": {
+          "name": "salary_payments_driver_id_drivers_id_fk",
+          "tableFrom": "salary_payments",
+          "columnsFrom": [
+            "driver_id"
+          ],
+          "tableTo": "drivers",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "salary_payments_total_check": {
+          "name": "salary_payments_total_check",
+          "value": "\"total\" > 0"
+        },
+        "salary_payments_rate_check": {
+          "name": "salary_payments_rate_check",
+          "value": "\"rate\" is null or \"rate\" > 0"
+        },
+        "salary_payments_units_check": {
+          "name": "salary_payments_units_check",
+          "value": "\"units\" is null or \"units\" > 0"
+        },
+        "salary_payments_employee_check": {
+          "name": "salary_payments_employee_check",
+          "value": "\"driver_id\" is not null or \"employee_name\" is not null"
         }
       },
       "isRLSEnabled": false
@@ -1100,6 +1343,25 @@
           "primaryKey": false,
           "notNull": true
         },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_by": {
+          "name": "issued_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "current_user"
+        },
         "trip_id": {
           "name": "trip_id",
           "type": "bigint",
@@ -1147,9 +1409,13 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "fines_amount_check": {
+          "name": "fines_amount_check",
+          "value": "\"amount\" > 0"
+        },
         "fines_status_check": {
           "name": "fines_status_check",
-          "value": "\"status\" in ('В процесі', 'Оплачено', 'Відмінено', 'Прострочено')"
+          "value": "\"status\" in ('Очікує сплати', 'В процесі', 'Оплачено', 'Відмінено', 'Прострочено')"
         }
       },
       "isRLSEnabled": false
@@ -1264,6 +1530,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},

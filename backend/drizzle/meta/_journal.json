@@ -5,176 +5,36 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1766697848477,
-      "tag": "0000_quiet_yellow_claw",
+      "when": 1767483806206,
+      "tag": "0000_brown_metal_master",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1766698346184,
-      "tag": "0001_postgis-geom",
+      "when": 1767483839966,
+      "tag": "0001_setup_roles_and_schemas",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1767046356535,
-      "tag": "0002_add-fines-fields",
+      "when": 1767483952290,
+      "tag": "0002_setup_functions_and_logic",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1767133473172,
-      "tag": "0003_add-driver-license-categories",
+      "when": 1767484024558,
+      "tag": "0003_setup_api_views",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1767300000000,
-      "tag": "0004_add-accounting-tables",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1767301000000,
-      "tag": "0005_add-complaints-created-at",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1767400000000,
-      "tag": "0006_add-logins",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1767500000000,
-      "tag": "0007_auth_register",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1767501000000,
-      "tag": "0008_driver-active-trips",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1767502000000,
-      "tag": "0009_api-schemas-views",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1767503000000,
-      "tag": "0010_api-security-hardening",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1767504000000,
-      "tag": "0011_revoke-public-access",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1767505000000,
-      "tag": "0012_controller_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1767506000000,
-      "tag": "0013_driver_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1767507000000,
-      "tag": "0014_api_functions_row_security",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1767508000000,
-      "tag": "0015_rls_policies_session_user",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1767509000000,
-      "tag": "0016_default_privileges_guard",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1767510000000,
-      "tag": "0017_fix_guest_route_stops",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1767511000000,
-      "tag": "0018_grant_guest_route_stops",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1767512000000,
-      "tag": "0019_dispatcher_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1767513000000,
-      "tag": "0020_dispatcher_views",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1767514000000,
-      "tag": "0021_relax_force_rls_trips",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1767515000000,
-      "tag": "0022_guest_api_functions",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "7",
-      "when": 1767516000000,
-      "tag": "0023_manager_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "7",
-      "when": 1767517000000,
-      "tag": "0024_manager_role_privileges",
+      "when": 1767484075750,
+      "tag": "0004_setup_rls_policies",
       "breakpoints": true
     }
   ]
