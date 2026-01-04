@@ -158,6 +158,7 @@ function AccountantPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accountant', 'budgets'] })
+      setBudgetForm((prev) => ({ ...prev, income: '', expenses: '', note: '' }))
     },
   })
 
@@ -175,6 +176,7 @@ function AccountantPage() {
     },
     onSuccess: () => {
       expensesMutation.mutate()
+      setExpenseForm({ category: '', amount: '', description: '', occurredAt: formatDate(today), documentRef: '' })
     },
   })
 
@@ -197,26 +199,13 @@ function AccountantPage() {
     },
   })
 
-  if (!user) {
+  if (!user || !hasAccess) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Доступ бухгалтера</h2>
+      <main className="page-shell flex items-center justify-center">
+        <div className="card max-w-md text-center">
+          <h2 className="text-2xl font-bold text-slate-800">Обмежений доступ</h2>
           <p className="mt-2 text-slate-600">
-            Увійдіть під акаунтом бухгалтера, щоб бачити фінансові дані.
-          </p>
-        </div>
-      </main>
-    )
-  }
-
-  if (!hasAccess) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Немає доступу</h2>
-          <p className="mt-2 text-slate-600">
-            Цей акаунт не має ролі бухгалтера.
+            Увійдіть під акаунтом бухгалтера.
           </p>
         </div>
       </main>
@@ -224,411 +213,250 @@ function AccountantPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10">
-      <header className="rounded-3xl border border-white/70 bg-white/70 p-8 shadow-xl">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-          ct-accountant
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          Фінанси: бюджет, витрати, доходи, зарплата
+    <main className="page-shell">
+      <header className="flex flex-col gap-2">
+        <div className="badge badge-warning w-fit">ct-accountant</div>
+        <h1 className="text-3xl sm:text-4xl text-slate-900">
+          Фінансовий контроль
         </h1>
+        <p className="text-slate-500 max-w-2xl">
+          Бюджетування, витрати, нарахування зарплат та звітність.
+        </p>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Бюджет на місяць
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={budgetForm.month}
-              onChange={(event) =>
-                setBudgetForm((prev) => ({ ...prev, month: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Планові доходи"
-              value={budgetForm.income}
-              onChange={(event) =>
-                setBudgetForm((prev) => ({ ...prev, income: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Планові витрати"
-              value={budgetForm.expenses}
-              onChange={(event) =>
-                setBudgetForm((prev) => ({
-                  ...prev,
-                  expenses: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Коментар"
-              value={budgetForm.note}
-              onChange={(event) =>
-                setBudgetForm((prev) => ({ ...prev, note: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
+      <section className="grid-dashboard">
+        {/* Budget */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Бюджет</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => createBudgetMutation.mutate()}
-            className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Зберегти бюджет
-          </button>
-          <div className="mt-4 space-y-2 text-sm">
-            {(budgetsQuery.data ?? []).slice(0, 6).map((budget) => (
-              <div
-                key={budget.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2"
-              >
-                {budget.month} · {budget.income} доходи · {budget.expenses}{' '}
-                витрати
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Фінансові звіти
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={reportQuery.from}
-              onChange={(event) =>
-                setReportQuery((prev) => ({ ...prev, from: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={reportQuery.to}
-              onChange={(event) =>
-                setReportQuery((prev) => ({ ...prev, to: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => reportMutation.mutate()}
-            className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Сформувати звіт
-          </button>
-          {reportMutation.data && (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              Чистий результат: {reportMutation.data.net}
+          <div className="space-y-4">
+            <div className="form-group">
+              <label>Місяць</label>
+              <input
+                type="date"
+                value={budgetForm.month}
+                onChange={(e) => setBudgetForm({ ...budgetForm, month: e.target.value })}
+                className="input"
+              />
             </div>
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Облік витрат
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              placeholder="Категорія"
-              value={expenseForm.category}
-              onChange={(event) =>
-                setExpenseForm((prev) => ({
-                  ...prev,
-                  category: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Сума"
-              value={expenseForm.amount}
-              onChange={(event) =>
-                setExpenseForm((prev) => ({
-                  ...prev,
-                  amount: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Документ"
-              value={expenseForm.documentRef}
-              onChange={(event) =>
-                setExpenseForm((prev) => ({
-                  ...prev,
-                  documentRef: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={expenseForm.occurredAt}
-              onChange={(event) =>
-                setExpenseForm((prev) => ({
-                  ...prev,
-                  occurredAt: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => createExpenseMutation.mutate()}
-            className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Додати витрату
-          </button>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={expensesQuery.from}
-              onChange={(event) =>
-                setExpensesQuery((prev) => ({
-                  ...prev,
-                  from: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={expensesQuery.to}
-              onChange={(event) =>
-                setExpensesQuery((prev) => ({
-                  ...prev,
-                  to: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Категорія"
-              value={expensesQuery.category}
-              onChange={(event) =>
-                setExpensesQuery((prev) => ({
-                  ...prev,
-                  category: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => expensesMutation.mutate()}
-            className="mt-3 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Показати витрати
-          </button>
-          <div className="mt-4 space-y-2 text-sm">
-            {(expensesMutation.data ?? []).map((row) => (
-              <div
-                key={row.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2"
-              >
-                {row.occurredAt.slice(0, 10)} · {row.category} · {row.amount}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="form-group">
+                <label>Доходи (План)</label>
+                <input
+                  type="number"
+                  value={budgetForm.income}
+                  onChange={(e) => setBudgetForm({ ...budgetForm, income: e.target.value })}
+                  className="input"
+                  placeholder="0.00"
+                />
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Доходи</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={incomeQuery.from}
-              onChange={(event) =>
-                setIncomeQuery((prev) => ({
-                  ...prev,
-                  from: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={incomeQuery.to}
-              onChange={(event) =>
-                setIncomeQuery((prev) => ({
-                  ...prev,
-                  to: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => incomeMutation.mutate()}
-            className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Порахувати
-          </button>
-          {incomeMutation.data && (
-            <div className="mt-4 space-y-2 text-sm">
-              <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2">
-                Поповнення: {incomeMutation.data.topupsTotal}
-              </div>
-              <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2">
-                Квитки: {incomeMutation.data.ticketsTotal}
-              </div>
-              <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2">
-                Штрафи: {incomeMutation.data.finesTotal}
+              <div className="form-group">
+                <label>Витрати (План)</label>
+                <input
+                  type="number"
+                  value={budgetForm.expenses}
+                  onChange={(e) => setBudgetForm({ ...budgetForm, expenses: e.target.value })}
+                  className="input"
+                  placeholder="0.00"
+                />
               </div>
             </div>
-          )}
-        </div>
-      </section>
+            <div className="form-group">
+              <label>Примітка</label>
+              <input
+                value={budgetForm.note}
+                onChange={(e) => setBudgetForm({ ...budgetForm, note: e.target.value })}
+                className="input"
+                placeholder="Коментар..."
+              />
+            </div>
+            
+            <button
+              onClick={() => createBudgetMutation.mutate()}
+              disabled={createBudgetMutation.isPending}
+              className="btn btn-primary w-full"
+            >
+              Зберегти
+            </button>
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Зарплати</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              placeholder="ID водія"
-              value={salaryForm.driverId}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({
-                  ...prev,
-                  driverId: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Ім’я працівника"
-              value={salaryForm.employeeName}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({
-                  ...prev,
-                  employeeName: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Роль"
-              value={salaryForm.employeeRole}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({
-                  ...prev,
-                  employeeRole: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Ставка"
-              value={salaryForm.rate}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({ ...prev, rate: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="К-сть годин/змін"
-              value={salaryForm.units}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({ ...prev, units: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Сума"
-              value={salaryForm.total}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({ ...prev, total: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={salaryForm.paidAt}
-              onChange={(event) =>
-                setSalaryForm((prev) => ({ ...prev, paidAt: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
+            <div className="mt-4 border-t border-slate-100 pt-4 space-y-2">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase">Останні бюджети</h3>
+              {(budgetsQuery.data ?? []).slice(0, 4).map((budget) => (
+                <div key={budget.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 text-sm">
+                  <span className="font-mono text-slate-600">{budget.month.slice(0, 7)}</span>
+                  <div className="text-right">
+                    <div className="text-emerald-600">+{budget.income}</div>
+                    <div className="text-rose-600">-{budget.expenses}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => createSalaryMutation.mutate()}
-            className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Нарахувати зарплату
-          </button>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Аналіз зарплат
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={salariesQuery.from}
-              onChange={(event) =>
-                setSalariesQuery((prev) => ({
-                  ...prev,
-                  from: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={salariesQuery.to}
-              onChange={(event) =>
-                setSalariesQuery((prev) => ({
-                  ...prev,
-                  to: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Роль"
-              value={salariesQuery.role}
-              onChange={(event) =>
-                setSalariesQuery((prev) => ({
-                  ...prev,
-                  role: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
+        {/* Expenses */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Витрати</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => salariesMutation.mutate()}
-            className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Показати нарахування
-          </button>
-          <div className="mt-4 space-y-2 text-sm">
-            {(salariesMutation.data ?? []).map((row) => (
-              <div
-                key={row.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2"
-              >
-                {row.paidAt.slice(0, 10)} · {row.employeeRole ?? '—'} ·{' '}
-                {row.total}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="form-group">
+                <label>Категорія</label>
+                <input
+                  value={expenseForm.category}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
+                  className="input"
+                  placeholder="Пальне"
+                />
               </div>
-            ))}
+              <div className="form-group">
+                <label>Сума</label>
+                <input
+                  type="number"
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                  className="input"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Документ</label>
+              <input
+                value={expenseForm.documentRef}
+                onChange={(e) => setExpenseForm({ ...expenseForm, documentRef: e.target.value })}
+                className="input"
+                placeholder="№ Накладної"
+              />
+            </div>
+            <button
+              onClick={() => createExpenseMutation.mutate()}
+              className="btn btn-secondary w-full"
+            >
+              Додати витрату
+            </button>
+
+            <div className="bg-slate-50 rounded-2xl p-4 mt-4">
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="date"
+                  value={expensesQuery.from}
+                  onChange={(e) => setExpensesQuery({ ...expensesQuery, from: e.target.value })}
+                  className="input flex-1 py-1.5 text-xs bg-white"
+                />
+                <input
+                  type="date"
+                  value={expensesQuery.to}
+                  onChange={(e) => setExpensesQuery({ ...expensesQuery, to: e.target.value })}
+                  className="input flex-1 py-1.5 text-xs bg-white"
+                />
+              </div>
+              <button onClick={() => expensesMutation.mutate()} className="btn btn-ghost w-full text-xs py-1">Оновити список</button>
+              
+              <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                {(expensesMutation.data ?? []).map((row) => (
+                  <div key={row.id} className="text-xs flex justify-between p-2 bg-white rounded border border-slate-100">
+                    <div>
+                      <span className="font-semibold text-slate-700">{row.category}</span>
+                      <span className="text-slate-400 ml-2">{row.occurredAt.slice(0, 10)}</span>
+                    </div>
+                    <span className="font-mono text-slate-900">{row.amount}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Reports & Salaries (Combined Column) */}
+        <div className="flex flex-col gap-6">
+          {/* Reports */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Звітність</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={reportQuery.from}
+                  onChange={(e) => setReportQuery({ ...reportQuery, from: e.target.value })}
+                  className="input w-full"
+                />
+                <input
+                  type="date"
+                  value={reportQuery.to}
+                  onChange={(e) => setReportQuery({ ...reportQuery, to: e.target.value })}
+                  className="input w-full"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => incomeMutation.mutate()} className="btn btn-secondary text-xs">Доходи</button>
+                <button onClick={() => reportMutation.mutate()} className="btn btn-primary text-xs">Повний звіт</button>
+              </div>
+
+              {incomeMutation.data && (
+                <div className="grid grid-cols-3 gap-2 mt-2 text-center text-xs">
+                  <div className="p-2 bg-slate-50 rounded-lg">
+                    <div className="text-slate-400">Поповн.</div>
+                    <div className="font-bold text-slate-700">{incomeMutation.data.topupsTotal}</div>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded-lg">
+                    <div className="text-slate-400">Квитки</div>
+                    <div className="font-bold text-slate-700">{incomeMutation.data.ticketsTotal}</div>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded-lg">
+                    <div className="text-slate-400">Штрафи</div>
+                    <div className="font-bold text-slate-700">{incomeMutation.data.finesTotal}</div>
+                  </div>
+                </div>
+              )}
+
+              {reportMutation.data && (
+                <div className="mt-3 p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
+                  <div className="text-sm text-emerald-600 mb-1">Чистий прибуток</div>
+                  <div className="text-2xl font-bold text-emerald-700">{reportMutation.data.net}</div>
+                  <div className="text-xs text-emerald-500 mt-1">
+                    Витрати: {reportMutation.data.expensesTotal} | ЗП: {reportMutation.data.salariesTotal}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Salaries Quick Form */}
+          <div className="card flex-1">
+            <div className="card-header">
+              <h2>Зарплата</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="form-group">
+                  <label>ID Водія</label>
+                  <input
+                    value={salaryForm.driverId}
+                    onChange={(e) => setSalaryForm({ ...salaryForm, driverId: e.target.value })}
+                    className="input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Сума</label>
+                  <input
+                    value={salaryForm.total}
+                    onChange={(e) => setSalaryForm({ ...salaryForm, total: e.target.value })}
+                    className="input"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => createSalaryMutation.mutate()}
+                className="btn btn-secondary w-full"
+              >
+                Нарахувати
+              </button>
+            </div>
           </div>
         </div>
       </section>

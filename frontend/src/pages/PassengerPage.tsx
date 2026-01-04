@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
 import { useAuthStore } from '../store/auth'
+import styles from './PassengerPage.module.scss'
 
 function PassengerPage() {
   const { user, roles } = useAuthStore()
@@ -38,6 +39,7 @@ function PassengerPage() {
     transportTypeId: '',
     routeNumber: '',
     direction: '',
+    stopId: '',
   })
   const [cardForm, setCardForm] = useState({
     userId: '',
@@ -238,773 +240,314 @@ function PassengerPage() {
     },
   })
 
-  if (!user) {
+  if (!user || !hasAccess) {
     return (
-      <main className="role-shell">
-        <div className="panel">
-          <div className="panel-title">Passenger access</div>
-          <p className="hero-body">Sign in with a passenger account.</p>
-        </div>
-      </main>
-    )
-  }
-
-  if (!hasAccess) {
-    return (
-      <main className="role-shell">
-        <div className="panel">
-          <div className="panel-title">No access</div>
-          <p className="hero-body">
-            This account does not have passenger permissions.
-          </p>
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-lg">
+          <h2 className="text-xl font-bold text-slate-800">Доступ обмежено</h2>
+          <p className="mt-2 text-slate-600">Увійдіть як пасажир.</p>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="role-shell">
-      <header className="role-header">
+    <main className={styles.page}>
+      <header className={styles.header}>
         <div>
-          <p className="hero-kicker">Passenger desk</p>
-          <h1>Cards, trips, fines, and route info.</h1>
-          <p className="hero-body">
-            Manage your transport card, review trips and fines, and browse
-            routes.
-          </p>
+          <span className={styles.badge}>Passenger</span>
+          <h1 className="mt-2">Особистий кабінет</h1>
+          <p>Керування карткою, поїздки та штрафи.</p>
         </div>
-        <span className="panel-chip">ct_passenger_role</span>
+        <div className="text-right text-sm text-slate-500 hidden md:block">
+          <div>User ID: {user.id}</div>
+          <div>{user.email}</div>
+        </div>
       </header>
 
-      <div className="role-grid">
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            stopsNearMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Stops near</div>
-          <label>
-            Longitude
-            <input
-              type="number"
-              step="0.0000001"
-              value={stopsNearForm.lon}
-              onChange={(event) =>
-                setStopsNearForm({ ...stopsNearForm, lon: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Latitude
-            <input
-              type="number"
-              step="0.0000001"
-              value={stopsNearForm.lat}
-              onChange={(event) =>
-                setStopsNearForm({ ...stopsNearForm, lat: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Radius (m)
-            <input
-              type="number"
-              value={stopsNearForm.radius}
-              onChange={(event) =>
-                setStopsNearForm({
-                  ...stopsNearForm,
-                  radius: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Limit
-            <input
-              type="number"
-              value={stopsNearForm.limit}
-              onChange={(event) =>
-                setStopsNearForm({
-                  ...stopsNearForm,
-                  limit: event.target.value,
-                })
-              }
-            />
-          </label>
-          <button type="submit" disabled={stopsNearMutation.isPending}>
-            {stopsNearMutation.isPending ? 'Searching...' : 'Find stops'}
-          </button>
-          {stopsNearMutation.error && (
-            <div className="status error">
-              {getErrorMessage(stopsNearMutation.error, 'Request failed.')}
+      <div className={styles.grid}>
+        
+        {/* Find Stops */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Зупинки поруч</h2>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); stopsNearMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <div className={styles.formGroup}>
+              <label>Координати (Lon / Lat)</label>
+              <div className="flex gap-2">
+                <input
+                  type="number" step="0.000001"
+                  value={stopsNearForm.lon}
+                  onChange={(e) => setStopsNearForm({ ...stopsNearForm, lon: e.target.value })}
+                  className={styles.input}
+                  placeholder="Lon" required
+                />
+                <input
+                  type="number" step="0.000001"
+                  value={stopsNearForm.lat}
+                  onChange={(e) => setStopsNearForm({ ...stopsNearForm, lat: e.target.value })}
+                  className={styles.input}
+                  placeholder="Lat" required
+                />
+              </div>
             </div>
-          )}
-          {stopsNearMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(stopsNearMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
+            <div className="flex gap-2">
+              <input
+                type="number" placeholder="Радіус (м)"
+                value={stopsNearForm.radius}
+                onChange={(e) => setStopsNearForm({ ...stopsNearForm, radius: e.target.value })}
+                className={styles.input}
+              />
+              <input
+                type="number" placeholder="Ліміт"
+                value={stopsNearForm.limit}
+                onChange={(e) => setStopsNearForm({ ...stopsNearForm, limit: e.target.value })}
+                className={styles.input}
+              />
+            </div>
+            <button type="submit" disabled={stopsNearMutation.isPending} className={`${styles.btn} ${styles.btnPrimary}`}>
+              {stopsNearMutation.isPending ? 'Пошук...' : 'Знайти'}
+            </button>
+            
+            {stopsNearMutation.error && (
+              <div className={styles.statusError}>{getErrorMessage(stopsNearMutation.error)}</div>
+            )}
+            {stopsNearMutation.data && (
+              <div className={styles.resultBlock}>
+                {JSON.stringify(stopsNearMutation.data, null, 2)}
+              </div>
+            )}
+          </form>
+        </section>
 
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            routeStopsMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Route stops</div>
-          <label>
-            Route ID
-            <input
-              type="number"
-              min={1}
-              value={routeStopsForm.routeId}
-              onChange={(event) =>
-                setRouteStopsForm({ ...routeStopsForm, routeId: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Transport type ID
-            <input
-              type="number"
-              min={1}
-              value={routeStopsForm.transportTypeId}
-              onChange={(event) =>
-                setRouteStopsForm({
-                  ...routeStopsForm,
-                  transportTypeId: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Route number
-            <input
-              type="text"
-              value={routeStopsForm.routeNumber}
-              onChange={(event) =>
-                setRouteStopsForm({
-                  ...routeStopsForm,
-                  routeNumber: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Direction
-            <select
-              value={routeStopsForm.direction}
-              onChange={(event) =>
-                setRouteStopsForm({
-                  ...routeStopsForm,
-                  direction: event.target.value,
-                })
-              }
+        {/* Transport Card */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Транспортна картка</h2>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); cardMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <div className={styles.formGroup}>
+              <label>User ID</label>
+              <input
+                type="number"
+                value={cardForm.userId}
+                onChange={(e) => setCardForm({ userId: e.target.value })}
+                className={styles.input}
+                required
+              />
+            </div>
+            <button type="submit" disabled={cardMutation.isPending} className={`${styles.btn} ${styles.btnSecondary}`}>
+              Перевірити баланс
+            </button>
+            {cardMutation.data && (
+              <div className={styles.resultBlock}>
+                {JSON.stringify(cardMutation.data, null, 2)}
+              </div>
+            )}
+          </form>
+
+          <hr className="border-slate-100 my-2" />
+
+          <form
+            onSubmit={(e) => { e.preventDefault(); topUpMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <h3 className="text-sm font-semibold text-slate-700">Поповнення</h3>
+            <div className={styles.formGroup}>
+              <label>Номер картки</label>
+              <input
+                value={topUpForm.cardNumber}
+                onChange={(e) => setTopUpForm({ ...topUpForm, cardNumber: e.target.value })}
+                className={styles.input}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Сума</label>
+              <input
+                type="number" step="0.01"
+                value={topUpForm.amount}
+                onChange={(e) => setTopUpForm({ ...topUpForm, amount: e.target.value })}
+                className={styles.input}
+                required
+              />
+            </div>
+            <button type="submit" disabled={topUpMutation.isPending} className={`${styles.btn} ${styles.btnPrimary}`}>
+              Поповнити
+            </button>
+            {topUpMutation.data && (
+              <div className="text-xs text-emerald-600 mt-2 text-center">
+                Успішно поповнено!
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* Trips History */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Історія поїздок</h2>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); tripsMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <div className={styles.formGroup}>
+              <label>User ID</label>
+              <input
+                type="number"
+                value={tripsForm.userId}
+                onChange={(e) => setTripsForm({ userId: e.target.value })}
+                className={styles.input}
+                required
+              />
+            </div>
+            <button type="submit" disabled={tripsMutation.isPending} className={`${styles.btn} ${styles.btnSecondary}`}>
+              Завантажити історію
+            </button>
+            {tripsMutation.data && (
+              <div className={styles.resultBlock}>
+                {JSON.stringify(tripsMutation.data, null, 2)}
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* Routes Search */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Пошук маршруту (A → B)</h2>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); routesBetweenMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div className={styles.formGroup}>
+                <label>A (Lon/Lat)</label>
+                <input value={routesBetweenForm.lonA} onChange={e => setRoutesBetweenForm({...routesBetweenForm, lonA: e.target.value})} className={styles.input} placeholder="Lon" />
+                <input value={routesBetweenForm.latA} onChange={e => setRoutesBetweenForm({...routesBetweenForm, latA: e.target.value})} className={styles.input} placeholder="Lat" />
+              </div>
+              <div className={styles.formGroup}>
+                <label>B (Lon/Lat)</label>
+                <input value={routesBetweenForm.lonB} onChange={e => setRoutesBetweenForm({...routesBetweenForm, lonB: e.target.value})} className={styles.input} placeholder="Lon" />
+                <input value={routesBetweenForm.latB} onChange={e => setRoutesBetweenForm({...routesBetweenForm, latB: e.target.value})} className={styles.input} placeholder="Lat" />
+              </div>
+            </div>
+            <div className={styles.formGroup}>
+              <label>Радіус пошуку</label>
+              <input type="number" value={routesBetweenForm.radius} onChange={e => setRoutesBetweenForm({...routesBetweenForm, radius: e.target.value})} className={styles.input} placeholder="700" />
+            </div>
+            <button type="submit" disabled={routesBetweenMutation.isPending} className={`${styles.btn} ${styles.btnPrimary}`}>
+              Знайти варіанти
+            </button>
+            {routesBetweenMutation.data && (
+              <div className={styles.resultBlock}>
+                {JSON.stringify(routesBetweenMutation.data, null, 2)}
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* Fines */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Штрафи</h2>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => finesMutation.mutate()} 
+              disabled={finesMutation.isPending}
+              className={`${styles.btn} ${styles.btnSecondary} text-xs`}
             >
-              <option value="">Not set</option>
-              <option value="forward">forward</option>
-              <option value="reverse">reverse</option>
-            </select>
-          </label>
-          <button type="submit" disabled={routeStopsMutation.isPending}>
-            {routeStopsMutation.isPending ? 'Loading...' : 'Get stops'}
-          </button>
-          {routeStopsMutation.error && (
-            <div className="status error">
-              {getErrorMessage(routeStopsMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {routeStopsMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(routeStopsMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            routePointsMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Route points</div>
-          <label>
-            Route ID
-            <input
-              type="number"
-              min={1}
-              value={routePointsForm.routeId}
-              onChange={(event) =>
-                setRoutePointsForm({ ...routePointsForm, routeId: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Transport type ID
-            <input
-              type="number"
-              min={1}
-              value={routePointsForm.transportTypeId}
-              onChange={(event) =>
-                setRoutePointsForm({
-                  ...routePointsForm,
-                  transportTypeId: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Route number
-            <input
-              type="text"
-              value={routePointsForm.routeNumber}
-              onChange={(event) =>
-                setRoutePointsForm({
-                  ...routePointsForm,
-                  routeNumber: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Direction
-            <select
-              value={routePointsForm.direction}
-              onChange={(event) =>
-                setRoutePointsForm({
-                  ...routePointsForm,
-                  direction: event.target.value,
-                })
-              }
-            >
-              <option value="">Not set</option>
-              <option value="forward">forward</option>
-              <option value="reverse">reverse</option>
-            </select>
-          </label>
-          <button type="submit" disabled={routePointsMutation.isPending}>
-            {routePointsMutation.isPending ? 'Loading...' : 'Get points'}
-          </button>
-          {routePointsMutation.error && (
-            <div className="status error">
-              {getErrorMessage(routePointsMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {routePointsMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(routePointsMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            routesBetweenMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Routes between points</div>
-          <label>
-            Point A lon
-            <input
-              type="number"
-              step="0.0000001"
-              value={routesBetweenForm.lonA}
-              onChange={(event) =>
-                setRoutesBetweenForm({
-                  ...routesBetweenForm,
-                  lonA: event.target.value,
-                })
-              }
-              required
-            />
-          </label>
-          <label>
-            Point A lat
-            <input
-              type="number"
-              step="0.0000001"
-              value={routesBetweenForm.latA}
-              onChange={(event) =>
-                setRoutesBetweenForm({
-                  ...routesBetweenForm,
-                  latA: event.target.value,
-                })
-              }
-              required
-            />
-          </label>
-          <label>
-            Point B lon
-            <input
-              type="number"
-              step="0.0000001"
-              value={routesBetweenForm.lonB}
-              onChange={(event) =>
-                setRoutesBetweenForm({
-                  ...routesBetweenForm,
-                  lonB: event.target.value,
-                })
-              }
-              required
-            />
-          </label>
-          <label>
-            Point B lat
-            <input
-              type="number"
-              step="0.0000001"
-              value={routesBetweenForm.latB}
-              onChange={(event) =>
-                setRoutesBetweenForm({
-                  ...routesBetweenForm,
-                  latB: event.target.value,
-                })
-              }
-              required
-            />
-          </label>
-          <label>
-            Radius (m)
-            <input
-              type="number"
-              value={routesBetweenForm.radius}
-              onChange={(event) =>
-                setRoutesBetweenForm({
-                  ...routesBetweenForm,
-                  radius: event.target.value,
-                })
-              }
-            />
-          </label>
-          <button type="submit" disabled={routesBetweenMutation.isPending}>
-            {routesBetweenMutation.isPending ? 'Searching...' : 'Find routes'}
-          </button>
-          {routesBetweenMutation.error && (
-            <div className="status error">
-              {getErrorMessage(routesBetweenMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {routesBetweenMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(routesBetweenMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            scheduleMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Route schedule</div>
-          <label>
-            Route ID
-            <input
-              type="number"
-              min={1}
-              value={scheduleForm.routeId}
-              onChange={(event) =>
-                setScheduleForm({ ...scheduleForm, routeId: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Transport type ID
-            <input
-              type="number"
-              min={1}
-              value={scheduleForm.transportTypeId}
-              onChange={(event) =>
-                setScheduleForm({
-                  ...scheduleForm,
-                  transportTypeId: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Route number
-            <input
-              type="text"
-              value={scheduleForm.routeNumber}
-              onChange={(event) =>
-                setScheduleForm({
-                  ...scheduleForm,
-                  routeNumber: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Direction
-            <select
-              value={scheduleForm.direction}
-              onChange={(event) =>
-                setScheduleForm({
-                  ...scheduleForm,
-                  direction: event.target.value,
-                })
-              }
-            >
-              <option value="">Not set</option>
-              <option value="forward">forward</option>
-              <option value="reverse">reverse</option>
-            </select>
-          </label>
-          <button type="submit" disabled={scheduleMutation.isPending}>
-            {scheduleMutation.isPending ? 'Loading...' : 'Get schedule'}
-          </button>
-          {scheduleMutation.error && (
-            <div className="status error">
-              {getErrorMessage(scheduleMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {scheduleMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(scheduleMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            cardMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Transport card</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={cardForm.userId}
-              onChange={(event) => setCardForm({ userId: event.target.value })}
-              required
-            />
-          </label>
-          <button type="submit" disabled={cardMutation.isPending}>
-            {cardMutation.isPending ? 'Loading...' : 'Get card'}
-          </button>
-          {cardMutation.error && (
-            <div className="status error">
-              {getErrorMessage(cardMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {cardMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(cardMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            topUpMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Top up card</div>
-          <label>
-            Card number
-            <input
-              type="text"
-              value={topUpForm.cardNumber}
-              onChange={(event) =>
-                setTopUpForm({ ...topUpForm, cardNumber: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Amount
-            <input
-              type="number"
-              min={0.01}
-              step={0.01}
-              value={topUpForm.amount}
-              onChange={(event) =>
-                setTopUpForm({ ...topUpForm, amount: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Topped at
-            <input
-              type="datetime-local"
-              value={topUpForm.toppedUpAt}
-              onChange={(event) =>
-                setTopUpForm({ ...topUpForm, toppedUpAt: event.target.value })
-              }
-            />
-          </label>
-          <button type="submit" disabled={topUpMutation.isPending}>
-            {topUpMutation.isPending ? 'Processing...' : 'Top up'}
-          </button>
-          {topUpMutation.error && (
-            <div className="status error">
-              {getErrorMessage(topUpMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {topUpMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(topUpMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            tripsMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Trips history</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={tripsForm.userId}
-              onChange={(event) => setTripsForm({ userId: event.target.value })}
-              required
-            />
-          </label>
-          <button type="submit" disabled={tripsMutation.isPending}>
-            {tripsMutation.isPending ? 'Loading...' : 'Get trips'}
-          </button>
-          {tripsMutation.error && (
-            <div className="status error">
-              {getErrorMessage(tripsMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {tripsMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(tripsMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            finesMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Fines list</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={finesForm.userId}
-              onChange={(event) => setFinesForm({ userId: event.target.value })}
-              required
-            />
-          </label>
-          <button type="submit" disabled={finesMutation.isPending}>
-            {finesMutation.isPending ? 'Loading...' : 'Get fines'}
-          </button>
-          {finesMutation.error && (
-            <div className="status error">
-              {getErrorMessage(finesMutation.error, 'Request failed.')}
-            </div>
-          )}
+              Мої штрафи
+            </button>
+          </div>
+          
           {finesMutation.data && (
-            <pre className="result-block">
+            <div className={styles.resultBlock}>
               {JSON.stringify(finesMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
-
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            fineMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Fine details</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={fineForm.userId}
-              onChange={(event) =>
-                setFineForm({ ...fineForm, userId: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Fine ID
-            <input
-              type="number"
-              min={1}
-              value={fineForm.fineId}
-              onChange={(event) =>
-                setFineForm({ ...fineForm, fineId: event.target.value })
-              }
-              required
-            />
-          </label>
-          <button type="submit" disabled={fineMutation.isPending}>
-            {fineMutation.isPending ? 'Loading...' : 'Get fine'}
-          </button>
-          {fineMutation.error && (
-            <div className="status error">
-              {getErrorMessage(fineMutation.error, 'Request failed.')}
             </div>
           )}
-          {fineMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(fineMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
 
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            appealMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Submit appeal</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={appealForm.userId}
-              onChange={(event) =>
-                setAppealForm({ ...appealForm, userId: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Fine ID
-            <input
-              type="number"
-              min={1}
-              value={appealForm.fineId}
-              onChange={(event) =>
-                setAppealForm({ ...appealForm, fineId: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Message
-            <textarea
-              rows={3}
-              value={appealForm.message}
-              onChange={(event) =>
-                setAppealForm({ ...appealForm, message: event.target.value })
-              }
-              required
-            />
-          </label>
-          <button type="submit" disabled={appealMutation.isPending}>
-            {appealMutation.isPending ? 'Submitting...' : 'Send appeal'}
-          </button>
-          {appealMutation.error && (
-            <div className="status error">
-              {getErrorMessage(appealMutation.error, 'Request failed.')}
-            </div>
-          )}
-          {appealMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(appealMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <h3 className="text-sm font-semibold mb-2">Оскарження</h3>
+            <form
+              onSubmit={(e) => { e.preventDefault(); appealMutation.mutate() }}
+              className="flex flex-col gap-3"
+            >
+              <div className="flex gap-2">
+                <input placeholder="Fine ID" value={appealForm.fineId} onChange={e => setAppealForm({...appealForm, fineId: e.target.value})} className={styles.input} />
+              </div>
+              <textarea 
+                placeholder="Причина оскарження..." 
+                value={appealForm.message} 
+                onChange={e => setAppealForm({...appealForm, message: e.target.value})} 
+                className={styles.input} 
+                rows={2}
+              />
+              <button type="submit" disabled={appealMutation.isPending} className={`${styles.btn} ${styles.btnSecondary}`}>
+                Надіслати
+              </button>
+              {appealMutation.data && (
+                <div className="text-xs text-emerald-600 mt-1">Оскарження подано.</div>
+              )}
+            </form>
+          </div>
+        </section>
 
-        <form
-          className="panel"
-          onSubmit={(event) => {
-            event.preventDefault()
-            complaintMutation.mutate()
-          }}
-        >
-          <div className="panel-title">Submit complaint</div>
-          <label>
-            User ID
-            <input
-              type="number"
-              min={1}
-              value={complaintForm.userId}
-              onChange={(event) =>
-                setComplaintForm({ ...complaintForm, userId: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Type
-            <input
-              type="text"
-              value={complaintForm.type}
-              onChange={(event) =>
-                setComplaintForm({ ...complaintForm, type: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Message
-            <textarea
-              rows={3}
-              value={complaintForm.message}
-              onChange={(event) =>
-                setComplaintForm({ ...complaintForm, message: event.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            Trip ID (optional)
-            <input
-              type="number"
-              min={1}
-              value={complaintForm.tripId}
-              onChange={(event) =>
-                setComplaintForm({ ...complaintForm, tripId: event.target.value })
-              }
-            />
-          </label>
-          <button type="submit" disabled={complaintMutation.isPending}>
-            {complaintMutation.isPending ? 'Submitting...' : 'Send complaint'}
-          </button>
-          {complaintMutation.error && (
-            <div className="status error">
-              {getErrorMessage(complaintMutation.error, 'Request failed.')}
+        {/* Complaints */}
+        <section className={styles.card}>
+          <div className={styles.cardHeader}>
+            <h2>Скарги</h2>
+          </div>
+          <form
+            onSubmit={(e) => { e.preventDefault(); complaintMutation.mutate() }}
+            className="flex flex-col gap-3"
+          >
+            <div className={styles.formGroup}>
+              <label>Тип</label>
+              <select value={complaintForm.type} onChange={e => setComplaintForm({...complaintForm, type: e.target.value})} className={styles.input}>
+                <option value="">Оберіть...</option>
+                <option value="Скарга">Скарга</option>
+                <option value="Пропозиція">Пропозиція</option>
+              </select>
             </div>
-          )}
-          {complaintMutation.data && (
-            <pre className="result-block">
-              {JSON.stringify(complaintMutation.data, null, 2)}
-            </pre>
-          )}
-        </form>
+            <div className={styles.formGroup}>
+              <label>Текст</label>
+              <textarea 
+                value={complaintForm.message} 
+                onChange={e => setComplaintForm({...complaintForm, message: e.target.value})} 
+                className={styles.input}
+                rows={3}
+                required
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Trip ID (опціонально)</label>
+              <input 
+                type="number" 
+                value={complaintForm.tripId} 
+                onChange={e => setComplaintForm({...complaintForm, tripId: e.target.value})} 
+                className={styles.input} 
+              />
+            </div>
+            <button type="submit" disabled={complaintMutation.isPending} className={`${styles.btn} ${styles.btnPrimary}`}>
+              Відправити
+            </button>
+            {complaintMutation.isSuccess && (
+              <div className="text-xs text-emerald-600 text-center">Дякуємо за відгук!</div>
+            )}
+          </form>
+        </section>
+
       </div>
     </main>
   )

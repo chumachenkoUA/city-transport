@@ -183,9 +183,6 @@ const makePreviewSlots = (
   return slots
 }
 
-const buildRouteLabel = (route?: RouteItem | null) =>
-  route ? `#${route.number} · ${route.transportType} · ${route.direction}` : '—'
-
 function DispatcherPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -453,864 +450,348 @@ function DispatcherPage() {
     }
   }
 
-  if (!user) {
+  if (!user || !hasAccess) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Диспетчерський доступ</h2>
-          <p className="mt-2 text-slate-600">Увійдіть як диспетчер.</p>
-        </div>
-      </main>
-    )
-  }
-
-  if (!hasAccess) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Немає доступу</h2>
-          <p className="mt-2 text-slate-600">
-            Цей акаунт не має ролі диспетчера.
-          </p>
+      <main className="page-shell flex items-center justify-center">
+        <div className="card max-w-md text-center">
+          <h2 className="text-2xl font-bold text-slate-800">Обмежений доступ</h2>
+          <p className="mt-2 text-slate-600">Увійдіть під акаунтом диспетчера.</p>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-8 px-4 py-8">
-      <section className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl backdrop-blur">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-emerald-700">
-              Диспетчер · Міський транспорт
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-              Панель оперативного контролю
-            </h1>
-            <p className="mt-2 text-slate-600">
-              Актуальна зміна, розклади, призначення, моніторинг рейсів.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 text-sm text-slate-600">
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-              {now.toLocaleString('uk-UA', {
-                day: '2-digit',
-                month: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </div>
-            <div className="rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                Session
-              </div>
-              <div className="font-semibold text-slate-800">
-                {token ? 'Redis session ok' : 'Session missing'}
-              </div>
-              <div className="text-xs text-slate-500">
-                DB user: {user.login}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-            >
-              Logout
-            </button>
-          </div>
+    <main className="page-shell">
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="badge badge-success mb-2">ct-dispatcher</div>
+          <h1 className="text-3xl font-bold text-slate-900">Диспетчерський центр</h1>
+          <p className="text-slate-500">Оперативний контроль руху та розкладів.</p>
         </div>
-      </section>
+        
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <div className="font-mono text-lg font-semibold text-slate-700">
+              {now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+            <div className="text-xs text-slate-400">{user.login}</div>
+          </div>
+          <button onClick={handleLogout} className="btn btn-ghost text-rose-500">Вихід</button>
+        </div>
+      </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          {
-            label: 'Активні рейси зараз',
-            value: dashboardQuery.data?.activeTrips ?? '—',
-          },
-          {
-            label: 'Відхилення > 5 хв',
-            value: dashboardQuery.data?.deviations ?? '—',
-          },
-          {
-            label: 'Розкладів на сьогодні',
-            value: dashboardQuery.data?.schedulesToday ?? '—',
-          },
-          {
-            label: 'Непризначені',
-            value:
-              dashboardQuery.data
-                ? `${dashboardQuery.data.unassignedDrivers} водіїв / ${dashboardQuery.data.unassignedVehicles} ТЗ`
-                : '—',
-          },
-        ].map((card) => (
-          <div
-            key={card.label}
-            className="rounded-3xl border border-white/70 bg-white/70 p-5 shadow-lg"
-          >
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              {card.label}
-            </div>
-            <div className="mt-3 text-2xl font-semibold text-slate-900">
-              {card.value}
-            </div>
+          { label: 'Активні рейси', value: dashboardQuery.data?.activeTrips ?? '—', color: 'text-emerald-600' },
+          { label: 'Відхилення', value: dashboardQuery.data?.deviations ?? '—', color: 'text-amber-600' },
+          { label: 'Розкладів', value: dashboardQuery.data?.schedulesToday ?? '—', color: 'text-indigo-600' },
+          { label: 'Вільні водії', value: dashboardQuery.data?.unassignedDrivers ?? '—', color: 'text-slate-600' },
+        ].map((stat, i) => (
+          <div key={i} className="card p-4 flex flex-col justify-between">
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{stat.label}</span>
+            <span className={`text-2xl font-bold ${stat.color}`}>{stat.value}</span>
           </div>
         ))}
       </section>
 
-      <section className="rounded-3xl border border-white/60 bg-white/80 p-4 shadow-xl backdrop-blur">
-        <div className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                activeTab === tab.id
-                  ? 'bg-emerald-600 text-white shadow'
-                  : 'bg-white text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <nav className="flex gap-2 overflow-x-auto pb-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
+      {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Активні рейси
+        <section className="grid-dashboard lg:grid-cols-2">
+          <div className="card">
+            <div className="card-header">
+              <h2>Активні рейси</h2>
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
               {(activeTripsQuery.data ?? []).map((trip) => (
-                <div
-                  key={trip.id}
-                  className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <div className="font-semibold text-slate-900">
-                      #{trip.routeNumber} · {trip.transportType}
-                    </div>
-                    <div className="text-slate-500">
-                      {trip.fleetNumber} · {trip.driverName}
-                    </div>
+                <div key={trip.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                  <div>
+                    <div className="font-semibold text-slate-800">#{trip.routeNumber} <span className="text-slate-400">·</span> {trip.fleetNumber}</div>
+                    <div className="text-xs text-slate-500">{trip.driverName}</div>
                   </div>
-                  <div className="mt-2 text-sm text-slate-600">
-                    Старт: {formatTime(trip.startsAt)} · Статус:{' '}
-                    {trip.endsAt ? 'Завершується' : 'Активний'}
+                  <div className="text-right text-xs">
+                    <div className="text-emerald-600 font-medium">Активний</div>
+                    <div className="text-slate-400">{formatTime(trip.startsAt)}</div>
                   </div>
                 </div>
               ))}
-              {activeTripsQuery.data && activeTripsQuery.data.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  Активних рейсів зараз немає.
-                </div>
-              )}
+              {!activeTripsQuery.data?.length && <p className="text-center text-slate-400 py-4 text-sm">Немає активних рейсів.</p>}
             </div>
           </div>
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Відхилення
+
+          <div className="card">
+            <div className="card-header">
+              <h2>Відхилення</h2>
             </div>
-            <div className="mt-4 space-y-3">
-              {(deviationsQuery.data ?? [])
-                .filter((item) => item.deviationMin !== null)
-                .slice(0, 4)
-                .map((item) => (
-                  <div
-                    key={`${item.fleetNumber}-${item.routeNumber}`}
-                    className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4"
-                  >
-                    <div className="text-sm font-semibold text-slate-900">
-                      {item.fleetNumber} · #{item.routeNumber}
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      Відхилення: {item.deviationMin} хв
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      План {item.plannedTime} · Зараз {item.currentTime}
-                    </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+              {(deviationsQuery.data ?? []).filter(d => d.deviationMin !== null).map((dev, i) => (
+                <div key={i} className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex justify-between items-center">
+                  <div>
+                    <div className="font-semibold text-amber-900">#{dev.routeNumber} <span className="text-amber-400">·</span> {dev.fleetNumber}</div>
+                    <div className="text-xs text-amber-700/70">План: {dev.plannedTime}</div>
                   </div>
-                ))}
-              {deviationsQuery.data && deviationsQuery.data.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  Даних про відхилення немає.
+                  <div className="text-right">
+                    <div className="text-rose-600 font-bold">+{dev.deviationMin} хв</div>
+                    <div className="text-xs text-amber-600">Запізнення</div>
+                  </div>
                 </div>
-              )}
+              ))}
+              {!deviationsQuery.data?.length && <p className="text-center text-slate-400 py-4 text-sm">Все йде за графіком.</p>}
             </div>
           </div>
         </section>
       )}
 
+      {/* Schedules Tab */}
       {activeTab === 'schedules' && (
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                  Розклади
-                </div>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">
-                  Список розкладів
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setScheduleForm({
-                    mode: 'create',
-                    routeId: '',
-                    fleetNumber: '',
-                    workStartTime: '06:00:00',
-                    workEndTime: '23:00:00',
-                    intervalMin: '10',
-                  })
-                  setScheduleModalOpen(true)
-                }}
-                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-              >
-                Створити розклад
-              </button>
+        <section className="card">
+          <div className="card-header">
+            <h2>Керування розкладами</h2>
+            <button 
+              onClick={() => {
+                setScheduleForm({ mode: 'create', routeId: '', fleetNumber: '', workStartTime: '06:00:00', workEndTime: '23:00:00', intervalMin: '10' })
+                setScheduleModalOpen(true)
+              }} 
+              className="btn btn-primary text-xs"
+            >
+              + Створити
+            </button>
+          </div>
+          
+          <div className="grid gap-4 sm:grid-cols-4 mb-6">
+            <div className="form-group">
+              <label>Маршрут</label>
+              <input value={scheduleFilter.routeNumber} onChange={e => setScheduleFilter({...scheduleFilter, routeNumber: e.target.value})} className="input py-2 text-sm" placeholder="№" />
             </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
-              <input
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                placeholder="Маршрут"
-                value={scheduleFilter.routeNumber}
-                onChange={(event) =>
-                  setScheduleFilter({
-                    ...scheduleFilter,
-                    routeNumber: event.target.value,
-                  })
-                }
-              />
-              <input
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                placeholder="Тип транспорту"
-                value={scheduleFilter.transportType}
-                onChange={(event) =>
-                  setScheduleFilter({
-                    ...scheduleFilter,
-                    transportType: event.target.value,
-                  })
-                }
-              />
-              <input
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                placeholder="Fleet number"
-                value={scheduleFilter.fleetNumber}
-                onChange={(event) =>
-                  setScheduleFilter({
-                    ...scheduleFilter,
-                    fleetNumber: event.target.value,
-                  })
-                }
-              />
-              <input
-                type="date"
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={scheduleFilter.date}
-                onChange={(event) =>
-                  setScheduleFilter({
-                    ...scheduleFilter,
-                    date: event.target.value,
-                  })
-                }
-              />
+            <div className="form-group">
+              <label>Транспорт</label>
+              <input value={scheduleFilter.transportType} onChange={e => setScheduleFilter({...scheduleFilter, transportType: e.target.value})} className="input py-2 text-sm" placeholder="Тип" />
             </div>
-
-            <div className="mt-4 space-y-2">
-              {filteredSchedules.map((schedule) => (
-                <div
-                  key={schedule.id}
-                  className={`rounded-2xl border px-4 py-3 text-sm transition ${
-                    selectedScheduleId === schedule.id
-                      ? 'border-emerald-200 bg-emerald-50'
-                      : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-900">
-                      #{schedule.routeNumber} · {schedule.transportType}
-                    </span>
-                    <span className="text-slate-500">
-                      Інтервал {schedule.intervalMin} хв
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {schedule.direction} · {schedule.workStartTime} - {schedule.workEndTime}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedScheduleId(schedule.id)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                    >
-                      Переглянути
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedScheduleId(schedule.id)
-                        setScheduleForm({
-                          mode: 'edit',
-                          routeId: `${schedule.routeId}`,
-                          fleetNumber: '',
-                          workStartTime: schedule.workStartTime,
-                          workEndTime: schedule.workEndTime,
-                          intervalMin: `${schedule.intervalMin}`,
-                        })
-                        setScheduleModalOpen(true)
-                      }}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                    >
-                      Редагувати
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScheduleForm({
-                          mode: 'create',
-                          routeId: `${schedule.routeId}`,
-                          fleetNumber: '',
-                          workStartTime: schedule.workStartTime,
-                          workEndTime: schedule.workEndTime,
-                          intervalMin: `${schedule.intervalMin}`,
-                        })
-                        setScheduleModalOpen(true)
-                      }}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600"
-                    >
-                      Дублювати
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {!filteredSchedules.length && (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  Розкладів не знайдено.
-                </div>
-              )}
+            <div className="form-group">
+              <label>Fleet</label>
+              <input value={scheduleFilter.fleetNumber} onChange={e => setScheduleFilter({...scheduleFilter, fleetNumber: e.target.value})} className="input py-2 text-sm" placeholder="Бортовий" />
+            </div>
+            <div className="form-group">
+              <label>Дата</label>
+              <input type="date" value={scheduleFilter.date} onChange={e => setScheduleFilter({...scheduleFilter, date: e.target.value})} className="input py-2 text-sm" />
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Деталі
-            </div>
-            <h3 className="mt-2 text-xl font-semibold text-slate-900">
-              {selectedScheduleDetails
-                ? `Розклад #${selectedScheduleDetails.id}`
-                : 'Оберіть розклад'}
-            </h3>
-            {selectedScheduleDetails && (
-              <>
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                  <div className="font-semibold text-slate-900">
-                    Маршрут #{selectedScheduleDetails.route.number}
-                  </div>
-                  <div className="mt-2">
-                    Старт: {selectedScheduleDetails.workStartTime} · Завершення:{' '}
-                    {selectedScheduleDetails.workEndTime}
-                  </div>
-                  <div>Інтервал: {selectedScheduleDetails.intervalMin} хв</div>
-                  <div className="mt-1">
-                    Час закінчення маршруту:{' '}
-                    {calculatedEndTime ? calculatedEndTime : '—'}
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Зупинки
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm">
-                    {selectedScheduleDetails.stops.map((stop) => (
-                      <div
-                        key={stop.id}
-                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Маршрут</th>
+                  <th className="px-4 py-3 font-medium">Тип</th>
+                  <th className="px-4 py-3 font-medium">Напрямок</th>
+                  <th className="px-4 py-3 font-medium">Час роботи</th>
+                  <th className="px-4 py-3 font-medium">Інтервал</th>
+                  <th className="px-4 py-3 font-medium text-right">Дії</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredSchedules.map(schedule => (
+                  <tr key={schedule.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 font-semibold text-slate-900">#{schedule.routeNumber}</td>
+                    <td className="px-4 py-3">{schedule.transportType}</td>
+                    <td className="px-4 py-3 text-slate-500">{schedule.direction}</td>
+                    <td className="px-4 py-3 font-mono">{schedule.workStartTime} - {schedule.workEndTime}</td>
+                    <td className="px-4 py-3">{schedule.intervalMin} хв</td>
+                    <td className="px-4 py-3 text-right">
+                      <button 
+                        onClick={() => {
+                          setSelectedScheduleId(schedule.id)
+                          setScheduleForm({
+                            mode: 'edit',
+                            routeId: `${schedule.routeId}`,
+                            fleetNumber: '',
+                            workStartTime: schedule.workStartTime,
+                            workEndTime: schedule.workEndTime,
+                            intervalMin: `${schedule.intervalMin}`
+                          })
+                          setScheduleModalOpen(true)
+                        }}
+                        className="text-indigo-600 hover:text-indigo-800 font-medium"
                       >
-                        <span className="font-medium text-slate-900">
-                          {stop.name}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {stop.minutesToNextStop
-                            ? `${stop.minutesToNextStop} хв`
-                            : '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+                        Ред.
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!filteredSchedules.length && <div className="text-center py-8 text-slate-400">Нічого не знайдено.</div>}
           </div>
         </section>
       )}
 
+      {/* Assignments Tab */}
       {activeTab === 'assignments' && (
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Призначення
+        <section className="grid-dashboard lg:grid-cols-[1fr_350px]">
+          <div className="card">
+            <div className="card-header">
+              <h2>Журнал призначень</h2>
             </div>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">
-              Таблиця призначень
-            </h2>
-            <div className="mt-4 space-y-2">
-              {(assignmentsQuery.data ?? []).map((assignment) => {
-                const assignedAt = new Date(assignment.assignedAt)
-                const ageHours = (now.getTime() - assignedAt.getTime()) / 3600000
-                const status =
-                  ageHours < 24 ? 'актуальне' : ageHours < 72 ? 'прострочене' : 'конфлікт'
-                return (
-                  <div
-                    key={assignment.id}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-semibold text-slate-900">
-                        {assignment.driverName} · {assignment.driverLogin}
-                      </div>
-                      <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        {status}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {assignment.fleetNumber} · #{assignment.routeNumber} ·{' '}
-                      {assignment.transportType}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400">
-                      Призначено: {formatDateTime(assignment.assignedAt)}
-                    </div>
+            <div className="space-y-2">
+              {(assignmentsQuery.data ?? []).map(assignment => (
+                <div key={assignment.id} className="p-3 border border-slate-100 rounded-xl flex justify-between items-center hover:bg-slate-50 transition-colors">
+                  <div>
+                    <div className="font-semibold text-slate-800">{assignment.driverName}</div>
+                    <div className="text-xs text-slate-500">{assignment.fleetNumber} · #{assignment.routeNumber}</div>
                   </div>
-                )
-              })}
-              {assignmentsQuery.data && assignmentsQuery.data.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  Призначення відсутні.
+                  <div className="text-xs text-slate-400 text-right">
+                    <div>{formatDateTime(assignment.assignedAt)}</div>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Нове призначення
-            </div>
-            <div className="mt-4 space-y-3 text-sm">
-              <label className="block">
-                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Водій
-                </span>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                  value={assignmentForm.driverLogin}
-                  onChange={(event) =>
-                    setAssignmentForm({
-                      ...assignmentForm,
-                      driverLogin: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">Оберіть водія</option>
-                  {(driversQuery.data ?? []).map((driver) => (
-                    <option key={driver.login} value={driver.login}>
-                      {driver.fullName} · {driver.login}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Транспорт
-                </span>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                  value={assignmentForm.fleetNumber}
-                  onChange={(event) =>
-                    setAssignmentForm({
-                      ...assignmentForm,
-                      fleetNumber: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">Оберіть транспорт</option>
-                  {(vehiclesQuery.data ?? []).map((vehicle) => (
-                    <option key={vehicle.fleetNumber} value={vehicle.fleetNumber}>
-                      {vehicle.fleetNumber} · маршрут {vehicle.routeId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Маршрут
-                </span>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                  value={assignmentForm.routeId}
-                  onChange={(event) =>
-                    setAssignmentForm({
-                      ...assignmentForm,
-                      routeId: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">Не обрано</option>
-                  {(routesQuery.data ?? []).map((route) => (
-                    <option key={route.id} value={route.id}>
-                      #{route.number} · {route.transportType} · {route.direction}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Час призначення
-                </span>
-                <input
-                  type="datetime-local"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                  value={assignmentForm.assignedAt}
-                  onChange={(event) =>
-                    setAssignmentForm({
-                      ...assignmentForm,
-                      assignedAt: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => assignDriverMutation.mutate()}
-                className="w-full rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-                disabled={assignDriverMutation.isPending}
-              >
-                {assignDriverMutation.isPending ? 'Призначення...' : 'Призначити'}
-              </button>
-              {assignDriverMutation.error && (
-                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-600">
-                  {getErrorMessage(assignDriverMutation.error, 'Помилка призначення.')}
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {activeTab === 'monitoring' && (
-        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Фільтри
-            </div>
-            <label className="mt-4 block text-sm">
-              Маршрут
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                value={scheduleFilter.routeNumber}
-                onChange={(event) =>
-                  setScheduleFilter({
-                    ...scheduleFilter,
-                    routeNumber: event.target.value,
-                  })
-                }
-              >
-                <option value="">Усі маршрути</option>
-                {(routesQuery.data ?? []).map((route) => (
-                  <option key={route.id} value={route.number}>
-                    #{route.number} · {route.transportType}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-4 block text-sm">
-              Транспорт
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                value={monitorFleet}
-                onChange={(event) => setMonitorFleet(event.target.value)}
-              >
-                <option value="">Оберіть ТЗ</option>
-                {(activeTripsQuery.data ?? []).map((trip) => (
-                  <option key={trip.fleetNumber} value={trip.fleetNumber}>
-                    {trip.fleetNumber} · #{trip.routeNumber}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-              {monitoringQuery.data ? (
-                <>
-                  <div className="font-semibold text-slate-900">
-                    {monitoringQuery.data.vehicle.fleetNumber}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Останній GPS: {formatDateTime(monitoringQuery.data.currentPosition?.recordedAt)}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-400">
-                    Координати: {monitoringQuery.data.currentPosition?.lon ?? '—'},{' '}
-                    {monitoringQuery.data.currentPosition?.lat ?? '—'}
-                  </div>
-                </>
-              ) : (
-                <div>Оберіть транспорт для моніторингу.</div>
-              )}
-            </div>
-          </div>
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Карта маршруту
-            </div>
-            <div className="mt-4 h-[360px] rounded-3xl border border-dashed border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
-              {monitoringQuery.data ? (
-                <svg viewBox="0 0 100 100" className="h-full w-full">
-                  {monitoringQuery.data.routePoints.map((point, index) => {
-                    const x = 10 + (index / (monitoringQuery.data.routePoints.length - 1 || 1)) * 80
-                    const y = 20 + (Math.sin(index / 2) + 1) * 25
-                    return (
-                      <circle key={point.id} cx={x} cy={y} r={2.5} fill="#10b981" />
-                    )
-                  })}
-                  {monitoringQuery.data.currentPosition && (
-                    <circle cx={50} cy={50} r={4} fill="#f97316" />
-                  )}
-                </svg>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                  Дані маршруту з'являться після вибору транспорту.
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {activeTab === 'deviations' && (
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Відхилення від графіка
-            </div>
-            <div className="mt-4 space-y-2">
-              {(deviationsQuery.data ?? []).map((item) => (
-                <button
-                  key={`${item.fleetNumber}-${item.routeNumber}`}
-                  type="button"
-                  onClick={() => setDeviationSelected(item)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${
-                    deviationSelected?.fleetNumber === item.fleetNumber
-                      ? 'border-emerald-200 bg-emerald-50'
-                      : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-semibold text-slate-900">
-                      {item.fleetNumber} · #{item.routeNumber}
-                    </div>
-                    <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      {item.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    План {item.plannedTime ?? '—'} · Факт {item.currentTime}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Відхилення: {item.deviationMin ?? '—'} хв
-                  </div>
-                </button>
               ))}
             </div>
           </div>
-          <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-xl">
-            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-              Деталі
+
+          <div className="card h-fit">
+            <div className="card-header">
+              <h2>Нове призначення</h2>
             </div>
-            {deviationSelected ? (
-              <div className="mt-4 space-y-3 text-sm text-slate-600">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="font-semibold text-slate-900">
-                    {deviationSelected.fleetNumber} · #{deviationSelected.routeNumber}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">
-                    Найближча зупинка:{' '}
-                    {deviationSelected.nearestStop?.stopName ?? '—'}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Останній GPS: {formatDateTime(deviationSelected.lastGps?.recordedAt)}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                    Історія GPS
-                  </div>
-                  <div className="mt-2 space-y-2 text-xs text-slate-500">
-                    {(deviationSelected.history ?? []).map((point, index) => (
-                      <div key={`${point.recordedAt}-${index}`}>
-                        {formatDateTime(point.recordedAt)} · {point.lon}, {point.lat}
-                      </div>
-                    ))}
-                    {!deviationSelected.history?.length && (
-                      <div>Немає історії GPS.</div>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCheckedDeviations({
-                      ...checkedDeviations,
-                      [deviationSelected.fleetNumber]: true,
-                    })
-                  }
-                  className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700"
+            <div className="space-y-4">
+              <div className="form-group">
+                <label>Водій</label>
+                <select 
+                  className="select"
+                  value={assignmentForm.driverLogin}
+                  onChange={e => setAssignmentForm({...assignmentForm, driverLogin: e.target.value})}
                 >
-                  {checkedDeviations[deviationSelected.fleetNumber]
-                    ? 'Перевірено'
-                    : 'Позначити як перевірено'}
-                </button>
+                  <option value="">Оберіть...</option>
+                  {(driversQuery.data ?? []).map(d => (
+                    <option key={d.login} value={d.login}>{d.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Транспорт</label>
+                <select 
+                  className="select"
+                  value={assignmentForm.fleetNumber}
+                  onChange={e => setAssignmentForm({...assignmentForm, fleetNumber: e.target.value})}
+                >
+                  <option value="">Оберіть...</option>
+                  {(vehiclesQuery.data ?? []).map(v => (
+                    <option key={v.fleetNumber} value={v.fleetNumber}>{v.fleetNumber} (ID: {v.id})</option>
+                  ))}
+                </select>
+              </div>
+              <button 
+                onClick={() => assignDriverMutation.mutate()}
+                disabled={assignDriverMutation.isPending}
+                className="btn btn-primary w-full"
+              >
+                Призначити
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Monitoring Tab */}
+      {activeTab === 'monitoring' && (
+        <section className="card min-h-[500px]">
+          <div className="card-header">
+            <h2>GPS Моніторинг</h2>
+            <select 
+              className="select py-1 text-sm w-48"
+              value={monitorFleet}
+              onChange={e => setMonitorFleet(e.target.value)}
+            >
+              <option value="">Оберіть транспорт...</option>
+              {(activeTripsQuery.data ?? []).map(t => (
+                <option key={t.fleetNumber} value={t.fleetNumber}>{t.fleetNumber} (#{t.routeNumber})</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="h-[400px] bg-slate-50 rounded-2xl border border-slate-200 relative overflow-hidden flex items-center justify-center">
+            {monitoringQuery.data ? (
+              <div className="absolute inset-0 p-4">
+                 {/* Simple visualization placeholder */}
+                 <svg viewBox="0 0 100 100" className="w-full h-full opacity-50">
+                    <path d="M10,50 Q50,10 90,50 T90,90" fill="none" stroke="#e2e8f0" strokeWidth="2" />
+                 </svg>
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                    <div className="text-4xl">📍</div>
+                    <div className="text-xs font-mono bg-white px-2 py-1 rounded shadow mt-1">
+                      {monitoringQuery.data.currentPosition?.lat}, {monitoringQuery.data.currentPosition?.lon}
+                    </div>
+                 </div>
               </div>
             ) : (
-              <div className="mt-4 text-sm text-slate-500">
-                Оберіть відхилення зі списку.
-              </div>
+              <div className="text-slate-400">Оберіть транспорт зі списку активних рейсів.</div>
             )}
           </div>
         </section>
       )}
 
+      {/* Modal */}
       {scheduleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">
-                {scheduleForm.mode === 'create' ? 'Створити розклад' : 'Редагувати розклад'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setScheduleModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+          <div className="card w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="card-header">
+              <h2>{scheduleForm.mode === 'create' ? 'Створення розкладу' : 'Редагування'}</h2>
+              <button onClick={() => setScheduleModalOpen(false)} className="btn btn-ghost px-2 py-1">✕</button>
             </div>
-            <div className="mt-4 grid gap-4 text-sm">
-              <label className="block">
-                Маршрут
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+            
+            <div className="space-y-4">
+              <div className="form-group">
+                <label>Маршрут</label>
+                <select 
+                  className="select"
                   value={scheduleForm.routeId}
-                  onChange={(event) =>
-                    setScheduleForm({ ...scheduleForm, routeId: event.target.value })
-                  }
+                  onChange={e => setScheduleForm({...scheduleForm, routeId: e.target.value})}
                 >
-                  <option value="">Оберіть маршрут</option>
-                  {(routesQuery.data ?? []).map((route) => (
-                    <option key={route.id} value={route.id}>
-                      #{route.number} · {route.transportType} · {route.direction}
-                    </option>
+                  <option value="">Оберіть...</option>
+                  {(routesQuery.data ?? []).map(r => (
+                    <option key={r.id} value={r.id}>#{r.number} · {r.transportType} · {r.direction}</option>
                   ))}
                 </select>
-              </label>
-              <label className="block">
-                Транспорт (fleet)
-                <input
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                  value={scheduleForm.fleetNumber}
-                  onChange={(event) =>
-                    setScheduleForm({ ...scheduleForm, fleetNumber: event.target.value })
-                  }
-                  placeholder="AB-001"
-                />
-              </label>
-              <div className="grid gap-4 md:grid-cols-3">
-                <label className="block">
-                  Старт
-                  <input
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                    value={scheduleForm.workStartTime}
-                    onChange={(event) =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        workStartTime: event.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label className="block">
-                  Фініш
-                  <input
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                    value={scheduleForm.workEndTime}
-                    onChange={(event) =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        workEndTime: event.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label className="block">
-                  Інтервал
-                  <input
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
-                    value={scheduleForm.intervalMin}
-                    onChange={(event) =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        intervalMin: event.target.value,
-                      })
-                    }
-                  />
-                </label>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                  Preview
+              
+              <div className="grid grid-cols-3 gap-3">
+                <div className="form-group">
+                  <label>Початок</label>
+                  <input className="input" value={scheduleForm.workStartTime} onChange={e => setScheduleForm({...scheduleForm, workStartTime: e.target.value})} />
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {schedulePreview.map((slot) => (
-                    <span
-                      key={slot}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1"
-                    >
-                      {slot}
-                    </span>
-                  ))}
+                <div className="form-group">
+                  <label>Кінець</label>
+                  <input className="input" value={scheduleForm.workEndTime} onChange={e => setScheduleForm({...scheduleForm, workEndTime: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Інтервал (хв)</label>
+                  <input className="input" value={scheduleForm.intervalMin} onChange={e => setScheduleForm({...scheduleForm, intervalMin: e.target.value})} />
                 </div>
               </div>
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScheduleModalOpen(false)}
-                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button onClick={() => setScheduleModalOpen(false)} className="btn btn-secondary">Скасувати</button>
+                <button 
+                  onClick={() => scheduleForm.mode === 'create' ? createScheduleMutation.mutate() : updateScheduleMutation.mutate()} 
+                  className="btn btn-primary"
                 >
-                  Скасувати
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    scheduleForm.mode === 'create'
-                      ? createScheduleMutation.mutate()
-                      : updateScheduleMutation.mutate()
-                  }
-                  className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  {scheduleForm.mode === 'create' ? 'Створити' : 'Зберегти'}
+                  Зберегти
                 </button>
               </div>
-              {(createScheduleMutation.error || updateScheduleMutation.error) && (
-                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-600">
-                  {getErrorMessage(
-                    createScheduleMutation.error ?? updateScheduleMutation.error,
-                    'Помилка збереження.',
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>

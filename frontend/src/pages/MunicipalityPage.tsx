@@ -113,6 +113,7 @@ function MunicipalityPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['municipality', 'stops'] })
+      setStopForm({ name: '', lon: '', lat: '' })
     },
   })
 
@@ -131,6 +132,7 @@ function MunicipalityPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['municipality', 'stops'] })
+      setStopEdit(null)
     },
   })
 
@@ -209,11 +211,11 @@ function MunicipalityPage() {
     [transportTypesQuery.data],
   )
 
-  if (!user) {
+  if (!user || !hasAccess) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Доступ мерії</h2>
+      <main className="page-shell flex items-center justify-center">
+        <div className="card max-w-md text-center">
+          <h2 className="text-2xl font-bold text-slate-800">Обмежений доступ</h2>
           <p className="mt-2 text-slate-600">
             Увійдіть під акаунтом департаменту мерії.
           </p>
@@ -222,497 +224,441 @@ function MunicipalityPage() {
     )
   }
 
-  if (!hasAccess) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-12">
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold">Немає доступу</h2>
-          <p className="mt-2 text-slate-600">
-            Цей акаунт не має ролі мерії.
-          </p>
-        </div>
-      </main>
-    )
-  }
-
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10">
-      <header className="rounded-3xl border border-white/70 bg-white/70 p-8 shadow-xl">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-          ct-municipality
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          Департамент мерії — маршрути, зупинки, аналітика
+    <main className="page-shell">
+      <header className="flex flex-col gap-2">
+        <div className="badge badge-neutral w-fit">ct-municipality</div>
+        <h1 className="text-3xl sm:text-4xl text-slate-900">
+          Управління транспортом
         </h1>
+        <p className="text-slate-500 max-w-2xl">
+          Проєктування маршрутів, керування зупинками та аналіз ефективності міської транспортної мережі.
+        </p>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Проєктування нового маршруту
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <select
-              value={routeForm.transportTypeId}
-              onChange={(event) =>
-                setRouteForm((prev) => ({
-                  ...prev,
-                  transportTypeId: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Тип транспорту</option>
-              {transportOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-            <input
-              placeholder="Номер маршруту"
-              value={routeForm.number}
-              onChange={(event) =>
-                setRouteForm((prev) => ({
-                  ...prev,
-                  number: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <select
-              value={routeForm.direction}
-              onChange={(event) =>
-                setRouteForm((prev) => ({
-                  ...prev,
-                  direction: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="forward">forward</option>
-              <option value="reverse">reverse</option>
-            </select>
+      <section className="grid-dashboard lg:grid-cols-[1.5fr_1fr]">
+        {/* Route Creator */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Новий маршрут</h2>
+          </div>
+          
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="form-group">
+              <label>Тип</label>
+              <select
+                value={routeForm.transportTypeId}
+                onChange={(e) => setRouteForm({ ...routeForm, transportTypeId: e.target.value })}
+                className="select"
+              >
+                <option value="">Оберіть...</option>
+                {transportOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Номер</label>
+              <input
+                value={routeForm.number}
+                onChange={(e) => setRouteForm({ ...routeForm, number: e.target.value })}
+                className="input"
+                placeholder="Напр. 12-А"
+              />
+            </div>
+            <div className="form-group">
+              <label>Напрямок</label>
+              <select
+                value={routeForm.direction}
+                onChange={(e) => setRouteForm({ ...routeForm, direction: e.target.value })}
+                className="select"
+              >
+                <option value="forward">Прямий</option>
+                <option value="reverse">Зворотній</option>
+              </select>
+            </div>
           </div>
 
-          <div className="mt-5 space-y-3">
-            <p className="text-sm font-semibold text-slate-700">Зупинки</p>
-            {draftStops.map((stop, index) => (
-              <div
-                key={`${index}-${stop.stopId ?? 'new'}`}
-                className="rounded-2xl border border-white/60 bg-white/80 p-4 text-sm"
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-700">Ланцюжок зупинок</h3>
+              <button
+                type="button"
+                onClick={() => setDraftStops((prev) => [...prev, { stopId: '' }])}
+                className="btn btn-secondary text-xs py-1.5"
               >
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <select
-                    value={stop.stopId ?? ''}
-                    onChange={(event) => {
-                      const next = [...draftStops]
-                      next[index] = { stopId: event.target.value }
-                      setDraftStops(next)
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                  >
-                    <option value="">Нова зупинка</option>
-                    {stopOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="Назва"
-                    value={stop.name ?? ''}
-                    onChange={(event) => {
-                      const next = [...draftStops]
-                      next[index] = { ...next[index], name: event.target.value }
-                      setDraftStops(next)
-                    }}
-                    disabled={Boolean(stop.stopId)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs disabled:opacity-60"
-                  />
-                  <input
-                    placeholder="Дистанція до наступної (км)"
-                    value={stop.distanceToNextKm ?? ''}
-                    onChange={(event) => {
-                      const next = [...draftStops]
-                      next[index] = {
-                        ...next[index],
-                        distanceToNextKm: event.target.value,
-                      }
-                      setDraftStops(next)
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                  />
-                </div>
-                {!stop.stopId && (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <input
-                      placeholder="Довгота"
-                      value={stop.lon ?? ''}
-                      onChange={(event) => {
-                        const next = [...draftStops]
-                        next[index] = { ...next[index], lon: event.target.value }
+                + Зупинка
+              </button>
+            </div>
+            
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {draftStops.map((stop, index) => (
+                <div key={index} className="flex flex-col gap-3 rounded-2xl bg-slate-50/50 border border-slate-100 p-3 relative group">
+                  <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                     <button
+                      type="button"
+                      onClick={() => {
+                        const next = draftStops.filter((_, idx) => idx !== index)
                         setDraftStops(next)
                       }}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                    />
-                    <input
-                      placeholder="Широта"
-                      value={stop.lat ?? ''}
-                      onChange={(event) => {
-                        const next = [...draftStops]
-                        next[index] = { ...next[index], lat: event.target.value }
-                        setDraftStops(next)
-                      }}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-                    />
+                      className="text-rose-400 hover:text-rose-600 p-1"
+                    >
+                      ✕
+                    </button>
                   </div>
-                )}
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (index === 0) {
-                        return
-                      }
-                      const next = [...draftStops]
-                      const temp = next[index - 1]
-                      next[index - 1] = next[index]
-                      next[index] = temp
-                      setDraftStops(next)
-                    }}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (index === draftStops.length - 1) {
-                        return
-                      }
-                      const next = [...draftStops]
-                      const temp = next[index + 1]
-                      next[index + 1] = next[index]
-                      next[index] = temp
-                      setDraftStops(next)
-                    }}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = draftStops.filter((_, idx) => idx !== index)
-                      setDraftStops(next)
-                    }}
-                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-600"
-                  >
-                    Видалити
-                  </button>
+                  
+                  <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+                    <div className="form-group">
+                      <label>Зупинка</label>
+                      <select
+                        value={stop.stopId ?? ''}
+                        onChange={(e) => {
+                          const next = [...draftStops]
+                          next[index] = { ...next[index], stopId: e.target.value }
+                          setDraftStops(next)
+                        }}
+                        className="select py-2 text-xs"
+                      >
+                        <option value="">Створити нову...</option>
+                        {stopOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Дистанція (км)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={stop.distanceToNextKm ?? ''}
+                        onChange={(e) => {
+                          const next = [...draftStops]
+                          next[index] = { ...next[index], distanceToNextKm: e.target.value }
+                          setDraftStops(next)
+                        }}
+                        className="input py-2 text-xs"
+                        placeholder="0.0"
+                      />
+                    </div>
+                  </div>
+
+                  {!stop.stopId && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <input
+                        placeholder="Назва нової зупинки"
+                        value={stop.name ?? ''}
+                        onChange={(e) => {
+                          const next = [...draftStops]
+                          next[index] = { ...next[index], name: e.target.value }
+                          setDraftStops(next)
+                        }}
+                        className="input py-2 text-xs"
+                      />
+                      <input
+                        placeholder="Lon"
+                        value={stop.lon ?? ''}
+                        onChange={(e) => {
+                          const next = [...draftStops]
+                          next[index] = { ...next[index], lon: e.target.value }
+                          setDraftStops(next)
+                        }}
+                        className="input py-2 text-xs"
+                      />
+                      <input
+                        placeholder="Lat"
+                        value={stop.lat ?? ''}
+                        onChange={(e) => {
+                          const next = [...draftStops]
+                          next[index] = { ...next[index], lat: e.target.value }
+                          setDraftStops(next)
+                        }}
+                        className="input py-2 text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() =>
-                setDraftStops((prev) => [...prev, { stopId: '' }])
-              }
-              className="rounded-full border border-slate-900/10 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow"
-            >
-              Додати зупинку
-            </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6">
-            <p className="text-sm font-semibold text-slate-700">
-              Точки маршруту (lon,lat по рядках)
-            </p>
-            <textarea
-              value={pointsInput}
-              onChange={(event) => setPointsInput(event.target.value)}
-              rows={6}
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
-              placeholder="30.52345,50.45012"
-            />
+            <div className="form-group">
+              <label>Геометрія маршруту (CSV: lon,lat)</label>
+              <textarea
+                value={pointsInput}
+                onChange={(e) => setPointsInput(e.target.value)}
+                rows={4}
+                className="input font-mono text-xs"
+                placeholder="30.52345,50.45012&#10;30.52350,50.45015"
+              />
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => createRouteMutation.mutate()}
-            className="mt-6 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Зберегти маршрут
-          </button>
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => createRouteMutation.mutate()}
+              disabled={createRouteMutation.isPending}
+              className="btn btn-primary w-full sm:w-auto"
+            >
+              {createRouteMutation.isPending ? 'Збереження...' : 'Створити маршрут'}
+            </button>
+          </div>
+          
           {createRouteMutation.isError && (
-            <p className="mt-2 text-sm text-rose-600">
+            <div className="mt-4 p-3 rounded-xl bg-rose-50 text-rose-600 text-sm border border-rose-100">
               {getErrorMessage(createRouteMutation.error)}
-            </p>
+            </div>
           )}
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h3 className="text-lg font-semibold text-slate-900">Зупинки</h3>
-          <div className="mt-4 grid gap-3">
-            <input
-              placeholder="Назва"
-              value={stopForm.name}
-              onChange={(event) =>
-                setStopForm((prev) => ({ ...prev, name: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                placeholder="Довгота"
-                value={stopForm.lon}
-                onChange={(event) =>
-                  setStopForm((prev) => ({ ...prev, lon: event.target.value }))
-                }
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-              <input
-                placeholder="Широта"
-                value={stopForm.lat}
-                onChange={(event) =>
-                  setStopForm((prev) => ({ ...prev, lat: event.target.value }))
-                }
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => createStopMutation.mutate()}
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-            >
-              Додати зупинку
-            </button>
+        {/* Stops Manager */}
+        <div className="card h-fit">
+          <div className="card-header">
+            <h2>Реєстр зупинок</h2>
           </div>
-
-          <div className="mt-6 space-y-2">
-            {stopOptions.slice(0, 8).map((stop) => (
+          
+          <div className="space-y-4">
+            <div className="grid gap-3">
+              <div className="form-group">
+                <label>Назва</label>
+                <input
+                  value={stopForm.name}
+                  onChange={(e) => setStopForm({ ...stopForm, name: e.target.value })}
+                  className="input"
+                  placeholder="Центральна площа"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="form-group">
+                  <label>Довгота</label>
+                  <input
+                    value={stopForm.lon}
+                    onChange={(e) => setStopForm({ ...stopForm, lon: e.target.value })}
+                    className="input"
+                    placeholder="30.5..."
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Широта</label>
+                  <input
+                    value={stopForm.lat}
+                    onChange={(e) => setStopForm({ ...stopForm, lat: e.target.value })}
+                    className="input"
+                    placeholder="50.4..."
+                  />
+                </div>
+              </div>
               <button
-                key={stop.id}
-                type="button"
-                onClick={() => setStopEdit(stop)}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-4 py-2 text-left text-sm"
+                onClick={() => createStopMutation.mutate()}
+                disabled={createStopMutation.isPending}
+                className="btn btn-secondary w-full"
               >
-                <p className="font-semibold text-slate-900">{stop.name}</p>
-                <p className="text-xs text-slate-500">
-                  {stop.lon}, {stop.lat}
-                </p>
+                Додати зупинку
               </button>
-            ))}
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-slate-500 mb-3 uppercase tracking-wider">Останні додані</h3>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {stopOptions.slice(0, 8).map((stop) => (
+                  <div
+                    key={stop.id}
+                    onClick={() => setStopEdit(stop)}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition-all"
+                  >
+                    <div>
+                      <p className="font-medium text-sm text-slate-900">{stop.name}</p>
+                      <p className="text-xs text-slate-400 font-mono">{stop.lon}, {stop.lat}</p>
+                    </div>
+                    <span className="text-slate-300">✎</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {stopEdit && (
-            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
-              <p className="font-semibold text-amber-900">
-                Редагування: {stopEdit.name}
-              </p>
-              <div className="mt-3 grid gap-3">
-                <input
-                  value={stopEdit.name}
-                  onChange={(event) =>
-                    setStopEdit((prev) =>
-                      prev ? { ...prev, name: event.target.value } : prev,
-                    )
-                  }
-                  className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs"
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    value={stopEdit.lon}
-                    onChange={(event) =>
-                      setStopEdit((prev) =>
-                        prev ? { ...prev, lon: event.target.value } : prev,
-                      )
-                    }
-                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs"
-                  />
-                  <input
-                    value={stopEdit.lat}
-                    onChange={(event) =>
-                      setStopEdit((prev) =>
-                        prev ? { ...prev, lat: event.target.value } : prev,
-                      )
-                    }
-                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs"
-                  />
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+              <div className="card w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200">
+                <div className="card-header">
+                  <h2>Редагування</h2>
+                  <button onClick={() => setStopEdit(null)} className="btn btn-ghost text-lg leading-none px-2 py-1">×</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => updateStopMutation.mutate()}
-                  className="rounded-full bg-amber-600 px-4 py-2 text-xs font-semibold text-white"
-                >
-                  Оновити зупинку
-                </button>
+                <div className="space-y-4">
+                  <div className="form-group">
+                    <label>Назва</label>
+                    <input
+                      value={stopEdit.name}
+                      onChange={(e) => setStopEdit({ ...stopEdit, name: e.target.value })}
+                      className="input"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="form-group">
+                      <label>Lon</label>
+                      <input
+                        value={stopEdit.lon}
+                        onChange={(e) => setStopEdit({ ...stopEdit, lon: e.target.value })}
+                        className="input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Lat</label>
+                      <input
+                        value={stopEdit.lat}
+                        onChange={(e) => setStopEdit({ ...stopEdit, lat: e.target.value })}
+                        className="input"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => updateStopMutation.mutate()}
+                    className="btn btn-primary w-full"
+                  >
+                    Зберегти зміни
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Аналітика пасажиропотоку
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={flowQuery.from}
-              onChange={(event) =>
-                setFlowQuery((prev) => ({ ...prev, from: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={flowQuery.to}
-              onChange={(event) =>
-                setFlowQuery((prev) => ({ ...prev, to: event.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Маршрут"
-              value={flowQuery.routeNumber}
-              onChange={(event) =>
-                setFlowQuery((prev) => ({
-                  ...prev,
-                  routeNumber: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <select
-              value={flowQuery.transportTypeId}
-              onChange={(event) =>
-                setFlowQuery((prev) => ({
-                  ...prev,
-                  transportTypeId: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Тип транспорту</option>
-              {transportOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+      <section className="grid-dashboard lg:grid-cols-2">
+        {/* Analytics */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Пасажиропотік</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => flowMutation.mutate()}
-            className="mt-4 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Застосувати
-          </button>
-          <div className="mt-4 space-y-2 text-sm">
-            {(flowMutation.data ?? []).map((row) => (
-              <div
-                key={`${row.day}-${row.fleetNumber}`}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2"
-              >
-                {row.day} · {row.fleetNumber} · маршрут {row.routeNumber} ·{' '}
-                {row.passengerCount} пас.
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="form-group">
+                <label>З</label>
+                <input
+                  type="date"
+                  value={flowQuery.from}
+                  onChange={(e) => setFlowQuery({ ...flowQuery, from: e.target.value })}
+                  className="input"
+                />
               </div>
-            ))}
+              <div className="form-group">
+                <label>По</label>
+                <input
+                  type="date"
+                  value={flowQuery.to}
+                  onChange={(e) => setFlowQuery({ ...flowQuery, to: e.target.value })}
+                  className="input"
+                />
+              </div>
+              <div className="form-group">
+                <label>Маршрут</label>
+                <input
+                  value={flowQuery.routeNumber}
+                  onChange={(e) => setFlowQuery({ ...flowQuery, routeNumber: e.target.value })}
+                  className="input"
+                  placeholder="Всі"
+                />
+              </div>
+              <div className="form-group">
+                <label>Тип</label>
+                <select
+                  value={flowQuery.transportTypeId}
+                  onChange={(e) => setFlowQuery({ ...flowQuery, transportTypeId: e.target.value })}
+                  className="select"
+                >
+                  <option value="">Всі</option>
+                  {transportOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={() => flowMutation.mutate()}
+              disabled={flowMutation.isPending}
+              className="btn btn-secondary w-full"
+            >
+              Сформувати звіт
+            </button>
+            
+            <div className="mt-4 space-y-2">
+              {(flowMutation.data ?? []).length === 0 ? (
+                <p className="text-center text-sm text-slate-400 py-4">Дані відсутні</p>
+              ) : (
+                (flowMutation.data ?? []).map((row, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 text-sm">
+                    <div className="flex gap-3">
+                      <span className="font-mono text-slate-500">{row.day}</span>
+                      <span className="font-semibold text-slate-900">{row.routeNumber}</span>
+                      <span className="text-slate-600">#{row.fleetNumber}</span>
+                    </div>
+                    <span className="badge badge-success">{row.passengerCount} пас.</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Скарги та пропозиції
-          </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <input
-              type="date"
-              value={complaintsQuery.from}
-              onChange={(event) =>
-                setComplaintsQuery((prev) => ({
-                  ...prev,
-                  from: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={complaintsQuery.to}
-              onChange={(event) =>
-                setComplaintsQuery((prev) => ({
-                  ...prev,
-                  to: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Маршрут"
-              value={complaintsQuery.routeNumber}
-              onChange={(event) =>
-                setComplaintsQuery((prev) => ({
-                  ...prev,
-                  routeNumber: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Бортовий №"
-              value={complaintsQuery.fleetNumber}
-              onChange={(event) =>
-                setComplaintsQuery((prev) => ({
-                  ...prev,
-                  fleetNumber: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-            <select
-              value={complaintsQuery.transportTypeId}
-              onChange={(event) =>
-                setComplaintsQuery((prev) => ({
-                  ...prev,
-                  transportTypeId: event.target.value,
-                }))
-              }
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="">Тип транспорту</option>
-              {transportOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+        {/* Complaints */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Скарги та пропозиції</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => complaintsMutation.mutate()}
-            className="mt-4 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-          >
-            Показати
-          </button>
-          <div className="mt-4 space-y-2 text-sm">
-            {(complaintsMutation.data ?? []).map((row) => (
-              <div
-                key={row.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3"
-              >
-                <p className="font-semibold text-slate-900">{row.type}</p>
-                <p className="text-xs text-slate-500">
-                  {row.routeNumber ?? '—'} · {row.transportType ?? '—'} ·{' '}
-                  {row.fleetNumber ?? '—'}
-                </p>
-                <p className="mt-2 text-xs text-slate-600">{row.message}</p>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="form-group">
+                <label>Період</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={complaintsQuery.from}
+                    onChange={(e) => setComplaintsQuery({ ...complaintsQuery, from: e.target.value })}
+                    className="input w-full"
+                  />
+                  <input
+                    type="date"
+                    value={complaintsQuery.to}
+                    onChange={(e) => setComplaintsQuery({ ...complaintsQuery, to: e.target.value })}
+                    className="input w-full"
+                  />
+                </div>
               </div>
-            ))}
+              <div className="form-group">
+                <label>Фільтр</label>
+                <input
+                  placeholder="Бортовий номер"
+                  value={complaintsQuery.fleetNumber}
+                  onChange={(e) => setComplaintsQuery({ ...complaintsQuery, fleetNumber: e.target.value })}
+                  className="input"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => complaintsMutation.mutate()}
+              disabled={complaintsMutation.isPending}
+              className="btn btn-secondary w-full"
+            >
+              Завантажити
+            </button>
+
+            <div className="mt-4 space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
+              {(complaintsMutation.data ?? []).map((row) => (
+                <div key={row.id} className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className={`badge ${row.type === 'Скарга' ? 'badge-error' : 'badge-success'}`}>
+                      {row.type}
+                    </span>
+                    <span className="text-xs text-slate-400">{row.createdAt ? row.createdAt.slice(0, 10) : ''}</span>
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed">{row.message}</p>
+                  <div className="mt-3 pt-3 border-t border-slate-50 flex gap-3 text-xs text-slate-500">
+                    {row.routeNumber && <span>Маршрут: {row.routeNumber}</span>}
+                    {row.fleetNumber && <span>Авто: {row.fleetNumber}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

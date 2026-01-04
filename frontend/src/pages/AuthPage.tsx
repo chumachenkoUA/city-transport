@@ -1,5 +1,5 @@
-import type { CSSProperties, FormEvent } from 'react'
-import { useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
+import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { api } from '../lib/api'
@@ -39,23 +39,16 @@ function AuthPage() {
     fullName: '',
   })
 
-  const features = useMemo(
-    () => [
-      {
-        title: 'PostgreSQL-native access',
-        body: 'Login uses real DB credentials and role membership.',
-      },
-      {
-        title: 'Role-aware UI',
-        body: 'Once logged in, we render interfaces by your role.',
-      },
-      {
-        title: 'Transport-grade data',
-        body: 'Routes, stops, schedules, and tickets are first-class data.',
-      },
-    ],
-    [],
-  )
+  const ROLE_REDIRECTS: Record<string, string> = {
+    ct_admin_role: '/admin',
+    ct_controller_role: '/controller',
+    ct_passenger_role: '/passenger',
+    ct_driver_role: '/driver',
+    ct_dispatcher_role: '/dispatcher',
+    ct_manager_role: '/manager',
+    ct_municipality_role: '/municipality',
+    ct_accountant_role: '/accountant',
+  }
 
   const loginMutation = useMutation({
     mutationFn: async (payload: LoginPayload) => {
@@ -77,15 +70,18 @@ function AuthPage() {
 
       const nextRoles: string[] = data.roles ?? []
       setAuth(nextUser, nextRoles, data.token ?? null)
-      setSuccess('Login successful.')
+      setSuccess('Успішний вхід.')
       setError('')
 
-      if (nextRoles.includes('ct_controller_role')) {
-        navigate({ to: '/controller' })
+      for (const role of nextRoles) {
+        if (ROLE_REDIRECTS[role]) {
+          navigate({ to: ROLE_REDIRECTS[role] })
+          return
+        }
       }
     },
     onError: (err) => {
-      setError(getErrorMessage(err, 'Login failed.'))
+      setError(getErrorMessage(err, 'Помилка входу.'))
       setSuccess('')
     },
   })
@@ -96,13 +92,13 @@ function AuthPage() {
       return response.data
     },
     onSuccess: () => {
-      setSuccess('Registration complete. You can log in now.')
+      setSuccess('Реєстрація успішна. Увійдіть у систему.')
       setError('')
       setLoginForm({ login: registerForm.login, password: '' })
       setMode('login')
     },
     onError: (err) => {
-      setError(getErrorMessage(err, 'Registration failed.'))
+      setError(getErrorMessage(err, 'Помилка реєстрації.'))
       setSuccess('')
     },
   })
@@ -115,10 +111,7 @@ function AuthPage() {
 
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    loginMutation.mutate({
-      login: loginForm.login,
-      password: loginForm.password,
-    })
+    loginMutation.mutate(loginForm)
   }
 
   const handleRegister = (event: FormEvent<HTMLFormElement>) => {
@@ -128,205 +121,246 @@ function AuthPage() {
 
   const isLoading = loginMutation.isPending || registerMutation.isPending
 
+  const handleLogout = () => {
+    useAuthStore.getState().clear()
+    navigate({ to: '/' })
+  }
+
   return (
-    <main className="auth-shell">
-      <section className="auth-hero">
-        <p className="hero-kicker">Unified access</p>
-        <h1>A role-based system for routes, schedules, and services.</h1>
-        <p className="hero-body">
-          Sign in with your database login. We use PostgreSQL roles to protect
-          access and surface only the interfaces you need.
-        </p>
-        <ul className="hero-list">
-          {features.map((feature, index) => (
-            <li
-              key={feature.title}
-              className="hero-item"
-              style={{ '--delay': `${index * 120}ms` } as CSSProperties}
-            >
-              <span>{feature.title}</span>
-              <p>{feature.body}</p>
-            </li>
-          ))}
-        </ul>
-        <div className="hero-note">
-          PostGIS enabled for proximity search, routing, and live tracking.
+    <div className="relative min-h-screen w-full bg-slate-900 overflow-hidden flex items-center justify-center font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Background Blobs Animation */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-40 animate-blob"></div>
+        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-purple-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-40 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-32 left-20 w-[500px] h-[500px] bg-pink-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-40 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <div className="relative z-10 w-full max-w-5xl grid lg:grid-cols-2 gap-12 p-6 items-center">
+        {/* Left Side: Brand & Info */}
+        <div className="hidden lg:block space-y-8">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-indigo-300 text-xs font-medium mb-6 backdrop-blur-md">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]"></span>
+              City Transport System v2.0
+            </div>
+            <h1 className="text-6xl font-bold tracking-tight text-white leading-[1.1]">
+              Рухайся містом <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">вільно.</span>
+            </h1>
+            <p className="mt-6 text-lg text-slate-300 max-w-md leading-relaxed">
+              Інтелектуальна платформа для керування міським трафіком. Розклади в реальному часі, електронні квитки та GPS-моніторинг.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-colors">
+              <div className="text-indigo-400 text-2xl mb-2">🚌</div>
+              <h3 className="font-semibold text-white">GPS Трекінг</h3>
+              <p className="text-xs text-slate-400 mt-1">Слідкуйте за транспортом онлайн.</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm hover:bg-white/10 transition-colors">
+              <div className="text-emerald-400 text-2xl mb-2">🎫</div>
+              <h3 className="font-semibold text-white">E-Квиток</h3>
+              <p className="text-xs text-slate-400 mt-1">Безконтактна оплата проїзду.</p>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="auth-card">
-        {user ? (
-          <div className="session">
-            <div className="session-header">
-              <h2>Welcome, {user.fullName || user.login}</h2>
-              <p>Active roles</p>
-            </div>
-            <div className="role-grid">
-              {roles.length > 0 ? (
-                roles.map((role) => (
-                  <span key={role} className="role-pill">
-                    {role}
-                  </span>
-                ))
-              ) : (
-                <span className="role-pill muted">No role mapping</span>
-              )}
-            </div>
-            {roles.includes('ct_controller_role') && (
-              <Link className="ghost" to="/controller">
-                Open controller workspace
-              </Link>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="tabs">
-              <button
-                type="button"
-                className={mode === 'login' ? 'tab active' : 'tab'}
-                onClick={() => handleModeChange('login')}
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                className={mode === 'register' ? 'tab active' : 'tab'}
-                onClick={() => handleModeChange('register')}
-              >
-                Register
-              </button>
-            </div>
+        {/* Right Side: Auth Card */}
+        <div className="w-full max-w-md mx-auto">
+          <div className="glass-card rounded-3xl p-8 lg:p-10 relative overflow-hidden">
+            {/* Glossy effect */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-80"></div>
 
-            {mode === 'login' ? (
-              <form className="form" onSubmit={handleLogin}>
-                <label>
-                  Login
-                  <input
-                    type="text"
-                    value={loginForm.login}
-                    onChange={(event) =>
-                      setLoginForm({
-                        ...loginForm,
-                        login: event.target.value,
-                      })
-                    }
-                    placeholder="db login"
-                    required
-                  />
-                </label>
-                <label>
-                  Password
-                  <input
-                    type="password"
-                    value={loginForm.password}
-                    onChange={(event) =>
-                      setLoginForm({
-                        ...loginForm,
-                        password: event.target.value,
-                      })
-                    }
-                    placeholder="••••••••"
-                    required
-                  />
-                </label>
-                <button type="submit" disabled={isLoading}>
-                  {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
+            {user ? (
+              <div className="text-center space-y-8 py-4 animate-in fade-in zoom-in duration-300">
+                <div className="relative mx-auto w-24 h-24">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-full blur-md opacity-60 animate-pulse"></div>
+                  <div className="relative h-full w-full bg-slate-900 rounded-full flex items-center justify-center border-2 border-white/20 text-3xl font-bold text-white shadow-xl">
+                    {user.login[0].toUpperCase()}
+                  </div>
+                </div>
+                
+                <div>
+                  <h2 className="text-2xl font-bold text-white">З поверненням!</h2>
+                  <p className="text-slate-400 mt-1">{user.fullName || user.login}</p>
+                </div>
+                
+                <div className="space-y-3">
+                  {roles.map(role => ROLE_REDIRECTS[role] && (
+                    <Link 
+                      key={role} 
+                      to={ROLE_REDIRECTS[role]} 
+                      className="group flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-indigo-500/50 transition-all cursor-pointer"
+                    >
+                      <span className="font-medium text-slate-200 group-hover:text-white">
+                        {role.replace('ct_', '').replace('_role', '').toUpperCase()} Dashboard
+                      </span>
+                      <span className="text-slate-500 group-hover:text-indigo-400 transition-colors">→</span>
+                    </Link>
+                  ))}
+                </div>
+
+                <button 
+                  onClick={handleLogout} 
+                  className="text-sm text-slate-500 hover:text-rose-400 transition-colors"
+                >
+                  Вийти з акаунту
                 </button>
-              </form>
+              </div>
             ) : (
-              <form className="form" onSubmit={handleRegister}>
-                <label>
-                  Login
-                  <input
-                    type="text"
-                    value={registerForm.login}
-                    onChange={(event) =>
-                      setRegisterForm({
-                        ...registerForm,
-                        login: event.target.value,
-                      })
-                    }
-                    placeholder="login"
-                    required
-                  />
-                </label>
-                <label>
-                  Email
-                  <input
-                    type="email"
-                    value={registerForm.email}
-                    onChange={(event) =>
-                      setRegisterForm({
-                        ...registerForm,
-                        email: event.target.value,
-                      })
-                    }
-                    placeholder="email@example.com"
-                    required
-                  />
-                </label>
-                <label>
-                  Phone
-                  <input
-                    type="tel"
-                    value={registerForm.phone}
-                    onChange={(event) =>
-                      setRegisterForm({
-                        ...registerForm,
-                        phone: event.target.value,
-                      })
-                    }
-                    placeholder="+380..."
-                    required
-                  />
-                </label>
-                <label>
-                  Full name
-                  <input
-                    type="text"
-                    value={registerForm.fullName}
-                    onChange={(event) =>
-                      setRegisterForm({
-                        ...registerForm,
-                        fullName: event.target.value,
-                      })
-                    }
-                    placeholder="Full name"
-                    required
-                  />
-                </label>
-                <label>
-                  Password
-                  <input
-                    type="password"
-                    value={registerForm.password}
-                    onChange={(event) =>
-                      setRegisterForm({
-                        ...registerForm,
-                        password: event.target.value,
-                      })
-                    }
-                    placeholder="At least 8 characters"
-                    required
-                  />
-                </label>
-                <button type="submit" disabled={isLoading}>
-                  {registerMutation.isPending
-                    ? 'Creating account...'
-                    : 'Create account'}
-                </button>
-              </form>
-            )}
-          </>
-        )}
+              <>
+                <div className="mb-8 text-center lg:text-left">
+                  <h2 className="text-2xl font-bold text-white">
+                    {mode === 'login' ? 'Вхід у кабінет' : 'Створити акаунт'}
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {mode === 'login' ? 'Введіть свої дані для продовження' : 'Приєднуйтесь до цифрової транспортної мережі'}
+                  </p>
+                </div>
 
-        {(error || success) && (
-          <div className={error ? 'status error' : 'status success'}>
-            {error || success}
+                {/* Tabs */}
+                <div className="flex bg-black/20 p-1 rounded-xl mb-6 backdrop-blur-md">
+                  <button
+                    onClick={() => handleModeChange('login')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      mode === 'login'
+                        ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    Вхід
+                  </button>
+                  <button
+                    onClick={() => handleModeChange('register')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                      mode === 'register'
+                        ? 'bg-white/10 text-white shadow-sm ring-1 ring-white/10'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    }`}
+                  >
+                    Реєстрація
+                  </button>
+                </div>
+
+                {/* Forms */}
+                {mode === 'login' ? (
+                  <form className="space-y-5 animate-in slide-in-from-right-8 fade-in duration-300" onSubmit={handleLogin}>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Логін</label>
+                      <input
+                        type="text"
+                        value={loginForm.login}
+                        onChange={(e) => setLoginForm({ ...loginForm, login: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder-slate-500 focus:bg-black/30 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none transition-all"
+                        placeholder="user123"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Пароль</label>
+                      <input
+                        type="password"
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder-slate-500 focus:bg-black/30 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none transition-all"
+                        placeholder="••••••••"
+                        required
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={isLoading} 
+                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg shadow-indigo-900/50 hover:shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none mt-2"
+                    >
+                      {isLoading ? 'Вхід...' : 'Увійти'}
+                    </button>
+                  </form>
+                ) : (
+                  <form className="space-y-4 animate-in slide-in-from-left-8 fade-in duration-300" onSubmit={handleRegister}>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Логін</label>
+                        <input
+                          value={registerForm.login}
+                          onChange={(e) => setRegisterForm({ ...registerForm, login: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white focus:bg-black/30 focus:border-indigo-500/50 outline-none transition-all text-sm"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Ім'я</label>
+                        <input
+                          value={registerForm.fullName}
+                          onChange={(e) => setRegisterForm({ ...registerForm, fullName: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white focus:bg-black/30 focus:border-indigo-500/50 outline-none transition-all text-sm"
+                          placeholder="Іван"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Email</label>
+                      <input
+                        type="email"
+                        value={registerForm.email}
+                        onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white focus:bg-black/30 focus:border-indigo-500/50 outline-none transition-all text-sm"
+                        placeholder="email@example.com"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Телефон</label>
+                      <input
+                        type="tel"
+                        value={registerForm.phone}
+                        onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white focus:bg-black/30 focus:border-indigo-500/50 outline-none transition-all text-sm"
+                        placeholder="+380..."
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider ml-1">Пароль</label>
+                      <input
+                        type="password"
+                        value={registerForm.password}
+                        onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white focus:bg-black/30 focus:border-indigo-500/50 outline-none transition-all text-sm"
+                        placeholder="••••••••"
+                        required
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={isLoading} 
+                      className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg shadow-indigo-900/50 hover:shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none mt-2"
+                    >
+                      {isLoading ? 'Реєстрація...' : 'Зареєструватися'}
+                    </button>
+                  </form>
+                )}
+
+                {/* Status Messages */}
+                {(error || success) && (
+                  <div className={`mt-4 p-3 rounded-xl text-sm text-center font-medium border animate-in fade-in slide-in-from-bottom-2 ${error ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
+                    {error || success}
+                  </div>
+                )}
+
+                {/* Footer Links */}
+                <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                  <Link to="/guest" className="text-sm text-slate-400 hover:text-white transition-colors">
+                    Я просто хочу знайти маршрут →
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </section>
-    </main>
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -3,101 +3,33 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
 
-type TransportType = {
-  id: number
-  name: string
-}
-
-type StopRow = {
-  id: number
-  name: string
-  lon: string
-  lat: string
-  distanceM?: number
-}
-
-type RouteStopRow = {
-  id: number
-  name: string
-  lon: string
-  lat: string
-  distanceToNextKm: number | null
-}
-
-type RoutePointRow = {
-  id: number
-  routeId: number
-  lon: string
-  lat: string
-}
-
+// Types... (same as before)
+type TransportType = { id: number; name: string }
+type StopRow = { id: number; name: string; lon: string; lat: string; distanceM?: number }
+type RouteStopRow = { id: number; name: string; lon: string; lat: string; distanceToNextKm: number | null }
+type RoutePointRow = { id: number; routeId: number; lon: string; lat: string }
 type RouteSchedule = {
-  route: {
-    id: number
-    number: string
-    direction: string
-    transportTypeId: number
-    transportType: string
-  }
-  stop: {
-    id: number
-    name: string | null
-    offsetMin: number | null
-  } | null
-  schedule: {
-    workStartTime: string
-    workEndTime: string
-    intervalMin: number
-  }
-  departures: string[]
-  arrivals: string[]
+  route: { id: number; number: string; direction: string; transportTypeId: number; transportType: string }
+  stop: { id: number; name: string | null; offsetMin: number | null } | null
+  schedule: { workStartTime: string; workEndTime: string; intervalMin: number }
+  departures: string[]; arrivals: string[]
 }
 
 function GuestPage() {
-  const [geoStatus, setGeoStatus] = useState('Геолокацію не запитували')
-  const [nearForm, setNearForm] = useState({
-    lon: '',
-    lat: '',
-    radius: '600',
-    limit: '8',
-  })
+  const [activeMode, setActiveMode] = useState<'stops' | 'route'>('stops')
+  const [geoStatus, setGeoStatus] = useState<string | null>(null)
+  
+  // Forms state
+  const [nearForm, setNearForm] = useState({ lon: '', lat: '', radius: '600', limit: '8' })
   const [selectedStop, setSelectedStop] = useState<StopRow | null>(null)
-  const [routeForm, setRouteForm] = useState({
-    transportTypeId: '',
-    routeNumber: '',
-    direction: 'forward',
-  })
-  const [tripForm, setTripForm] = useState({
-    lonA: '',
-    latA: '',
-    lonB: '',
-    latB: '',
-    radius: '700',
-  })
-  const [scheduleForm, setScheduleForm] = useState({
-    transportTypeId: '',
-    routeNumber: '',
-    direction: 'forward',
-    stopId: '',
-  })
-
-  const transportTypesQuery = useQuery({
-    queryKey: ['guest', 'transportTypes'],
-    queryFn: async () => {
-      const response = await api.get('/guest/transport-types')
-      return response.data as TransportType[]
-    },
-  })
-
-
+  
+  // Planner State
+  const [tripForm, setTripForm] = useState({ lonA: '', latA: '', lonB: '', latB: '', radius: '1000' })
+  
+  // Queries & Mutations
   const stopsNearMutation = useMutation({
     mutationFn: async () => {
-      const params = {
-        lon: Number(nearForm.lon),
-        lat: Number(nearForm.lat),
-        radius: Number(nearForm.radius),
-        limit: Number(nearForm.limit),
-      }
+      const params = { lon: Number(nearForm.lon), lat: Number(nearForm.lat), radius: Number(nearForm.radius), limit: Number(nearForm.limit) }
       const response = await api.get('/guest/stops/near', { params })
       return response.data as StopRow[]
     },
@@ -105,120 +37,34 @@ function GuestPage() {
 
   const routesByStopMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedStop) {
-        return []
-      }
+      if (!selectedStop) return []
       const response = await api.get(`/guest/stops/${selectedStop.id}/routes`)
-      return response.data as Array<{
-        routeId: number
-        routeNumber: string
-        transportTypeId: number
-        transportType: string
-        direction: string
-        approxArrivalMin: number | null
-      }>
-    },
-  })
-
-  const routeStopsMutation = useMutation({
-    mutationFn: async () => {
-      const params: Record<string, string | number> = {
-        direction: routeForm.direction,
-      }
-      if (routeForm.routeNumber) {
-        params.routeNumber = routeForm.routeNumber
-      }
-      if (routeForm.transportTypeId) {
-        params.transportTypeId = Number(routeForm.transportTypeId)
-      }
-      const response = await api.get('/guest/routes/stops', { params })
-      return response.data as RouteStopRow[]
-    },
-  })
-
-  const routePointsMutation = useMutation({
-    mutationFn: async () => {
-      const params: Record<string, string | number> = {
-        direction: routeForm.direction,
-      }
-      if (routeForm.routeNumber) {
-        params.routeNumber = routeForm.routeNumber
-      }
-      if (routeForm.transportTypeId) {
-        params.transportTypeId = Number(routeForm.transportTypeId)
-      }
-      const response = await api.get('/guest/routes/points', { params })
-      return response.data as RoutePointRow[]
+      return response.data as Array<{ routeId: number; routeNumber: string; transportType: string; direction: string; approxArrivalMin: number | null }>
     },
   })
 
   const routesBetweenMutation = useMutation({
     mutationFn: async () => {
-      const params = {
-        lonA: Number(tripForm.lonA),
-        latA: Number(tripForm.latA),
-        lonB: Number(tripForm.lonB),
-        latB: Number(tripForm.latB),
-        radius: Number(tripForm.radius),
-      }
+      const params = { lonA: Number(tripForm.lonA), latA: Number(tripForm.latA), lonB: Number(tripForm.lonB), latB: Number(tripForm.latB), radius: Number(tripForm.radius) }
       const response = await api.get('/guest/routes/near', { params })
-      return response.data as {
-        fromStop: StopRow
-        toStop: StopRow
-        routes: Array<{
-          routeId: number
-          routeNumber: string
-          transportType: string
-          direction: string
-          distanceKm: number | null
-          travelMinutes: number | null
-        }>
-      }
-    },
-  })
-
-  const scheduleMutation = useMutation({
-    mutationFn: async () => {
-      const params: Record<string, string | number> = {
-        direction: scheduleForm.direction,
-      }
-      if (scheduleForm.routeNumber) {
-        params.routeNumber = scheduleForm.routeNumber
-      }
-      if (scheduleForm.transportTypeId) {
-        params.transportTypeId = Number(scheduleForm.transportTypeId)
-      }
-      if (scheduleForm.stopId) {
-        params.stopId = Number(scheduleForm.stopId)
-      }
-      const response = await api.get('/guest/routes/schedule', { params })
-      return response.data as RouteSchedule
+      return response.data as { fromStop: StopRow; toStop: StopRow; routes: Array<{ routeId: number; routeNumber: string; transportType: string; travelMinutes: number | null }> }
     },
   })
 
   const handleGeolocation = () => {
-    if (!navigator.geolocation) {
-      setGeoStatus('Геолокація недоступна у цьому браузері')
-      return
-    }
-    setGeoStatus('Отримуємо координати...')
+    if (!navigator.geolocation) return
+    setGeoStatus('Locating...')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lon = pos.coords.longitude.toFixed(6)
         const lat = pos.coords.latitude.toFixed(6)
-        setNearForm((prev) => ({ ...prev, lon, lat }))
-        setTripForm((prev) => ({ ...prev, lonA: lon, latA: lat }))
-        setGeoStatus('Координати отримано')
+        setNearForm(p => ({ ...p, lon, lat }))
+        setTripForm(p => ({ ...p, lonA: lon, latA: lat }))
+        setGeoStatus(null)
+        stopsNearMutation.mutate()
       },
-      () => {
-        setGeoStatus('Немає доступу до геолокації')
-      },
+      () => setGeoStatus('Error')
     )
-  }
-
-  const handleFindStops = () => {
-    setSelectedStop(null)
-    stopsNearMutation.mutate()
   }
 
   const handleSelectStop = (stop: StopRow) => {
@@ -226,496 +72,215 @@ function GuestPage() {
     routesByStopMutation.mutate()
   }
 
-  const handleFindRouteDetails = () => {
-    routeStopsMutation.mutate()
-    routePointsMutation.mutate()
-  }
-
-  const handleFindRoutesBetween = () => {
-    routesBetweenMutation.mutate()
-  }
-
-  const handleFindSchedule = () => {
-    scheduleMutation.mutate()
-  }
-
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10">
-      <header className="rounded-3xl border border-white/70 bg-white/70 p-8 shadow-xl">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              ct-guest
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-              Публічний довідник міського транспорту
-            </h1>
-            <p className="mt-2 max-w-2xl text-slate-600">
-              Зупинки поблизу, маршрути, точки та розклад — усе без реєстрації.
-            </p>
-          </div>
-          <a
-            href="/auth"
-            className="inline-flex items-center justify-center rounded-full border border-slate-900/10 bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/20"
-          >
-            Увійти або зареєструватися
-          </a>
+    <div className="relative w-full h-screen bg-[#f0f4f8] overflow-hidden flex flex-col md:flex-row">
+      {/* Map Background Placeholder */}
+      <div className="absolute inset-0 z-0 opacity-10 pointer-events-none bg-[url('https://upload.wikimedia.org/wikipedia/commons/e/ec/World_map_blank_without_borders.svg')] bg-cover bg-center grayscale"></div>
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px] opacity-40"></div>
+
+      {/* Floating Sidebar */}
+      <aside className="relative z-10 w-full md:w-[450px] h-full bg-white/90 backdrop-blur-xl border-r border-slate-200 shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100">
+           <div className="flex items-center gap-2 mb-4">
+             <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">CT</div>
+             <span className="font-bold text-slate-800 tracking-tight">City Transport</span>
+           </div>
+
+           <div className="flex bg-slate-100 p-1 rounded-xl">
+             <button 
+               onClick={() => setActiveMode('stops')}
+               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeMode === 'stops' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+             >
+               Зупинки
+             </button>
+             <button 
+               onClick={() => setActiveMode('route')}
+               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeMode === 'route' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+             >
+               Маршрут
+             </button>
+           </div>
         </div>
-      </header>
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Найближчі зупинки
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">{geoStatus}</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleGeolocation}
-              className="rounded-full border border-slate-900/10 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow"
-            >
-              Взяти геолокацію
-            </button>
-            <button
-              type="button"
-              onClick={handleFindStops}
-              className="rounded-full border border-emerald-600/30 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-            >
-              Оновити список
-            </button>
-          </div>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            {['lon', 'lat', 'radius', 'limit'].map((field) => (
-              <label key={field} className="text-xs font-semibold text-slate-500">
-                {field === 'lon' && 'Довгота'}
-                {field === 'lat' && 'Широта'}
-                {field === 'radius' && 'Радіус (м)'}
-                {field === 'limit' && 'Ліміт'}
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={(nearForm as Record<string, string>)[field]}
-                  onChange={(event) =>
-                    setNearForm((prev) => ({
-                      ...prev,
-                      [field]: event.target.value,
-                    }))
-                  }
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-inner"
-                />
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-6 grid gap-3">
-            {(stopsNearMutation.data ?? []).map((stop) => (
-              <button
-                key={stop.id}
-                type="button"
-                onClick={() => handleSelectStop(stop)}
-                className={`rounded-2xl border px-4 py-3 text-left text-sm shadow-sm transition ${
-                  selectedStop?.id === stop.id
-                    ? 'border-emerald-500 bg-emerald-50'
-                    : 'border-white/50 bg-white/80 hover:border-emerald-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-900">{stop.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {stop.lon}, {stop.lat}
-                    </p>
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+           
+           {activeMode === 'stops' && (
+             <div className="space-y-6 animate-in slide-in-from-left-4 fade-in duration-300">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="8" r="3"/><path d="M8 11v4M8 5V1M11 8h4M5 8H1"/></svg>
                   </div>
-                  {stop.distanceM !== undefined && (
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                      {Math.round(stop.distanceM)} м
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-            {stopsNearMutation.isError && (
-              <p className="text-sm text-rose-600">
-                {getErrorMessage(stopsNearMutation.error)}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Зупинка — транспорт і прибуття
-          </h2>
-          {selectedStop ? (
-            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm font-semibold text-emerald-900">
-                {selectedStop.name}
-              </p>
-              <p className="text-xs text-emerald-700">
-                {selectedStop.lon}, {selectedStop.lat}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-600">
-              Оберіть зупинку зі списку ліворуч.
-            </p>
-          )}
-
-          <div className="mt-4 space-y-3">
-            {(routesByStopMutation.data ?? []).map((route) => (
-              <div
-                key={`${route.routeId}-${route.direction}`}
-                className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      Маршрут {route.routeNumber} · {route.transportType}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Напрямок: {route.direction}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-                    {route.approxArrivalMin
-                      ? `${route.approxArrivalMin} хв`
-                      : 'без даних'}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {routesByStopMutation.isError && (
-              <p className="text-sm text-rose-600">
-                {getErrorMessage(routesByStopMutation.error)}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-slate-900">
-              Маршрут — зупинки та карта
-            </h2>
-            <button
-              type="button"
-              onClick={handleFindRouteDetails}
-              className="rounded-full border border-emerald-600/30 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-            >
-              Показати маршрут
-            </button>
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <label className="text-xs font-semibold text-slate-500">
-              Тип транспорту
-              <select
-                value={routeForm.transportTypeId}
-                onChange={(event) =>
-                  setRouteForm((prev) => ({
-                    ...prev,
-                    transportTypeId: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Оберіть</option>
-                {(transportTypesQuery.data ?? []).map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              Номер маршруту
-              <input
-                value={routeForm.routeNumber}
-                onChange={(event) =>
-                  setRouteForm((prev) => ({
-                    ...prev,
-                    routeNumber: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              Напрямок
-              <select
-                value={routeForm.direction}
-                onChange={(event) =>
-                  setRouteForm((prev) => ({
-                    ...prev,
-                    direction: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="forward">forward</option>
-                <option value="reverse">reverse</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="mt-6 space-y-2">
-            {(routeStopsMutation.data ?? []).map((stop, index) => (
-              <div
-                key={`${stop.id}-${index}`}
-                className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/80 px-4 py-2 text-sm"
-              >
-                <div>
-                  <p className="font-semibold text-slate-900">{stop.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {stop.lon}, {stop.lat}
-                  </p>
-                </div>
-                <span className="text-xs text-slate-500">
-                  {stop.distanceToNextKm
-                    ? `${stop.distanceToNextKm} км`
-                    : '—'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Точки маршруту</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Полілінія для відображення на карті.
-          </p>
-          <div className="mt-4 space-y-2">
-            {(routePointsMutation.data ?? []).slice(0, 12).map((point) => (
-              <div
-                key={point.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-2 text-xs text-slate-600"
-              >
-                {point.lon}, {point.lat}
-              </div>
-            ))}
-            {(routePointsMutation.data ?? []).length === 0 && (
-              <p className="text-sm text-slate-500">Немає точок маршруту.</p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Поїздка A → B</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Знайдіть маршрути між двома точками.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-500">
-              A: Довгота
-              <input
-                value={tripForm.lonA}
-                onChange={(event) =>
-                  setTripForm((prev) => ({ ...prev, lonA: event.target.value }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              A: Широта
-              <input
-                value={tripForm.latA}
-                onChange={(event) =>
-                  setTripForm((prev) => ({ ...prev, latA: event.target.value }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              B: Довгота
-              <input
-                value={tripForm.lonB}
-                onChange={(event) =>
-                  setTripForm((prev) => ({ ...prev, lonB: event.target.value }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              B: Широта
-              <input
-                value={tripForm.latB}
-                onChange={(event) =>
-                  setTripForm((prev) => ({ ...prev, latB: event.target.value }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleFindRoutesBetween}
-              className="rounded-full border border-slate-900/10 bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow"
-            >
-              Знайти маршрути
-            </button>
-          </div>
-
-          {routesBetweenMutation.data && (
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Від {routesBetweenMutation.data.fromStop.name} до{' '}
-                {routesBetweenMutation.data.toStop.name}
-              </div>
-              {routesBetweenMutation.data.routes.map((route) => (
-                <div
-                  key={route.routeId}
-                  className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3 text-sm"
-                >
-                  <p className="font-semibold text-slate-900">
-                    {route.transportType} · маршрут {route.routeNumber}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {route.distanceKm ?? '—'} км ·{' '}
-                    {route.travelMinutes ?? '—'} хв
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-slate-900">
-              Розклад по маршруту
-            </h2>
-            <button
-              type="button"
-              onClick={handleFindSchedule}
-              className="rounded-full border border-emerald-600/30 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow"
-            >
-              Показати
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-500">
-              Тип транспорту
-              <select
-                value={scheduleForm.transportTypeId}
-                onChange={(event) =>
-                  setScheduleForm((prev) => ({
-                    ...prev,
-                    transportTypeId: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Оберіть</option>
-                {(transportTypesQuery.data ?? []).map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              Номер маршруту
-              <input
-                value={scheduleForm.routeNumber}
-                onChange={(event) =>
-                  setScheduleForm((prev) => ({
-                    ...prev,
-                    routeNumber: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              Напрямок
-              <select
-                value={scheduleForm.direction}
-                onChange={(event) =>
-                  setScheduleForm((prev) => ({
-                    ...prev,
-                    direction: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="forward">forward</option>
-                <option value="reverse">reverse</option>
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-slate-500">
-              Зупинка (ID)
-              <input
-                value={scheduleForm.stopId}
-                onChange={(event) =>
-                  setScheduleForm((prev) => ({
-                    ...prev,
-                    stopId: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-
-          {scheduleMutation.data && (
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3">
-                <p className="font-semibold text-slate-900">
-                  Маршрут {scheduleMutation.data.route.number} ·{' '}
-                  {scheduleMutation.data.route.transportType}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {scheduleMutation.data.schedule.workStartTime} —{' '}
-                  {scheduleMutation.data.schedule.workEndTime} · інтервал{' '}
-                  {scheduleMutation.data.schedule.intervalMin} хв
-                </p>
-              </div>
-              {scheduleMutation.data.stop && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs text-emerald-700">
-                    Зупинка: {scheduleMutation.data.stop.name ?? 'невідомо'}
-                  </p>
-                  <p className="text-xs text-emerald-700">
-                    Зміщення:{' '}
-                    {scheduleMutation.data.stop.offsetMin ?? '—'} хв
-                  </p>
-                </div>
-              )}
-              <div className="grid gap-2 sm:grid-cols-2">
-                {scheduleMutation.data.departures.slice(0, 8).map((time) => (
-                  <div
-                    key={time}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                  <input 
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
+                    placeholder="Введіть координати..."
+                    value={`${nearForm.lon} ${nearForm.lat}`}
+                    readOnly
+                  />
+                  <button 
+                    onClick={handleGeolocation}
+                    className="absolute inset-y-1 right-1 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
                   >
-                    Відправлення: {time}
-                  </div>
-                ))}
-              </div>
-              {scheduleMutation.data.arrivals.length > 0 && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {scheduleMutation.data.arrivals.slice(0, 8).map((time) => (
-                    <div
-                      key={time}
-                      className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
-                    >
-                      Прибуття: {time}
-                    </div>
-                  ))}
+                    {geoStatus || 'Знайти мене'}
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+
+                <button 
+                  onClick={() => stopsNearMutation.mutate()}
+                  className="w-full py-3 bg-slate-900 text-white rounded-xl font-semibold shadow-lg shadow-slate-900/10 hover:bg-slate-800 transition-all active:scale-[0.98]"
+                >
+                  Шукати поруч
+                </button>
+
+                <div className="space-y-2">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Результати</h3>
+                   {stopsNearMutation.data?.map(stop => (
+                     <div 
+                       key={stop.id}
+                       onClick={() => handleSelectStop(stop)}
+                       className={`group p-4 rounded-2xl border cursor-pointer transition-all ${
+                         selectedStop?.id === stop.id 
+                           ? 'bg-blue-50 border-blue-500 shadow-md ring-1 ring-blue-500' 
+                           : 'bg-white border-slate-100 hover:border-blue-300 hover:shadow-sm'
+                       }`}
+                     >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{stop.name}</div>
+                            <div className="text-xs text-slate-400 mt-0.5 font-mono">{stop.lon.slice(0,7)}, {stop.lat.slice(0,7)}</div>
+                          </div>
+                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">🚏</div>
+                        </div>
+                     </div>
+                   ))}
+                   {stopsNearMutation.data?.length === 0 && (
+                     <div className="text-center py-8 text-slate-400 text-sm bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                       Зупинок не знайдено.
+                     </div>
+                   )}
+                </div>
+             </div>
+           )}
+
+           {activeMode === 'route' && (
+             <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                <div className="space-y-4">
+                   <div className="relative">
+                     <div className="absolute left-4 top-3 bottom-3 w-0.5 bg-slate-200"></div>
+                     
+                     <div className="relative mb-3">
+                       <div className="absolute left-2.5 top-3 w-3 h-3 bg-white border-2 border-slate-400 rounded-full z-10"></div>
+                       <input 
+                         placeholder="Звідки (Lon, Lat)"
+                         value={`${tripForm.lonA}, ${tripForm.latA}`}
+                         onChange={e => {
+                           const [l, la] = e.target.value.split(','); 
+                           setTripForm({...tripForm, lonA: l, latA: la})
+                         }}
+                         className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:border-blue-500 outline-none shadow-sm"
+                       />
+                     </div>
+
+                     <div className="relative">
+                       <div className="absolute left-2.5 top-3 w-3 h-3 bg-blue-600 rounded-full z-10 shadow ring-2 ring-white"></div>
+                       <input 
+                         placeholder="Куди (Lon, Lat)"
+                         value={`${tripForm.lonB}, ${tripForm.latB}`}
+                         onChange={e => {
+                           const [l, la] = e.target.value.split(','); 
+                           setTripForm({...tripForm, lonB: l, latB: la})
+                         }}
+                         className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:border-blue-500 outline-none shadow-sm"
+                       />
+                     </div>
+                   </div>
+
+                   <button 
+                      onClick={() => routesBetweenMutation.mutate()}
+                      className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98]"
+                    >
+                      Побудувати маршрут
+                    </button>
+                </div>
+
+                <div className="space-y-3">
+                   {routesBetweenMutation.data?.routes.map(route => (
+                     <div key={route.routeId} className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer">
+                        <div className="h-12 w-12 rounded-xl bg-slate-100 flex flex-col items-center justify-center">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">{route.transportType.slice(0,3)}</span>
+                          <span className="text-lg font-black text-slate-900">{route.routeNumber}</span>
+                        </div>
+                        <div className="flex-1">
+                           <div className="flex justify-between items-baseline">
+                             <span className="font-semibold text-slate-700">Прямий рейс</span>
+                             <span className="font-bold text-green-600">{Math.round(route.travelMinutes ?? 0)} хв</span>
+                           </div>
+                           <div className="text-xs text-slate-400 mt-1">Оптимальний маршрут</div>
+                        </div>
+                     </div>
+                   ))}
+                </div>
+             </div>
+           )}
+
         </div>
-      </section>
-    </main>
+      </aside>
+
+      {/* Main Map Area (Mockup) */}
+      <main className="flex-1 relative hidden md:block">
+         {selectedStop ? (
+            <div className="absolute top-8 left-8 right-8 z-20">
+               <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-white/50 max-w-2xl animate-in zoom-in-95 duration-300">
+                  <div className="flex justify-between items-start mb-6">
+                     <div>
+                       <h2 className="text-3xl font-bold text-slate-900">{selectedStop.name}</h2>
+                       <p className="text-slate-500 mt-1">Інформаційне табло</p>
+                     </div>
+                     <button onClick={() => setSelectedStop(null)} className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">✕</button>
+                  </div>
+
+                  <div className="grid gap-3">
+                     {routesByStopMutation.isPending && <div className="text-center py-4 text-slate-400">Завантаження розкладу...</div>}
+                     {routesByStopMutation.data?.map(route => (
+                       <div key={route.routeId} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                          <div className="flex items-center gap-4">
+                             <div className="bg-white px-3 py-1 rounded-lg border border-slate-200 font-black text-xl text-slate-800 shadow-sm w-16 text-center">
+                               {route.routeNumber}
+                             </div>
+                             <div>
+                               <div className="font-semibold text-slate-700">{route.transportType}</div>
+                               <div className="text-xs text-slate-400 uppercase tracking-wide">{route.direction}</div>
+                             </div>
+                          </div>
+                          
+                          <div className="text-right">
+                             {route.approxArrivalMin ? (
+                               <div className="flex items-baseline gap-1">
+                                  <span className="text-2xl font-bold text-green-600">{route.approxArrivalMin}</span>
+                                  <span className="text-sm font-medium text-slate-500">хв</span>
+                               </div>
+                             ) : (
+                               <span className="text-sm text-slate-400">--</span>
+                             )}
+                          </div>
+                       </div>
+                     ))}
+                  </div>
+               </div>
+            </div>
+         ) : (
+           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur px-6 py-3 rounded-full shadow-xl border border-white/50 text-slate-600 text-sm font-medium">
+             Оберіть зупинку на панелі ліворуч
+           </div>
+         )}
+         
+         {/* Map Points Visualization Mockup */}
+         {selectedStop && (
+           <div className="absolute top-1/2 left-1/2 w-4 h-4 bg-blue-600 rounded-full shadow-[0_0_0_8px_rgba(37,99,235,0.2)] animate-pulse"></div>
+         )}
+      </main>
+    </div>
   )
 }
 
