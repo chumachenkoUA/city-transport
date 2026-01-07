@@ -9,12 +9,15 @@ async function waitForServer() {
       await fetch(API_URL);
       console.log('Server is reachable!');
       return;
-    } catch (e) {
+    } catch {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error('Server did not start in time');
 }
+
+type LoginResponse = { token: string };
+type StartTripResponse = { tripId: number };
 
 async function login(login: string) {
   const res = await fetch(`${API_URL}/auth/login`, {
@@ -22,8 +25,9 @@ async function login(login: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login, password: 'CHANGE_ME' }),
   });
-  if (!res.ok) throw new Error(`Login failed for ${login}: ${await res.text()}`);
-  const data = await res.json();
+  if (!res.ok)
+    throw new Error(`Login failed for ${login}: ${await res.text()}`);
+  const data = (await res.json()) as LoginResponse;
   return data.token;
 }
 
@@ -51,7 +55,7 @@ async function main() {
     console.error('Start Trip failed:', await startRes.text());
     process.exit(1);
   }
-  const tripData = await startRes.json();
+  const tripData = (await startRes.json()) as StartTripResponse;
   const tripId = tripData.tripId;
   console.log('Trip started. ID:', tripId);
   assert(tripId, 'Trip ID missing');
@@ -79,7 +83,7 @@ async function main() {
     },
     body: JSON.stringify({ fleetNumber }),
   });
-  
+
   if (startRes2.ok) {
     console.error('Error: Duplicate start trip succeeded! It should fail.');
     process.exit(1);

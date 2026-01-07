@@ -1,7 +1,8 @@
 import { Client } from 'pg';
 
 const client = new Client({
-  connectionString: 'postgresql://driver1:CHANGE_ME@localhost:5455/city_transport',
+  connectionString:
+    'postgresql://driver1:CHANGE_ME@localhost:5455/city_transport',
 });
 
 async function main() {

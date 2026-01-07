@@ -9,12 +9,17 @@ async function waitForServer() {
       await fetch(API_URL);
       console.log('Server is reachable!');
       return;
-    } catch (e) {
+    } catch {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error('Server did not start in time');
 }
+
+type LoginResponse = { token: string };
+type StopResponse = { id: number };
+type RouteResponse = { route: { id: number } };
+type RouteItem = { number: string };
 
 async function main() {
   await waitForServer();
@@ -33,7 +38,8 @@ async function main() {
     process.exit(1);
   }
 
-  const { token } = await loginRes.json();
+  const loginData = (await loginRes.json()) as LoginResponse;
+  const token = loginData.token;
   assert(token, 'Token not received');
   console.log('Login successful.');
 
@@ -58,7 +64,7 @@ async function main() {
     console.error('Create Stop failed:', await createStopRes.text());
     process.exit(1);
   }
-  const stopData = await createStopRes.json();
+  const stopData = (await createStopRes.json()) as StopResponse;
   console.log('Stop created:', stopData);
   assert(stopData.id, 'Stop ID missing');
 
@@ -73,12 +79,12 @@ async function main() {
     isActive: true,
     stops: [
       { stopId: stopData.id, distanceToNextKm: 1.5 },
-      { name: 'End Stop', lon: 30.560, lat: 50.450 }, // New stop inline
+      { name: 'End Stop', lon: 30.56, lat: 50.45 }, // New stop inline
     ],
     points: [
       { lon: 30.555, lat: 50.444 },
       { lon: 30.558, lat: 50.448 },
-      { lon: 30.560, lat: 50.450 },
+      { lon: 30.56, lat: 50.45 },
     ],
   };
 
@@ -95,7 +101,7 @@ async function main() {
     console.error('Create Route failed:', await createRouteRes.text());
     process.exit(1);
   }
-  const routeData = await createRouteRes.json();
+  const routeData = (await createRouteRes.json()) as RouteResponse;
   console.log('Route created:', routeData);
   assert(routeData.route?.id, 'Route ID missing');
 
@@ -104,8 +110,8 @@ async function main() {
   const listRes = await fetch(`${API_URL}/municipality/routes`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const routes = await listRes.json();
-  const found = routes.find((r: any) => r.number === '999-TEST');
+  const routes = (await listRes.json()) as RouteItem[];
+  const found = routes.find((r) => r.number === '999-TEST');
   assert(found, 'Created route not found in list');
   console.log('Verified: Route exists.');
 

@@ -9,12 +9,21 @@ async function waitForServer() {
       await fetch(API_URL); // Just check if it accepts connection
       console.log('Server is reachable!');
       return;
-    } catch (e) {
+    } catch {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error('Server did not start in time');
 }
+
+type LoginResponse = { token: string };
+type Budget = {
+  id: number;
+  month: string;
+  income: string;
+  expenses: string;
+  note: string;
+};
 
 async function main() {
   await waitForServer();
@@ -34,7 +43,7 @@ async function main() {
     process.exit(1);
   }
 
-  const loginData = await loginRes.json();
+  const loginData = (await loginRes.json()) as LoginResponse;
   const token = loginData.token;
   assert(token, 'Token not received');
   console.log('Login successful. Token received.');
@@ -65,21 +74,24 @@ async function main() {
 
   // 3. List Budgets
   console.log('3. Listing Budgets...');
-  const listRes = await fetch(`${API_URL}/accountant/budgets?month=2025-05-01`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const listRes = await fetch(
+    `${API_URL}/accountant/budgets?month=2025-05-01`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
 
   if (!listRes.ok) {
     console.error('List Budgets failed:', await listRes.text());
     process.exit(1);
   }
 
-  const budgets = await listRes.json();
+  const budgets = (await listRes.json()) as Budget[];
   console.log('Budgets found:', budgets.length);
-  
-  const found = budgets.find((b: any) => b.note === 'Test budget via script');
+
+  const found = budgets.find((b) => b.note === 'Test budget via script');
   assert(found, 'Created budget not found in list');
   console.log('Verified: Budget exists in DB.');
 
