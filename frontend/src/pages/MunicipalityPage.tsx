@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
 import { useAuthStore } from '../store/auth'
+import { Map } from '../lib/Map'
+import maplibregl from 'maplibre-gl'
 
 type TransportType = {
   id: number
@@ -15,6 +17,7 @@ type StopRow = {
   lon: string
   lat: string
 }
+// ... (rest of types)
 
 type PassengerFlowRow = {
   day: string
@@ -211,6 +214,27 @@ function MunicipalityPage() {
     [transportTypesQuery.data],
   )
 
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  const mapMarkers = useMemo(() => {
+    const markers = stopOptions.map(s => ({
+      lon: Number(s.lon),
+      lat: Number(s.lat),
+      title: s.name,
+      color: '#3b82f6'
+    }))
+    
+    if (stopForm.lon && stopForm.lat) {
+      markers.push({
+        lon: Number(stopForm.lon),
+        lat: Number(stopForm.lat),
+        title: stopForm.name || 'Нова зупинка',
+        color: '#ef4444'
+      })
+    }
+    
+    return markers
+  }, [stopOptions, stopForm])
+
   if (!user || !hasAccess) {
     return (
       <main className="page-shell flex items-center justify-center">
@@ -237,6 +261,23 @@ function MunicipalityPage() {
       </header>
 
       <section className="grid-dashboard lg:grid-cols-[1.5fr_1fr]">
+        <div className="lg:col-span-2 card p-0 overflow-hidden h-[400px] relative">
+          <Map 
+            onMapLoad={(map) => { mapRef.current = map }}
+            markers={mapMarkers}
+            onClick={(e) => {
+              setStopForm(prev => ({
+                ...prev,
+                lon: e.lngLat.lng.toFixed(6),
+                lat: e.lngLat.lat.toFixed(6)
+              }))
+            }}
+          />
+          <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider z-10">
+            Клікніть на мапу, щоб обрати координати
+          </div>
+        </div>
+
         {/* Route Creator */}
         <div className="card">
           <div className="card-header">

@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0B0B10;
+  --color-surface: #12121A;
+  --color-border: #2A2A3A;
+  --color-text: #F2F2F5;
+  --color-muted: #B3B3C6;
+  --color-accent: #A78BFA;
+  --color-accent-hover: #8B5CF6;
+  
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  /* Дублюємо змінні для надійності, якщо @theme не спрацює як очікується в деяких контекстах */
+  --background: #0B0B10;
+  --surface: #12121A;
+  --text: #F2F2F5;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

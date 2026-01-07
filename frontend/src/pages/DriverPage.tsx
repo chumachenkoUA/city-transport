@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '../lib/api'
 import { getErrorMessage } from '../lib/errors'
 import { useAuthStore } from '../store/auth'
+import { Map } from '../lib/Map'
+import maplibregl from 'maplibre-gl'
 
 type DriverProfile = {
+// ...
   id: number
   login: string
   fullName: string

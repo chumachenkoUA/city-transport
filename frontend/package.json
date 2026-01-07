@@ -14,9 +14,13 @@
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-router": "^1.143.4",
     "axios": "^1.13.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.562.0",
+    "maplibre-gl": "^5.15.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.69.0",
+    "tailwind-merge": "^3.4.0",
     "zod": "^4.2.1",
     "zustand": "^5.0.9"
   },
