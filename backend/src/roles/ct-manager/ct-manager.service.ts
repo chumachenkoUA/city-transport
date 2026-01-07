@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateDriverDto } from '../../modules/drivers/dto/create-driver.dto';
@@ -12,31 +16,15 @@ type ManagerDriverRow = {
   phone: string;
   driverLicenseNumber: string;
   licenseCategories: unknown;
-  passportData: unknown;
 };
 
 type ManagerVehicleRow = {
   id: number;
   fleetNumber: string;
-  capacity: number;
-  transportTypeId: number;
-  transportType: string;
-  routeId: number;
   routeNumber: string;
-  direction: string;
-};
-
-type ManagerRouteRow = {
-  id: number;
-  number: string;
-  direction: string;
-  transportTypeId: number;
   transportType: string;
-};
-
-type ManagerTransportTypeRow = {
-  id: number;
-  name: string;
+  modelName: string;
+  capacity: number;
 };
 
 @Injectable()
@@ -52,8 +40,7 @@ export class CtManagerService {
         email as "email",
         phone as "phone",
         driver_license_number as "driverLicenseNumber",
-        license_categories as "licenseCategories",
-        passport_data as "passportData"
+        license_categories as "licenseCategories"
       from manager_api.v_drivers
       order by id desc
     `)) as unknown as { rows: ManagerDriverRow[] };
@@ -66,12 +53,10 @@ export class CtManagerService {
       select
         id as "id",
         fleet_number as "fleetNumber",
-        capacity as "capacity",
-        transport_type_id as "transportTypeId",
-        transport_type as "transportType",
-        route_id as "routeId",
         route_number as "routeNumber",
-        direction as "direction"
+        transport_type as "transportType",
+        model_name as "modelName",
+        capacity as "capacity"
       from manager_api.v_vehicles
       order by id desc
     `)) as unknown as { rows: ManagerVehicleRow[] };
@@ -86,10 +71,10 @@ export class CtManagerService {
         number as "number",
         direction as "direction",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
-      from manager_api.v_routes
+        transport_type_name as "transportType"
+      from guest_api.v_routes
       order by number
-    `)) as unknown as { rows: ManagerRouteRow[] };
+    `)) as unknown as { rows: Record<string, unknown>[] };
 
     return result.rows;
   }
@@ -99,23 +84,26 @@ export class CtManagerService {
       select
         id as "id",
         name as "name"
-      from manager_api.v_transport_types
+      from guest_api.v_transport_types
       order by id
-    `)) as unknown as { rows: ManagerTransportTypeRow[] };
+    `)) as unknown as { rows: Record<string, unknown>[] };
 
     return result.rows;
   }
 
   async hireDriver(payload: CreateDriverDto) {
+    const password = payload.password || 'driver123';
+
     const result = (await this.dbService.db.execute(sql`
-      select manager_api.create_driver(
+      select manager_api.hire_driver(
         ${payload.login},
-        ${payload.fullName},
+        ${password},
         ${payload.email},
         ${payload.phone},
+        ${payload.fullName},
         ${payload.driverLicenseNumber},
-        ${JSON.stringify(payload.passportData)},
-        ${JSON.stringify(payload.licenseCategories)}
+        ${JSON.stringify(payload.licenseCategories)}::jsonb,
+        ${JSON.stringify(payload.passportData)}::jsonb
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -123,18 +111,37 @@ export class CtManagerService {
   }
 
   async addVehicle(payload: CreateManagerVehicleDto) {
-    if (!payload.routeId && !payload.routeNumber) {
-      throw new BadRequestException('routeId or routeNumber is required');
+    const ttResult = (await this.dbService.db.execute(sql`
+       select name from public.transport_types where id = ${payload.transportTypeId}
+    `)) as unknown as { rows: { name: string }[] };
+
+    const ttName = ttResult.rows[0]?.name;
+    if (!ttName)
+      throw new NotFoundException(
+        `Transport Type ${payload.transportTypeId} not found`,
+      );
+
+    let routeNumber = payload.routeNumber;
+    if (!routeNumber && payload.routeId) {
+      const rResult = (await this.dbService.db.execute(sql`
+            select number from public.routes where id = ${payload.routeId}
+         `)) as unknown as { rows: { number: string }[] };
+      routeNumber = rResult.rows[0]?.number;
     }
 
+    if (!routeNumber) {
+      throw new BadRequestException('routeNumber or valid routeId is required');
+    }
+
+    const modelName = 'Default Model';
+
     const result = (await this.dbService.db.execute(sql`
-      select manager_api.create_vehicle(
+      select manager_api.add_vehicle(
         ${payload.fleetNumber},
-        ${payload.transportTypeId},
+        ${ttName},
+        ${routeNumber},
         ${payload.capacity},
-        ${payload.routeId ?? null},
-        ${payload.routeNumber ?? null},
-        ${payload.direction ?? 'forward'}
+        ${modelName}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   ValidateNested,
@@ -15,6 +16,11 @@ export class CreateDriverDto {
   @IsNotEmpty()
   @Matches(/^[a-zA-Z0-9._-]{3,32}$/)
   login!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  password?: string;
 
   @IsEmail()
   @IsNotEmpty()
