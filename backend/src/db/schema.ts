@@ -20,3 +20,4 @@ export * from './schema/fine-appeals';
 export * from './schema/complaints-suggestions';
 export * from './schema/user-gps-logs';
 export * from './schema/vehicle-gps-logs';
+export * from './schema/vehicle-models';

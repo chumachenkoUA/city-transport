@@ -1,0 +1,104 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1767731672535,
+      "tag": "0000_late_the_santerians",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1767731812169,
+      "tag": "0001_setup_roles_and_schemas",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1767731946660,
+      "tag": "0002_setup_business_logic",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1767732048951,
+      "tag": "0003_setup_api_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1767732118853,
+      "tag": "0004_setup_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767732155404,
+      "tag": "0005_guest_map_views_recursive",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767732201553,
+      "tag": "0006_fix_guest_api_functions",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1767735561737,
+      "tag": "0007_right_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1767737364988,
+      "tag": "0008_guest_complaints",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1767791939353,
+      "tag": "0009_passenger_api_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1767793092696,
+      "tag": "0010_driver_api_refinements",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1767793973996,
+      "tag": "0011_dispatcher_api_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1767794216370,
+      "tag": "0012_dispatcher_fix_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1767798431733,
+      "tag": "0013_controller_api_update",
+      "breakpoints": true
+    }
+  ]
+}
