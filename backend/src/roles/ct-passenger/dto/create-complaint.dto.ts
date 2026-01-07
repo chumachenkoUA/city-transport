@@ -1,12 +1,6 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreatePassengerComplaintDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  userId!: number;
-
   @IsString()
   @IsNotEmpty()
   type!: string;
@@ -15,9 +9,15 @@ export class CreatePassengerComplaintDto {
   @IsNotEmpty()
   message!: string;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsString()
   @IsOptional()
-  tripId?: number;
+  routeNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  transportType?: string;
+
+  @IsString()
+  @IsOptional()
+  vehicleNumber?: string;
 }

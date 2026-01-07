@@ -6,9 +6,9 @@ import { IssueFineDto } from './dto/issue-fine.dto';
 export class CtControllerController {
   constructor(private readonly ctControllerService: CtControllerService) {}
 
-  @Get('cards/:cardNumber/last-trip')
-  getLastTrip(@Param('cardNumber') cardNumber: string) {
-    return this.ctControllerService.getLastTripByCardNumber(cardNumber);
+  @Get('cards/:cardNumber/check')
+  checkCard(@Param('cardNumber') cardNumber: string) {
+    return this.ctControllerService.checkCard(cardNumber);
   }
 
   @Post('fines')

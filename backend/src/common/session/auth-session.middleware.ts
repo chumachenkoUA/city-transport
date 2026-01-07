@@ -16,11 +16,10 @@ export class AuthSessionMiddleware implements NestMiddleware {
       ? authHeader.slice('Bearer '.length).trim()
       : '';
 
-    const session = token
-      ? await this.sessionService.getSession(token)
-      : null;
+    const session = token ? await this.sessionService.getSession(token) : null;
 
-    (req as Request & { session?: typeof session }).session = session ?? undefined;
+    (req as Request & { session?: typeof session }).session =
+      session ?? undefined;
 
     return this.contextService.run(session, () => next());
   }

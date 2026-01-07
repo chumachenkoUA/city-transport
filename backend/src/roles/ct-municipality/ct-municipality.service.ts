@@ -23,7 +23,6 @@ type RouteRow = {
   id: number;
   number: string;
   direction: string;
-  isActive: boolean;
   transportTypeId: number;
   transportType: string;
 };
@@ -50,25 +49,23 @@ type RoutePointRow = {
 };
 
 type PassengerFlowRow = {
-  day: string;
-  fleetNumber: string;
+  tripDate: string;
   routeNumber: string;
-  transportTypeId: number;
-  passengerCount: string;
+  transportType: string;
+  fleetNumber: string;
+  passengerCount: number;
 };
 
 type ComplaintRow = {
   id: number;
-  userId: number;
   type: string;
   message: string;
   status: string;
-  tripId: number | null;
-  createdAt: Date | null;
+  createdAt: string;
   routeNumber: string | null;
-  transportTypeId: number | null;
   transportType: string | null;
   fleetNumber: string | null;
+  contactInfo: string | null;
 };
 
 @Injectable()
@@ -78,7 +75,7 @@ export class CtMunicipalityService {
   async listTransportTypes() {
     const result = (await this.dbService.db.execute(sql`
       select id as "id", name as "name"
-      from municipality_api.v_transport_types
+      from guest_api.v_transport_types
       order by id
     `)) as unknown as { rows: TransportTypeRow[] };
 
@@ -86,6 +83,7 @@ export class CtMunicipalityService {
   }
 
   async listStops() {
+    // Using municipality_api view for stops list (created in 0015)
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
@@ -103,8 +101,8 @@ export class CtMunicipalityService {
     const result = (await this.dbService.db.execute(sql`
       select municipality_api.create_stop(
         ${payload.name},
-        ${payload.lon},
-        ${payload.lat}
+        ${payload.lon}::numeric,
+        ${payload.lat}::numeric
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -112,25 +110,24 @@ export class CtMunicipalityService {
   }
 
   async updateStop(id: number, payload: UpdateStopDto) {
-    if (!payload.name || payload.lon === undefined || payload.lat === undefined) {
+    if (
+      !payload.name ||
+      payload.lon === undefined ||
+      payload.lat === undefined
+    ) {
       throw new BadRequestException('name, lon, and lat are required');
     }
 
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        name as "name",
-        lon as "lon",
-        lat as "lat"
-      from municipality_api.update_stop(
+    await this.dbService.db.execute(sql`
+      select municipality_api.update_stop(
         ${id},
         ${payload.name},
-        ${payload.lon},
-        ${payload.lat}
+        ${payload.lon}::numeric,
+        ${payload.lat}::numeric
       )
-    `)) as unknown as { rows: StopRow[] };
+    `);
 
-    return result.rows[0] ?? null;
+    return { success: true };
   }
 
   async listRoutes() {
@@ -139,10 +136,9 @@ export class CtMunicipalityService {
         id as "id",
         number as "number",
         direction as "direction",
-        is_active as "isActive",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
-      from municipality_api.v_routes
+        transport_type_name as "transportType"
+      from guest_api.v_routes
       order by number
     `)) as unknown as { rows: RouteRow[] };
 
@@ -161,7 +157,7 @@ export class CtMunicipalityService {
         prev_route_stop_id as "prevRouteStopId",
         next_route_stop_id as "nextRouteStopId",
         distance_to_next_km as "distanceToNextKm"
-      from municipality_api.v_route_stops
+      from guest_api.v_route_stops
       where route_id = ${routeId}
       order by id
     `)) as unknown as { rows: RouteStopRow[] };
@@ -178,7 +174,7 @@ export class CtMunicipalityService {
         lat as "lat",
         prev_route_point_id as "prevRoutePointId",
         next_route_point_id as "nextRoutePointId"
-      from municipality_api.v_route_points
+      from guest_api.v_route_points
       where route_id = ${routeId}
       order by id
     `)) as unknown as { rows: RoutePointRow[] };
@@ -201,13 +197,12 @@ export class CtMunicipalityService {
     }));
 
     const result = (await this.dbService.db.execute(sql`
-      select municipality_api.create_route(
-        ${payload.transportTypeId},
+      select municipality_api.create_route_full(
         ${payload.number},
+        ${payload.transportTypeId}::integer,
         ${payload.direction},
-        ${payload.isActive ?? true},
-        ${JSON.stringify(stopsJson)},
-        ${JSON.stringify(pointsJson)}
+        ${JSON.stringify(stopsJson)}::jsonb,
+        ${JSON.stringify(pointsJson)}::jsonb
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -216,7 +211,10 @@ export class CtMunicipalityService {
       throw new BadRequestException('Failed to create route');
     }
 
+    // Return created data
     const route = await this.findRouteById(routeId);
+
+    // Fetch stops/points via guest_api
     const routeStops = await this.listRouteStops(routeId);
     const routePoints = await this.listRoutePoints(routeId);
 
@@ -228,16 +226,16 @@ export class CtMunicipalityService {
 
     const result = (await this.dbService.db.execute(sql`
       select
-        day as "day",
-        fleet_number as "fleetNumber",
+        trip_date as "tripDate",
         route_number as "routeNumber",
-        transport_type_id as "transportTypeId",
+        transport_type as "transportType",
+        fleet_number as "fleetNumber",
         passenger_count as "passengerCount"
-      from municipality_api.passenger_flow(
-        ${from},
-        ${to},
+      from municipality_api.get_passenger_flow(
+        ${from}::date,
+        ${to}::date,
         ${query.routeNumber ?? null},
-        ${query.transportTypeId ?? null}
+        ${query.transportTypeId ? await this.getTransportTypeName(query.transportTypeId) : null}
       )
     `)) as unknown as { rows: PassengerFlowRow[] };
 
@@ -250,21 +248,19 @@ export class CtMunicipalityService {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
-        user_id as "userId",
         type as "type",
         message as "message",
         status as "status",
-        trip_id as "tripId",
         created_at as "createdAt",
         route_number as "routeNumber",
-        transport_type_id as "transportTypeId",
         transport_type as "transportType",
-        fleet_number as "fleetNumber"
-      from municipality_api.complaints(
-        ${from},
-        ${to},
+        fleet_number as "fleetNumber",
+        contact_info as "contactInfo"
+      from municipality_api.get_complaints(
+        ${from}::date,
+        ${to}::date,
         ${query.routeNumber ?? null},
-        ${query.transportTypeId ?? null},
+        ${query.transportTypeId ? await this.getTransportTypeName(query.transportTypeId) : null},
         ${query.fleetNumber ?? null}
       )
     `)) as unknown as { rows: ComplaintRow[] };
@@ -278,10 +274,9 @@ export class CtMunicipalityService {
         id as "id",
         number as "number",
         direction as "direction",
-        is_active as "isActive",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
-      from municipality_api.v_routes
+        transport_type_name as "transportType"
+      from guest_api.v_routes
       where id = ${routeId}
       limit 1
     `)) as unknown as { rows: RouteRow[] };
@@ -289,18 +284,25 @@ export class CtMunicipalityService {
     return result.rows[0] ?? null;
   }
 
-  private parsePeriod(query: { from: string; to: string }) {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
+  private async getTransportTypeName(id: number) {
+    const result = (await this.dbService.db.execute(
+      sql`select name from public.transport_types where id = ${id}`,
+    )) as unknown as { rows: { name: string }[] };
+    return result.rows[0]?.name;
+  }
 
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
-      throw new BadRequestException('Invalid period dates');
+  private parsePeriod(query: { from?: string; to?: string }) {
+    if (!query.from || !query.to) {
+      // Default to last 30 days
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - 30);
+      return {
+        from: from.toISOString().split('T')[0],
+        to: to.toISOString().split('T')[0],
+      };
     }
 
-    if (from > to) {
-      throw new BadRequestException('from must be before to');
-    }
-
-    return { from, to };
+    return { from: query.from, to: query.to };
   }
 }

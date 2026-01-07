@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateBudgetDto } from '../../modules/budgets/dto/create-budget.dto';
@@ -9,229 +9,136 @@ import { ExpensesQueryDto } from './dto/expenses-query.dto';
 import { PeriodDto } from './dto/period.dto';
 import { SalariesQueryDto } from './dto/salaries-query.dto';
 
-type BudgetRow = {
-  id: number;
-  month: string;
-  income: string;
-  expenses: string;
-  note: string | null;
-};
-
-type ExpenseRow = {
-  id: number;
+type FinancialReportRow = {
   category: string;
-  amount: string;
-  description: string | null;
-  documentRef: string | null;
-  occurredAt: Date;
-};
-
-type SalaryRow = {
-  id: number;
-  driverId: number | null;
-  employeeName: string | null;
-  employeeRole: string | null;
-  rate: string | null;
-  units: number | null;
-  total: string;
-  paidAt: Date;
-};
-
-type IncomeRow = {
-  topupsTotal: string;
-  ticketsTotal: string;
-  finesTotal: string;
+  amount: number;
+  type: string;
 };
 
 @Injectable()
 export class CtAccountantService {
   constructor(private readonly dbService: DbService) {}
 
-  async listBudgets(query: BudgetQueryDto) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        month as "month",
-        income as "income",
-        expenses as "expenses",
-        note as "note"
-      from accountant_api.v_budgets
-      ${query.month ? sql`where month = ${query.month}` : sql``}
-      order by month desc
-    `)) as unknown as { rows: BudgetRow[] };
-
-    return result.rows;
-  }
-
   async upsertBudget(payload: CreateBudgetDto) {
     const result = (await this.dbService.db.execute(sql`
       select accountant_api.upsert_budget(
-        ${payload.month},
-        ${payload.income},
-        ${payload.expenses},
-        ${payload.note ?? null}
+        ${payload.month}::date,
+        ${payload.income}::numeric,
+        ${payload.expenses}::numeric,
+        ${payload.note}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
-    return { id: result.rows[0]?.id };
+    return { id: result.rows[0].id };
+  }
+
+  async listBudgets(query: BudgetQueryDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select id, month, planned_income as "plannedIncome", planned_expenses as "plannedExpenses", note
+      from accountant_api.v_budgets
+      limit ${query.limit ?? 50}
+    `)) as unknown as { rows: Record<string, unknown>[] };
+    return result.rows;
   }
 
   async createExpense(payload: CreateExpenseDto) {
+    const occurredAt = payload.occurredAt ?? new Date();
     const result = (await this.dbService.db.execute(sql`
-      select accountant_api.create_expense(
+      select accountant_api.add_expense(
         ${payload.category},
-        ${payload.amount},
-        ${payload.description ?? null},
-        ${payload.occurredAt ?? null},
-        ${payload.documentRef ?? null}
+        ${payload.amount}::numeric,
+        ${payload.description},
+        ${payload.documentRef},
+        ${occurredAt}::timestamp
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
-    return { id: result.rows[0]?.id };
+    return { id: result.rows[0].id };
   }
 
   async getExpenses(query: ExpensesQueryDto) {
-    const { from, to } = this.parsePeriod(query);
-
     const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        category as "category",
-        amount as "amount",
-        description as "description",
-        document_ref as "documentRef",
-        occurred_at as "occurredAt"
-      from accountant_api.expenses_by_period(
-        ${from},
-        ${to},
-        ${query.category ?? null}
-      )
-    `)) as unknown as { rows: ExpenseRow[] };
-
+      select * from accountant_api.v_expenses
+      limit ${query.limit ?? 50}
+    `)) as unknown as { rows: Record<string, unknown>[] };
     return result.rows;
   }
 
   async createSalary(payload: CreateSalaryPaymentDto) {
     const result = (await this.dbService.db.execute(sql`
-      select accountant_api.create_salary_payment(
-        ${payload.driverId ?? null},
+      select accountant_api.pay_salary(
+        ${payload.driverId ?? null}::bigint,
         ${payload.employeeName ?? null},
-        ${payload.employeeRole ?? null},
-        ${payload.rate ?? null},
-        ${payload.units ?? null},
-        ${payload.total},
-        ${payload.paidAt ?? null}
+        ${payload.employeeRole ?? 'Інше'},
+        ${payload.rate ?? 0}::numeric,
+        ${payload.units ?? 0}::integer,
+        ${payload.total ?? 0}::numeric
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
-    return { id: result.rows[0]?.id };
+    return { id: result.rows[0].id };
   }
 
   async getSalaries(query: SalariesQueryDto) {
-    const { from, to } = this.parsePeriod(query);
-
     const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        driver_id as "driverId",
-        employee_name as "employeeName",
-        employee_role as "employeeRole",
-        rate as "rate",
-        units as "units",
-        total as "total",
-        paid_at as "paidAt"
-      from accountant_api.salaries_by_period(
-        ${from},
-        ${to},
-        ${query.role ?? null}
-      )
-    `)) as unknown as { rows: SalaryRow[] };
-
+      select id, paid_at as "paidAt", employee_name as "employeeName", role, total
+      from accountant_api.v_salary_history
+      limit ${query.limit ?? 50}
+    `)) as unknown as { rows: Record<string, unknown>[] };
     return result.rows;
   }
 
   async getIncomeSummary(query: PeriodDto) {
-    const { from, to } = this.parsePeriod(query);
-
-    const result = (await this.dbService.db.execute(sql`
-      select
-        topups_total as "topupsTotal",
-        tickets_total as "ticketsTotal",
-        fines_total as "finesTotal"
-      from accountant_api.income_summary(${from}, ${to})
-    `)) as unknown as { rows: IncomeRow[] };
-
-    return {
-      from,
-      to,
-      ...(result.rows[0] ?? {
-        topupsTotal: '0',
-        ticketsTotal: '0',
-        finesTotal: '0',
-      }),
-    };
+    const report = await this.getReport(query);
+    const income = report.items.filter(
+      (i) => i.type === 'income' || i.type === 'income_flow',
+    );
+    return { income };
   }
 
   async getReport(query: PeriodDto) {
-    const { from, to } = this.parsePeriod(query);
+    let startDate = query.startDate;
+    let endDate = query.endDate;
 
-    const [income, expensesTotal, salariesTotal] = await Promise.all([
-      this.getIncomeSummary(query),
-      this.sumExpenses(from, to),
-      this.sumSalaries(from, to),
-    ]);
+    if (!startDate || !endDate) {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .split('T')[0];
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toISOString()
+        .split('T')[0];
+    }
 
-    const incomeSum =
-      this.toNumber(income.topupsTotal) +
-      this.toNumber(income.ticketsTotal) +
-      this.toNumber(income.finesTotal);
-    const expensesSum =
-      this.toNumber(expensesTotal) + this.toNumber(salariesTotal);
+    const result = (await this.dbService.db.execute(sql`
+      select category, amount, type
+      from accountant_api.get_financial_report(
+        ${startDate}::date,
+        ${endDate}::date
+      )
+    `)) as unknown as { rows: FinancialReportRow[] };
+
+    const items = result.rows.map((r) => ({
+      ...r,
+      amount: Number(r.amount),
+    }));
+
+    const totalIncome = items
+      .filter((i) => i.type === 'income')
+      .reduce((sum, i) => sum + i.amount, 0);
+
+    const totalExpenses = items
+      .filter((i) => i.type === 'expense')
+      .reduce((sum, i) => sum + i.amount, 0);
 
     return {
-      from,
-      to,
-      income,
-      expensesTotal,
-      salariesTotal,
-      net: (incomeSum - expensesSum).toFixed(2),
+      period: { start: startDate, end: endDate },
+      items,
+      summary: {
+        totalIncome,
+        totalExpenses,
+        netProfit: totalIncome - totalExpenses,
+      },
     };
-  }
-
-  private async sumExpenses(from: Date, to: Date) {
-    const result = (await this.dbService.db.execute(sql`
-      select coalesce(sum(amount), 0) as total
-      from accountant_api.expenses_by_period(${from}, ${to}, ${null})
-    `)) as unknown as { rows: Array<{ total: string }> };
-
-    return result.rows[0]?.total ?? '0';
-  }
-
-  private async sumSalaries(from: Date, to: Date) {
-    const result = (await this.dbService.db.execute(sql`
-      select coalesce(sum(total), 0) as total
-      from accountant_api.salaries_by_period(${from}, ${to}, ${null})
-    `)) as unknown as { rows: Array<{ total: string }> };
-
-    return result.rows[0]?.total ?? '0';
-  }
-
-  private parsePeriod(query: { from: string; to: string }) {
-    const from = new Date(query.from);
-    const to = new Date(query.to);
-
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
-      throw new BadRequestException('Invalid period dates');
-    }
-
-    if (from > to) {
-      throw new BadRequestException('from must be before to');
-    }
-
-    return { from, to };
-  }
-
-  private toNumber(value: string | undefined) {
-    return value ? Number(value) : 0;
   }
 }

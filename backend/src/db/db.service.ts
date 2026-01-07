@@ -93,9 +93,10 @@ export class DbService implements OnApplicationShutdown, OnModuleInit {
     });
 
     if (this.config.get<string>('SEED_ON_START') === 'true') {
-      // Use require to avoid ESM extension issues in NodeNext.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { seedDatabase } = require('../seed');
+      // Use dynamic import to avoid ESM/CJS issues.
+
+      const seedDatabase = (await import('../seed.js')).seedDatabase;
+
       await seedDatabase();
     }
   }

@@ -10,53 +10,69 @@ import { CreateDispatcherScheduleDto } from './dto/create-schedule.dto';
 import { DetectDeviationDto } from './dto/deviation.dto';
 import { UpdateDispatcherScheduleDto } from './dto/update-schedule.dto';
 
-const AVERAGE_SPEED_KMH = 25;
+type MonitoringRow = {
+  fleetNumber: string;
+  routeNumber: string;
+  transportType: string;
+  lon: string;
+  lat: string;
+  lastRecordedAt: string;
+  status: string;
+  driverName: string;
+};
+
+type StopRow = {
+  stopId: number;
+  stopName: string;
+  distanceToNextKm: string | null;
+  lon: string;
+  lat: string;
+};
 
 @Injectable()
 export class CtDispatcherService {
   constructor(private readonly dbService: DbService) {}
 
   async createSchedule(payload: CreateDispatcherScheduleDto) {
-    const routeId = await this.resolveRouteId(payload);
+    let transportTypeName = '';
 
-    if (payload.fleetNumber) {
-      const vehicle = await this.findVehicleByFleet(payload.fleetNumber);
+    // Якщо передано ID типу транспорту, знаходимо його назву
+    if (payload.transportTypeId) {
+      const tt = await this.findTransportTypeById(payload.transportTypeId);
+      transportTypeName = tt.name;
+    }
+    // Якщо передано маршрут, але не тип транспорту, спробуємо знайти через маршрут (якщо routeId є)
+    else if (payload.routeId) {
+      const route = await this.findRouteById(payload.routeId);
+      const tt = await this.findTransportTypeById(route.transportTypeId);
+      transportTypeName = tt.name;
+    }
 
-      if (!vehicle) {
-        throw new NotFoundException(`Vehicle ${payload.fleetNumber} not found`);
-      }
+    if (!transportTypeName) {
+      throw new BadRequestException('Transport Type ID is required');
+    }
 
-      if (vehicle.routeId !== routeId) {
-        throw new BadRequestException(
-          `Vehicle ${payload.fleetNumber} is not assigned to route ${routeId}`,
-        );
-      }
+    const routeNumber =
+      payload.routeNumber ??
+      (payload.routeId
+        ? (await this.findRouteById(payload.routeId)).number
+        : null);
+
+    if (!routeNumber) {
+      throw new BadRequestException('Route Number or Route ID is required');
     }
 
     const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        route_id as "routeId",
-        work_start_time as "workStartTime",
-        work_end_time as "workEndTime",
-        interval_min as "intervalMin"
-      from dispatcher_api.create_schedule(
-        ${routeId},
+      select dispatcher_api.create_schedule_v2(
+        ${routeNumber},
+        ${transportTypeName},
         ${payload.workStartTime}::time,
         ${payload.workEndTime}::time,
         ${payload.intervalMin}
-      )
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        routeId: number;
-        workStartTime: string;
-        workEndTime: string;
-        intervalMin: number;
-      }>;
-    };
+      ) as "id"
+    `)) as unknown as { rows: Array<{ id: number }> };
 
-    return result.rows[0] ?? null;
+    return { id: result.rows[0].id };
   }
 
   async listRoutes() {
@@ -85,29 +101,22 @@ export class CtDispatcherService {
   async listSchedules() {
     const result = (await this.dbService.db.execute(sql`
       select
-        sc.id as "id",
-        sc.route_id as "routeId",
-        sc.work_start_time as "workStartTime",
-        sc.work_end_time as "workEndTime",
-        sc.interval_min as "intervalMin",
-        r.number as "routeNumber",
-        r.direction as "direction",
-        r.transport_type_id as "transportTypeId",
-        r.transport_type as "transportType"
-      from guest_api.v_schedules sc
-      join guest_api.v_routes r on r.id = sc.route_id
-      order by r.number, r.direction
+        id as "id",
+        route_number as "routeNumber",
+        transport_type as "transportType",
+        work_start_time as "workStartTime",
+        work_end_time as "workEndTime",
+        interval_min as "intervalMin"
+      from dispatcher_api.v_schedules_list
+      order by route_number
     `)) as unknown as {
       rows: Array<{
         id: number;
-        routeId: number;
+        routeNumber: string;
+        transportType: string;
         workStartTime: string;
         workEndTime: string;
         intervalMin: number;
-        routeNumber: string;
-        direction: string;
-        transportTypeId: number;
-        transportType: string;
       }>;
     };
 
@@ -120,16 +129,16 @@ export class CtDispatcherService {
         id as "id",
         fleet_number as "fleetNumber",
         route_id as "routeId",
-        transport_type_id as "transportTypeId",
+        route_number as "routeNumber",
         capacity as "capacity"
-      from dispatcher_api.v_vehicles
+      from dispatcher_api.v_vehicles_list
       order by fleet_number
     `)) as unknown as {
       rows: Array<{
         id: number;
         fleetNumber: string;
         routeId: number;
-        transportTypeId: number;
+        routeNumber: string;
         capacity: number;
       }>;
     };
@@ -144,8 +153,8 @@ export class CtDispatcherService {
         login as "login",
         full_name as "fullName",
         phone as "phone",
-        email as "email"
-      from dispatcher_api.v_drivers
+        driver_license_number as "driverLicenseNumber"
+      from dispatcher_api.v_drivers_list
       order by full_name
     `)) as unknown as {
       rows: Array<{
@@ -153,7 +162,7 @@ export class CtDispatcherService {
         login: string;
         fullName: string;
         phone: string;
-        email: string;
+        driverLicenseNumber: string;
       }>;
     };
 
@@ -176,7 +185,7 @@ export class CtDispatcherService {
         transport_type_id as "transportTypeId",
         transport_type as "transportType",
         assigned_at as "assignedAt"
-      from dispatcher_api.v_assignments
+      from dispatcher_api.v_assignments_history
       order by assigned_at desc
     `)) as unknown as {
       rows: Array<{
@@ -203,35 +212,21 @@ export class CtDispatcherService {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
-        route_id as "routeId",
         route_number as "routeNumber",
-        direction as "direction",
-        transport_type_id as "transportTypeId",
-        transport_type as "transportType",
         vehicle_id as "vehicleId",
         fleet_number as "fleetNumber",
-        driver_id as "driverId",
-        driver_name as "driverName",
-        driver_login as "driverLogin",
-        starts_at as "startsAt",
-        ends_at as "endsAt"
+        current_driver_name as "driverName",
+        starts_at as "startsAt"
       from dispatcher_api.v_active_trips
       order by starts_at desc
     `)) as unknown as {
       rows: Array<{
         id: number;
-        routeId: number;
         routeNumber: string;
-        direction: string;
-        transportTypeId: number;
-        transportType: string;
         vehicleId: number;
         fleetNumber: string;
-        driverId: number;
         driverName: string;
-        driverLogin: string;
         startsAt: Date;
-        endsAt: Date | null;
       }>;
     };
 
@@ -239,89 +234,30 @@ export class CtDispatcherService {
   }
 
   async listDeviations() {
-    const activeTrips = await this.listActiveTrips();
-    const schedules = await this.listSchedules();
-    const scheduleByRouteId = new Map(
-      schedules.map((schedule) => [schedule.routeId, schedule]),
-    );
+    const result = (await this.dbService.db.execute(sql`
+        select
+            fleet_number as "fleetNumber",
+            route_number as "routeNumber",
+            transport_type as "transportType",
+            last_recorded_at as "lastRecordedAt",
+            status as "status",
+            current_driver_name as "driverName"
+        from dispatcher_api.v_vehicle_monitoring
+        where status = 'active'
+      `)) as unknown as { rows: MonitoringRow[] };
 
-    const results = [];
-    for (const trip of activeTrips) {
-      const schedule = scheduleByRouteId.get(trip.routeId);
-      if (!schedule) {
-        results.push({
-          status: 'out_of_schedule',
-          fleetNumber: trip.fleetNumber,
-          routeNumber: trip.routeNumber,
-          direction: trip.direction,
-          currentTime: this.currentTimeString(),
-          plannedTime: null,
-          deviationMin: null,
-          vehicleId: trip.vehicleId,
-          driverName: trip.driverName,
-        });
-        continue;
-      }
-
-      const currentTime = this.currentTimeString();
-      const currentMinutes = this.parseTimeToMinutes(currentTime);
-      const startMinutes = this.parseTimeToMinutes(schedule.workStartTime);
-      const endMinutes = this.parseTimeToMinutes(schedule.workEndTime);
-
-      if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-        results.push({
-          status: 'out_of_schedule',
-          fleetNumber: trip.fleetNumber,
-          routeNumber: trip.routeNumber,
-          direction: trip.direction,
-          currentTime,
-          plannedTime: null,
-          deviationMin: null,
-          vehicleId: trip.vehicleId,
-          driverName: trip.driverName,
-        });
-        continue;
-      }
-
-      const passed = currentMinutes - startMinutes;
-      const bucket = Math.floor(passed / schedule.intervalMin);
-      const plannedMinutes = startMinutes + bucket * schedule.intervalMin;
-      const deviationMin = this.roundTo1(currentMinutes - plannedMinutes);
-
-      const latestGps = await this.findLatestVehicleGps(trip.vehicleId);
-      const nearestStop = latestGps
-        ? await this.findNearestStop(trip.routeId, latestGps.lon, latestGps.lat)
-        : null;
-      const lastPoints = await this.findRecentVehicleGps(trip.vehicleId, 5);
-
-      results.push({
-        status: Math.abs(deviationMin) >= 5 ? 'late' : 'ok',
-        fleetNumber: trip.fleetNumber,
-        routeNumber: trip.routeNumber,
-        direction: trip.direction,
-        currentTime,
-        plannedTime: this.formatMinutes(plannedMinutes),
-        deviationMin,
-        vehicleId: trip.vehicleId,
-        driverName: trip.driverName,
-        lastGps: latestGps,
-        nearestStop,
-        history: lastPoints,
-      });
-    }
-
-    return results;
+    return result.rows;
   }
 
   async getDashboard() {
-    const [activeTrips, deviations, schedules, drivers, vehicles, assignments] =
+    const [activeTrips, schedules, drivers, vehicles, assignments, deviations] =
       await Promise.all([
         this.listActiveTrips(),
-        this.listDeviations(),
         this.listSchedules(),
         this.listDrivers(),
         this.listVehicles(),
         this.listAssignments(),
+        this.listDeviations(),
       ]);
 
     const assignedDrivers = new Set(assignments.map((row) => row.driverId));
@@ -333,9 +269,7 @@ export class CtDispatcherService {
       (vehicle) => !assignedVehicles.has(vehicle.id),
     ).length;
 
-    const deviationCount = deviations.filter(
-      (item) => item.deviationMin !== null && Math.abs(item.deviationMin) >= 5,
-    ).length;
+    const deviationCount = deviations.length;
 
     return {
       activeTrips: activeTrips.length,
@@ -369,54 +303,40 @@ export class CtDispatcherService {
   }
 
   async updateSchedule(id: number, payload: UpdateDispatcherScheduleDto) {
-    const routeId =
-      payload.routeId !== undefined
-        ? payload.routeId
-        : payload.routeNumber || payload.transportTypeId
-          ? await this.resolveRouteId(payload)
-          : null;
-
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        route_id as "routeId",
-        work_start_time as "workStartTime",
-        work_end_time as "workEndTime",
-        interval_min as "intervalMin"
-      from dispatcher_api.update_schedule(
+    await this.dbService.db.execute(sql`
+      select dispatcher_api.update_schedule(
         ${id},
-        ${routeId}::bigint,
         ${payload.workStartTime ?? null}::time,
         ${payload.workEndTime ?? null}::time,
         ${payload.intervalMin ?? null}::integer
       )
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        routeId: number;
-        workStartTime: string;
-        workEndTime: string;
-        intervalMin: number;
-      }>;
-    };
+    `);
 
-    return result.rows[0] ?? null;
+    return { ok: true };
   }
 
   async getScheduleDetails(id: number) {
     const schedule = await this.findScheduleById(id);
     const route = await this.findRouteById(schedule.routeId);
-    const vehicles = await this.findVehiclesByRouteId(route.id);
-    const stops = await this.findStopsByRouteId(route.id);
 
-    const stopsWithIntervals = stops.map((stop) => {
+    const stopsResult = (await this.dbService.db.execute(sql`
+      select
+        stop_id as "stopId",
+        stop_name as "stopName",
+        distance_to_next_km as "distanceToNextKm",
+        lon as "lon",
+        lat as "lat"
+      from guest_api.v_route_stops
+      where route_id = ${route.id}
+      order by id
+    `)) as unknown as { rows: StopRow[] };
+
+    const stopsWithIntervals = stopsResult.rows.map((stop) => {
       const distanceKm = stop.distanceToNextKm
         ? Number(stop.distanceToNextKm)
         : null;
-        const minutesToNextStop =
-          distanceKm !== null
-            ? this.roundTo1((distanceKm / AVERAGE_SPEED_KMH) * 60)
-            : null;
+      const minutesToNextStop =
+        distanceKm !== null ? this.roundTo1((distanceKm / 25) * 60) : null;
 
       return {
         id: stop.stopId,
@@ -430,16 +350,9 @@ export class CtDispatcherService {
 
     return {
       id: schedule.id,
-      route: {
-        id: route.id,
-        number: route.number,
-        transportTypeId: route.transportTypeId,
-        direction: route.direction,
-      },
-      vehicles: vehicles.map((vehicle) => ({
-        id: vehicle.id,
-        fleetNumber: vehicle.fleetNumber,
-      })),
+      routeNumber: route.number,
+      transportType: (await this.findTransportTypeById(route.transportTypeId))
+        .name,
       workStartTime: schedule.workStartTime,
       workEndTime: schedule.workEndTime,
       intervalMin: schedule.intervalMin,
@@ -449,314 +362,87 @@ export class CtDispatcherService {
 
   async assignDriver(payload: AssignDriverDto) {
     const driverId = await this.resolveDriverId(payload);
-    await this.findDriverById(driverId);
-    const vehicle = await this.resolveVehicle(payload);
+    const fleetNumber = await this.resolveFleetNumber(payload);
 
-    if (payload.routeNumber || payload.transportTypeId) {
-      const routeId = await this.resolveRouteId(payload);
-      if (vehicle.routeId !== routeId) {
-        throw new BadRequestException(
-          `Vehicle ${vehicle.fleetNumber} is not assigned to route ${routeId}`,
-        );
-      }
-    }
-
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        driver_id as "driverId",
-        vehicle_id as "vehicleId",
-        assigned_at as "assignedAt"
-      from dispatcher_api.assign_driver(
+    await this.dbService.db.execute(sql`
+      select dispatcher_api.assign_driver_v2(
         ${driverId},
-        ${vehicle.id},
-        ${payload.assignedAt ?? null}::timestamp
+        ${fleetNumber}
       )
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        driverId: number;
-        vehicleId: number;
-        assignedAt: Date;
-      }>;
-    };
+    `);
 
-    return result.rows[0] ?? null;
+    return { ok: true };
   }
 
   async monitorVehicle(fleetNumber: string) {
-    const vehicle = await this.findVehicleByFleet(fleetNumber);
+    const result = (await this.dbService.db.execute(sql`
+      select 
+         fleet_number as "fleetNumber",
+         route_number as "routeNumber",
+         transport_type as "transportType",
+         last_lon as "lon",
+         last_lat as "lat",
+         last_recorded_at as "recordedAt",
+         status as "status",
+         current_driver_name as "driverName"
+      from dispatcher_api.v_vehicle_monitoring
+      where fleet_number = ${fleetNumber}
+      limit 1
+    `)) as unknown as { rows: MonitoringRow[] };
 
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${fleetNumber} not found`);
+    const monitoring = result.rows[0];
+    if (!monitoring) {
+      throw new NotFoundException(
+        `Vehicle ${fleetNumber} not found in monitoring`,
+      );
     }
 
-    const route = await this.findRouteById(vehicle.routeId);
-    const routePoints = await this.findRoutePointsByRouteId(route.id);
-    const currentPosition = await this.findLatestVehicleGps(vehicle.id);
+    const routeResult = (await this.dbService.db.execute(sql`
+       select r.id as "id" from public.routes r 
+       join public.transport_types tt on tt.id = r.transport_type_id
+       where r.number = ${monitoring.routeNumber} and tt.name = ${monitoring.transportType}
+       limit 1
+    `)) as unknown as { rows: { id: number }[] };
+
+    let points: { id: number; routeId: number; lon: string; lat: string }[] =
+      [];
+    if (routeResult.rows[0]) {
+      points = await this.getRoutePoints(routeResult.rows[0].id);
+    }
 
     return {
       vehicle: {
-        id: vehicle.id,
-        fleetNumber: vehicle.fleetNumber,
-        routeId: vehicle.routeId,
+        ...monitoring,
+        recordedAt: monitoring.lastRecordedAt,
       },
-      route: {
-        id: route.id,
-        number: route.number,
-        transportTypeId: route.transportTypeId,
-        direction: route.direction,
-      },
-      routePoints: routePoints.map((point) => ({
-        id: point.id,
-        lon: point.lon,
-        lat: point.lat,
-      })),
-      currentPosition: currentPosition
-        ? {
-          lon: currentPosition.lon,
-          lat: currentPosition.lat,
-          recordedAt: currentPosition.recordedAt,
-        }
-        : null,
+      routePoints: points,
     };
   }
 
   async detectDeviation(fleetNumber: string, payload: DetectDeviationDto) {
-    const vehicle = await this.findVehicleByFleet(fleetNumber);
+    const status = await this.monitorVehicle(fleetNumber);
 
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${fleetNumber} not found`);
-    }
-
-    const schedule = await this.findScheduleByRouteId(vehicle.routeId);
-    if (!schedule) {
-      throw new NotFoundException(
-        `Schedule for route ${vehicle.routeId} not found`,
-      );
-    }
-
-    const currentTime = payload.currentTime ?? this.currentTimeString();
-    const currentMinutes = this.parseTimeToMinutes(currentTime);
-    const startMinutes = this.parseTimeToMinutes(schedule.workStartTime);
-    const endMinutes = this.parseTimeToMinutes(schedule.workEndTime);
-
-    if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-      return {
-        status: 'out_of_schedule',
-        vehicleId: vehicle.id,
-        fleetNumber: vehicle.fleetNumber,
-        routeId: vehicle.routeId,
-        currentTime,
-        workStartTime: schedule.workStartTime,
-        workEndTime: schedule.workEndTime,
-      };
-    }
-
-    const passed = currentMinutes - startMinutes;
-    const bucket = Math.floor(passed / schedule.intervalMin);
-    const plannedMinutes = startMinutes + bucket * schedule.intervalMin;
-    const deviationMin = this.roundTo1(currentMinutes - plannedMinutes);
+    const isLate =
+      status.vehicle.status === 'active' &&
+      (!payload.currentTime ||
+        new Date(status.vehicle.lastRecordedAt).getTime() <
+          new Date().getTime() - 5 * 60000);
 
     return {
-      status: 'ok',
-      vehicleId: vehicle.id,
-      fleetNumber: vehicle.fleetNumber,
-      routeId: vehicle.routeId,
-      currentTime,
-      plannedTime: this.formatMinutes(plannedMinutes),
-      deviationMin,
-      intervalMin: schedule.intervalMin,
+      fleetNumber,
+      status: status.vehicle.status,
+      deviation: isLate ? 'Possible delay (no GPS update)' : 'OK',
+      details: status.vehicle,
     };
   }
 
-  private async resolveRouteId(payload: {
-    routeId?: number;
-    routeNumber?: string;
-    transportTypeId?: number;
-    direction?: 'forward' | 'reverse';
-  }) {
-    if (payload.routeId) {
-      return payload.routeId;
-    }
+  // --- Helpers ---
 
-    if (!payload.routeNumber || !payload.transportTypeId) {
-      throw new BadRequestException(
-        'routeId or routeNumber + transportTypeId is required',
-      );
-    }
-
-    const conditions = [
-      sql`number = ${payload.routeNumber}`,
-      sql`transport_type_id = ${payload.transportTypeId}`,
-    ];
-    if (payload.direction) {
-      conditions.push(sql`direction = ${payload.direction}`);
-    }
-    const whereClause = sql.join(conditions, sql.raw(' and '));
-
+  private async findTransportTypeById(id: number) {
     const result = (await this.dbService.db.execute(sql`
-      select id
-      from guest_api.v_routes
-      where ${whereClause}
-      limit 1
-    `)) as unknown as { rows: Array<{ id: number }> };
-
-    const route = result.rows[0];
-    if (!route) {
-      throw new NotFoundException(
-        `Route ${payload.routeNumber} (${payload.transportTypeId}) not found`,
-      );
-    }
-
-    return route.id;
-  }
-
-  private async resolveVehicle(payload: {
-    vehicleId?: number;
-    fleetNumber?: string;
-  }) {
-    if (payload.vehicleId) {
-      return this.findVehicleById(payload.vehicleId);
-    }
-
-    if (!payload.fleetNumber) {
-      throw new BadRequestException('vehicleId or fleetNumber is required');
-    }
-
-    const vehicle = await this.findVehicleByFleet(payload.fleetNumber);
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${payload.fleetNumber} not found`);
-    }
-
-    return vehicle;
-  }
-
-  private async resolveDriverId(payload: {
-    driverId?: number;
-    driverLogin?: string;
-  }) {
-    if (payload.driverId) {
-      return payload.driverId;
-    }
-
-    if (!payload.driverLogin) {
-      throw new BadRequestException('driverId or driverLogin is required');
-    }
-
-    const result = (await this.dbService.db.execute(sql`
-      select id
-      from dispatcher_api.v_drivers
-      where login = ${payload.driverLogin}
-      limit 1
-    `)) as unknown as { rows: Array<{ id: number }> };
-
-    const driver = result.rows[0];
-    if (!driver) {
-      throw new NotFoundException(`Driver ${payload.driverLogin} not found`);
-    }
-
-    return driver.id;
-  }
-
-  private parseTimeToMinutes(value: string) {
-    const parts = value.split(':').map((part) => Number(part));
-
-    if (parts.length < 2 || parts.length > 3 || parts.some(Number.isNaN)) {
-      throw new BadRequestException(`Invalid time value: ${value}`);
-    }
-
-    const [hours, minutes, seconds = 0] = parts;
-
-    if (
-      hours < 0 ||
-      hours > 23 ||
-      minutes < 0 ||
-      minutes > 59 ||
-      seconds < 0 ||
-      seconds > 59
-    ) {
-      throw new BadRequestException(`Invalid time value: ${value}`);
-    }
-
-    return hours * 60 + minutes + seconds / 60;
-  }
-
-  private formatMinutes(totalMinutes: number) {
-    const totalSeconds = Math.round(totalMinutes * 60);
-    const hours = Math.floor(totalSeconds / 3600) % 24;
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    return `${this.pad2(hours)}:${this.pad2(minutes)}:${this.pad2(seconds)}`;
-  }
-
-  private currentTimeString() {
-    const now = new Date();
-    return `${this.pad2(now.getHours())}:${this.pad2(now.getMinutes())}:${this.pad2(
-      now.getSeconds(),
-    )}`;
-  }
-
-  private pad2(value: number) {
-    return value.toString().padStart(2, '0');
-  }
-
-  private roundTo1(value: number) {
-    return Math.round(value * 10) / 10;
-  }
-
-  private async findScheduleById(id: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        route_id as "routeId",
-        work_start_time as "workStartTime",
-        work_end_time as "workEndTime",
-        interval_min as "intervalMin"
-      from guest_api.v_schedules
-      where id = ${id}
-      limit 1
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        routeId: number;
-        workStartTime: string;
-        workEndTime: string;
-        intervalMin: number;
-      }>;
-    };
-
-    const schedule = result.rows[0];
-    if (!schedule) {
-      throw new NotFoundException(`Schedule ${id} not found`);
-    }
-
-    return schedule;
-  }
-
-  private async findScheduleByRouteId(routeId: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        route_id as "routeId",
-        work_start_time as "workStartTime",
-        work_end_time as "workEndTime",
-        interval_min as "intervalMin"
-      from guest_api.v_schedules
-      where route_id = ${routeId}
-      limit 1
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        routeId: number;
-        workStartTime: string;
-        workEndTime: string;
-        intervalMin: number;
-      }>;
-    };
-
-    return result.rows[0] ?? null;
+        select id, name from public.transport_types where id = ${id}
+      `)) as unknown as { rows: { id: number; name: string }[] };
+    return result.rows[0];
   }
 
   private async findRouteById(routeId: number) {
@@ -786,199 +472,77 @@ export class CtDispatcherService {
     return route;
   }
 
-  private async findVehiclesByRouteId(routeId: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        fleet_number as "fleetNumber",
-        route_id as "routeId"
-      from dispatcher_api.v_vehicles
-      where route_id = ${routeId}
-      order by fleet_number
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        fleetNumber: string;
-        routeId: number;
-      }>;
-    };
-
-    return result.rows;
-  }
-
-  private async findStopsByRouteId(routeId: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        stop_id as "stopId",
-        stop_name as "stopName",
-        lon as "lon",
-        lat as "lat",
-        distance_to_next_km as "distanceToNextKm"
-      from guest_api.v_route_stops
-      where route_id = ${routeId}
-      order by id
-    `)) as unknown as {
-      rows: Array<{
-        stopId: number;
-        stopName: string;
-        lon: string;
-        lat: string;
-        distanceToNextKm: string | null;
-      }>;
-    };
-
-    return result.rows;
-  }
-
-  private async findVehicleByFleet(fleetNumber: string) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        fleet_number as "fleetNumber",
-        route_id as "routeId"
-      from dispatcher_api.v_vehicles
-      where fleet_number = ${fleetNumber}
-      limit 1
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        fleetNumber: string;
-        routeId: number;
-      }>;
-    };
-
-    return result.rows[0] ?? null;
-  }
-
-  private async findVehicleById(id: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        fleet_number as "fleetNumber",
-        route_id as "routeId"
-      from dispatcher_api.v_vehicles
-      where id = ${id}
-      limit 1
-    `)) as unknown as {
-      rows: Array<{
-        id: number;
-        fleetNumber: string;
-        routeId: number;
-      }>;
-    };
-
-    const vehicle = result.rows[0];
-    if (!vehicle) {
-      throw new NotFoundException(`Vehicle ${id} not found`);
-    }
-
-    return vehicle;
-  }
-
-  private async findDriverById(id: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select id
-      from dispatcher_api.v_drivers
-      where id = ${id}
-      limit 1
-    `)) as unknown as { rows: Array<{ id: number }> };
-
-    if (!result.rows[0]) {
-      throw new NotFoundException(`Driver ${id} not found`);
-    }
-  }
-
-  private async findRoutePointsByRouteId(routeId: number) {
+  private async findScheduleById(id: number) {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
         route_id as "routeId",
-        lon as "lon",
-        lat as "lat"
-      from guest_api.v_route_points
-      where route_id = ${routeId}
-      order by id
+        work_start_time as "workStartTime",
+        work_end_time as "workEndTime",
+        interval_min as "intervalMin"
+      from public.schedules
+      where id = ${id}
+      limit 1
     `)) as unknown as {
       rows: Array<{
         id: number;
         routeId: number;
-        lon: string;
-        lat: string;
+        workStartTime: string;
+        workEndTime: string;
+        intervalMin: number;
       }>;
     };
 
-    return result.rows;
+    const schedule = result.rows[0];
+    if (!schedule) {
+      throw new NotFoundException(`Schedule ${id} not found`);
+    }
+
+    return schedule;
   }
 
-  private async findLatestVehicleGps(vehicleId: number) {
+  private async resolveDriverId(payload: {
+    driverId?: number;
+    driverLogin?: string;
+  }) {
+    if (payload.driverId) {
+      return payload.driverId;
+    }
+
+    if (!payload.driverLogin) {
+      throw new BadRequestException('driverId or driverLogin is required');
+    }
+
     const result = (await this.dbService.db.execute(sql`
-      select
-        vehicle_id as "vehicleId",
-        lon as "lon",
-        lat as "lat",
-        recorded_at as "recordedAt"
-      from dispatcher_api.v_vehicle_gps_latest
-      where vehicle_id = ${vehicleId}
+      select id
+      from dispatcher_api.v_drivers_list
+      where login = ${payload.driverLogin}
       limit 1
-    `)) as unknown as {
-      rows: Array<{
-        vehicleId: number;
-        lon: string;
-        lat: string;
-        recordedAt: Date;
-      }>;
-    };
+    `)) as unknown as { rows: Array<{ id: number }> };
 
-    return result.rows[0] ?? null;
-  }
-
-  private async findRecentVehicleGps(vehicleId: number, limit: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        vehicle_id as "vehicleId",
-        lon as "lon",
-        lat as "lat",
-        recorded_at as "recordedAt"
-      from dispatcher_api.v_vehicle_gps_logs
-      where vehicle_id = ${vehicleId}
-      order by recorded_at desc
-      limit ${limit}
-    `)) as unknown as {
-      rows: Array<{
-        vehicleId: number;
-        lon: string;
-        lat: string;
-        recordedAt: Date;
-      }>;
-    };
-
-    return result.rows;
-  }
-
-  private async findNearestStop(
-    routeId: number,
-    lon: string,
-    lat: string,
-  ): Promise<{ stopId: number; stopName: string } | null> {
-    const stops = await this.findStopsByRouteId(routeId);
-    if (stops.length === 0) {
-      return null;
+    const driver = result.rows[0];
+    if (!driver) {
+      throw new NotFoundException(`Driver ${payload.driverLogin} not found`);
     }
 
-    const lonNum = Number(lon);
-    const latNum = Number(lat);
-    let nearest = stops[0];
-    let best = Number.POSITIVE_INFINITY;
-    for (const stop of stops) {
-      const dlon = lonNum - Number(stop.lon);
-      const dlat = latNum - Number(stop.lat);
-      const distance = dlon * dlon + dlat * dlat;
-      if (distance < best) {
-        best = distance;
-        nearest = stop;
-      }
-    }
+    return driver.id;
+  }
 
-    return { stopId: nearest.stopId, stopName: nearest.stopName };
+  private async resolveFleetNumber(payload: {
+    vehicleId?: number;
+    fleetNumber?: string;
+  }) {
+    if (payload.fleetNumber) return payload.fleetNumber;
+    if (payload.vehicleId) {
+      const result = (await this.dbService.db.execute(sql`
+             select fleet_number as "fleetNumber" from dispatcher_api.v_vehicles_list where id = ${payload.vehicleId}
+          `)) as unknown as { rows: { fleetNumber: string }[] };
+      if (result.rows[0]) return result.rows[0].fleetNumber;
+    }
+    throw new BadRequestException('Fleet Number required');
+  }
+
+  private roundTo1(value: number) {
+    return Math.round(value * 10) / 10;
   }
 }

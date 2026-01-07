@@ -62,7 +62,7 @@ export class CtAdminService {
         ${payload.fullName}
       )
     `);
-    
+
     const userId = result.rows[0].register_passenger;
     return this.usersService.findOne(Number(userId));
   }

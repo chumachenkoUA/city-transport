@@ -76,7 +76,7 @@ type RoutePointRow = {
 export class CtDriverService {
   constructor(private readonly dbService: DbService) {}
 
-  async getProfile(_login: string) {
+  async getProfile() {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
@@ -98,8 +98,8 @@ export class CtDriverService {
     return driver;
   }
 
-  async getScheduleByLogin(_login: string, date?: string) {
-    const driver = await this.getProfile(_login);
+  async getScheduleByLogin(date?: string) {
+    const driver = await this.getProfile();
     const targetDate = this.parseDate(date);
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
@@ -111,6 +111,7 @@ export class CtDriverService {
         id as "id",
         starts_at as "startsAt",
         ends_at as "endsAt",
+        passenger_count as "passengerCount",
         route_id as "routeId",
         route_number as "routeNumber",
         direction as "routeDirection",
@@ -121,7 +122,9 @@ export class CtDriverService {
       from driver_api.v_my_schedule
       where starts_at >= ${startOfDay} and starts_at < ${endOfDay}
       order by starts_at
-    `)) as unknown as { rows: DriverScheduleRow[] };
+    `)) as unknown as {
+      rows: (DriverScheduleRow & { passengerCount: number })[];
+    };
 
     const trips = tripsResult.rows;
     const routeIds = Array.from(new Set(trips.map((trip) => trip.routeId)));
@@ -166,8 +169,13 @@ export class CtDriverService {
 
       return {
         id: trip.id,
-        startsAt: trip.startsAt instanceof Date ? trip.startsAt.toISOString() : trip.startsAt,
-        endsAt: trip.endsAt instanceof Date ? trip.endsAt.toISOString() : trip.endsAt,
+        startsAt:
+          trip.startsAt instanceof Date
+            ? trip.startsAt.toISOString()
+            : trip.startsAt,
+        endsAt:
+          trip.endsAt instanceof Date ? trip.endsAt.toISOString() : trip.endsAt,
+        passengerCount: trip.passengerCount,
         route: {
           id: trip.routeId,
           number: trip.routeNumber,
@@ -204,7 +212,7 @@ export class CtDriverService {
     };
   }
 
-  async getActiveTripByLogin(_login: string) {
+  async getActiveTripByLogin() {
     const now = new Date();
     const result = (await this.dbService.db.execute(sql`
       select
@@ -289,7 +297,7 @@ export class CtDriverService {
     return result.rows;
   }
 
-  async startTrip(_login: string, payload: StartTripDto) {
+  async startTrip(payload: StartTripDto) {
     if (!payload.fleetNumber) {
       throw new BadRequestException('fleetNumber is required');
     }
@@ -307,7 +315,7 @@ export class CtDriverService {
     return result.rows[0] ?? { tripId: null };
   }
 
-  async finishTrip(_login: string, payload: FinishTripDto) {
+  async finishTrip(payload: FinishTripDto) {
     const endedAt = payload.endedAt ?? new Date();
     const result = (await this.dbService.db.execute(sql`
       select driver_api.finish_trip(${endedAt}) as "tripId"
@@ -316,7 +324,7 @@ export class CtDriverService {
     return result.rows[0] ?? { tripId: null };
   }
 
-  async setPassengerCount(_login: string, payload: PassengerCountDto) {
+  async setPassengerCount(payload: PassengerCountDto) {
     await this.dbService.db.execute(sql`
       select driver_api.update_passengers(${payload.tripId}::bigint, ${payload.passengerCount}::integer)
     `);
@@ -324,7 +332,7 @@ export class CtDriverService {
     return { ok: true };
   }
 
-  async logGps(_login: string, payload: GpsLogDto) {
+  async logGps(payload: GpsLogDto) {
     const recordedAt = payload.recordedAt ?? new Date().toISOString();
     await this.dbService.db.execute(sql`
       select driver_api.log_vehicle_gps(
@@ -371,7 +379,9 @@ export class CtDriverService {
     return route.id;
   }
 
-  private async findScheduleByRouteId(routeId: number): Promise<ScheduleRow | null> {
+  private async findScheduleByRouteId(
+    routeId: number,
+  ): Promise<ScheduleRow | null> {
     const result = (await this.dbService.db.execute(sql`
       select
         work_start_time as "workStartTime",

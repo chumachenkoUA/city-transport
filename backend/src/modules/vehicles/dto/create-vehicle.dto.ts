@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateVehicleDto {
   @IsString()
@@ -7,11 +7,8 @@ export class CreateVehicleDto {
 
   @IsInt()
   @Min(1)
-  transportTypeId!: number;
-
-  @IsInt()
-  @Min(1)
-  capacity!: number;
+  @IsOptional()
+  vehicleModelId?: number;
 
   @IsInt()
   @Min(1)

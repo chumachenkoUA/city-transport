@@ -1,9 +1,11 @@
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsOptional } from 'class-validator';
 
 export class PeriodDto {
   @IsDateString()
-  from!: string;
+  @IsOptional()
+  startDate?: string;
 
   @IsDateString()
-  to!: string;
+  @IsOptional()
+  endDate?: string;
 }

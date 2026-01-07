@@ -47,8 +47,7 @@ export class VehiclesService {
       .insert(vehicles)
       .values({
         fleetNumber: payload.fleetNumber,
-        transportTypeId: payload.transportTypeId,
-        capacity: payload.capacity,
+        vehicleModelId: payload.vehicleModelId,
         routeId: payload.routeId,
       })
       .returning();
@@ -62,11 +61,8 @@ export class VehiclesService {
     if (payload.fleetNumber !== undefined) {
       updates.fleetNumber = payload.fleetNumber;
     }
-    if (payload.transportTypeId !== undefined) {
-      updates.transportTypeId = payload.transportTypeId;
-    }
-    if (payload.capacity !== undefined) {
-      updates.capacity = payload.capacity;
+    if (payload.vehicleModelId !== undefined) {
+      updates.vehicleModelId = payload.vehicleModelId;
     }
     if (payload.routeId !== undefined) {
       updates.routeId = payload.routeId;

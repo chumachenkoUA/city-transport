@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, desc, eq, gte, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { routes, transportTypes, trips, vehicles } from '../../db/schema';

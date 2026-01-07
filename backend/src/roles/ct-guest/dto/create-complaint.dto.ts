@@ -1,23 +1,28 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
 
 export class CreateGuestComplaintDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  userId!: number;
-
   @IsString()
   @IsNotEmpty()
+  @IsIn(['complaint', 'suggestion'])
   type!: string;
 
   @IsString()
   @IsNotEmpty()
   message!: string;
 
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsString()
   @IsOptional()
-  tripId?: number;
+  contactInfo?: string;
+
+  @IsString()
+  @IsOptional()
+  routeNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  transportType?: string;
+
+  @IsString()
+  @IsOptional()
+  vehicleNumber?: string;
 }

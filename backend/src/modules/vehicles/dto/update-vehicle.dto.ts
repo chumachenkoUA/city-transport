@@ -8,12 +8,7 @@ export class UpdateVehicleDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  transportTypeId?: number;
-
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  capacity?: number;
+  vehicleModelId?: number;
 
   @IsInt()
   @Min(1)

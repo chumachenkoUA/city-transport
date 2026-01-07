@@ -6,6 +6,7 @@ import { TopUpDto } from './dto/top-up.dto';
 import { RouteLookupDto } from '../ct-guest/dto/route-lookup.dto';
 import { RoutesBetweenDto } from '../ct-guest/dto/routes-between.dto';
 import { StopsNearDto } from '../ct-guest/dto/stops-near.dto';
+import { BuyTicketDto } from './dto/buy-ticket.dto';
 
 @Controller('passenger')
 export class CtPassengerController {
@@ -46,9 +47,9 @@ export class CtPassengerController {
     return this.ctPassengerService.createComplaint(payload);
   }
 
-  @Get(':userId/card')
-  getCard(@Param('userId') userId: string) {
-    return this.ctPassengerService.getCard(Number(userId));
+  @Get('cards')
+  getMyCards() {
+    return this.ctPassengerService.getMyCards();
   }
 
   @Post('cards/:cardNumber/top-up')
@@ -59,31 +60,31 @@ export class CtPassengerController {
     return this.ctPassengerService.topUpCard(cardNumber, payload);
   }
 
-  @Get(':userId/trips')
-  getTrips(@Param('userId') userId: string) {
-    return this.ctPassengerService.getTrips(Number(userId));
+  @Post('tickets/buy')
+  buyTicket(@Body() payload: BuyTicketDto) {
+    return this.ctPassengerService.buyTicket(payload);
   }
 
-  @Get(':userId/fines')
-  getFines(@Param('userId') userId: string) {
-    return this.ctPassengerService.getFines(Number(userId));
+  @Get('trips')
+  getTrips() {
+    return this.ctPassengerService.getMyTrips();
   }
 
-  @Get(':userId/fines/:fineId')
-  getFine(@Param('userId') userId: string, @Param('fineId') fineId: string) {
-    return this.ctPassengerService.getFine(Number(userId), Number(fineId));
+  @Get('fines')
+  getFines() {
+    return this.ctPassengerService.getMyFines();
   }
 
-  @Post(':userId/fines/:fineId/appeals')
+  @Get('fines/:fineId')
+  getFine(@Param('fineId') fineId: string) {
+    return this.ctPassengerService.getFineDetails(Number(fineId));
+  }
+
+  @Post('fines/:fineId/appeals')
   createAppeal(
-    @Param('userId') userId: string,
     @Param('fineId') fineId: string,
     @Body() payload: CreateAppealDto,
   ) {
-    return this.ctPassengerService.createAppeal(
-      Number(userId),
-      Number(fineId),
-      payload,
-    );
+    return this.ctPassengerService.createAppeal(Number(fineId), payload);
   }
 }

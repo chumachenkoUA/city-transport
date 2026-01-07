@@ -1,10 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CardTopUpsService } from '../../modules/card-top-ups/card-top-ups.service';
-import { ComplaintsSuggestionsService } from '../../modules/complaints-suggestions/complaints-suggestions.service';
-import { FineAppealsService } from '../../modules/fine-appeals/fine-appeals.service';
-import { FinesService } from '../../modules/fines/fines.service';
-import { TicketsService } from '../../modules/tickets/tickets.service';
-import { TransportCardsService } from '../../modules/transport-cards/transport-cards.service';
+import { sql } from 'drizzle-orm';
+import { DbService } from '../../db/db.service';
 import { CtGuestService } from '../ct-guest/ct-guest.service';
 import { RouteLookupDto } from '../ct-guest/dto/route-lookup.dto';
 import { RoutesBetweenDto } from '../ct-guest/dto/routes-between.dto';
@@ -12,25 +8,81 @@ import { StopsNearDto } from '../ct-guest/dto/stops-near.dto';
 import { CreateAppealDto } from './dto/create-appeal.dto';
 import { CreatePassengerComplaintDto } from './dto/create-complaint.dto';
 import { TopUpDto } from './dto/top-up.dto';
+import { BuyTicketDto } from './dto/buy-ticket.dto';
+
+type MyCardRow = {
+  id: number;
+  card_number: string;
+  balance: string;
+  last_top_up: string | null;
+};
+
+type MyTripRow = {
+  ticket_id: number;
+  purchased_at: string;
+  price: string;
+  route_number: string;
+  transport_type: string;
+  starts_at: string;
+};
+
+type MyFineRow = {
+  id: number;
+  amount: string;
+  reason: string;
+  status: string;
+  issued_at: string;
+};
+
+type StopNearRow = {
+  id: number;
+  name: string;
+  lon: string;
+  lat: string;
+  distance_m: number;
+};
+
+type RouteBetweenRow = {
+  route_id: number;
+  route_number: string;
+  transport_type: string;
+  start_stop_name: string;
+  end_stop_name: string;
+};
+
+type TransportAtStopRow = {
+  stop_id: number;
+  route_id: number;
+  route_number: string;
+  transport_type: string;
+  approximate_interval: number | null;
+};
 
 @Injectable()
 export class CtPassengerService {
   constructor(
+    private readonly dbService: DbService,
     private readonly guestService: CtGuestService,
-    private readonly transportCardsService: TransportCardsService,
-    private readonly cardTopUpsService: CardTopUpsService,
-    private readonly ticketsService: TicketsService,
-    private readonly finesService: FinesService,
-    private readonly fineAppealsService: FineAppealsService,
-    private readonly complaintsSuggestionsService: ComplaintsSuggestionsService,
   ) {}
 
-  getStopsNear(query: StopsNearDto) {
-    return this.guestService.getStopsNear(query);
+  async getStopsNear(payload: StopsNearDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select id, name, lon, lat, distance_m
+      from passenger_api.find_stops_nearby(${payload.lon}, ${payload.lat}, ${payload.radius ?? 1000})
+      limit ${payload.limit ?? 10}
+    `)) as unknown as { rows: StopNearRow[] };
+
+    return result.rows;
   }
 
-  getRoutesByStop(stopId: number) {
-    return this.guestService.getRoutesByStop(stopId);
+  async getRoutesByStop(stopId: number) {
+    const result = (await this.dbService.db.execute(sql`
+      select stop_id, route_id, route_number, transport_type, approximate_interval
+      from passenger_api.v_transport_at_stops
+      where stop_id = ${stopId}
+    `)) as unknown as { rows: TransportAtStopRow[] };
+
+    return result.rows;
   }
 
   getRouteStops(query: RouteLookupDto) {
@@ -41,90 +93,101 @@ export class CtPassengerService {
     return this.guestService.getRoutePoints(query);
   }
 
-  getRoutesBetween(query: RoutesBetweenDto) {
-    return this.guestService.getRoutesBetween(query);
+  async getRoutesBetween(payload: RoutesBetweenDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select route_id, route_number, transport_type, start_stop_name, end_stop_name
+      from passenger_api.find_routes_between(
+        ${payload.lonA}, ${payload.latA},
+        ${payload.lonB}, ${payload.latB},
+        ${payload.radius ?? 800}
+      )
+    `)) as unknown as { rows: RouteBetweenRow[] };
+
+    return result.rows;
   }
 
   getSchedule(query: RouteLookupDto) {
     return this.guestService.getSchedule(query);
   }
 
-  createComplaint(payload: CreatePassengerComplaintDto) {
-    return this.complaintsSuggestionsService.create({
-      userId: payload.userId,
-      type: payload.type,
-      message: payload.message,
-      tripId: payload.tripId,
-      status: 'Подано',
-    });
+  async createComplaint(payload: CreatePassengerComplaintDto) {
+    await this.dbService.db.execute(sql`
+      select passenger_api.submit_complaint(
+        ${payload.type},
+        ${payload.message},
+        null,
+        ${payload.routeNumber ?? null},
+        ${payload.transportType ?? null},
+        ${payload.vehicleNumber ?? null}
+      )
+    `);
   }
 
-  async getCard(userId: number) {
-    const card = await this.transportCardsService.findByUserId(userId);
+  async getMyCards() {
+    const result = (await this.dbService.db.execute(sql`
+      select id, card_number, balance, last_top_up from passenger_api.v_my_cards
+    `)) as unknown as { rows: MyCardRow[] };
 
-    if (!card) {
-      throw new NotFoundException(
-        `Transport card for user ${userId} not found`,
-      );
-    }
-
-    const lastTopUp = await this.cardTopUpsService.findLatestByCardId(card.id);
-
-    return {
-      card,
-      lastTopUpAt: lastTopUp?.toppedUpAt ?? null,
-    };
+    return result.rows;
   }
 
   async topUpCard(cardNumber: string, payload: TopUpDto) {
-    return this.transportCardsService.topUpByCardNumber(
-      cardNumber,
-      payload.amount,
-      payload.toppedUpAt,
-    );
+    await this.dbService.db.execute(sql`
+      select passenger_api.top_up_card(${cardNumber}, ${payload.amount})
+    `);
   }
 
-  async getTrips(userId: number) {
-    const trips = await this.ticketsService.findTripsByUserId(userId);
+  async buyTicket(payload: BuyTicketDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select passenger_api.buy_ticket(${payload.cardId}, ${payload.tripId}, ${payload.price})
+    `)) as unknown as { rows: { buy_ticket: number }[] };
+
+    return { ticketId: result.rows[0].buy_ticket };
+  }
+
+  async getMyTrips() {
+    const result = (await this.dbService.db.execute(sql`
+      select ticket_id, purchased_at, price, route_number, transport_type, starts_at 
+      from passenger_api.v_my_trips
+    `)) as unknown as { rows: MyTripRow[] };
+
     return {
-      total: trips.length,
-      trips,
+      total: result.rows.length,
+      trips: result.rows,
     };
   }
 
-  async getFines(userId: number) {
-    const fines = await this.finesService.findByUserId(userId);
+  async getMyFines() {
+    const result = (await this.dbService.db.execute(sql`
+      select id, amount, reason, status, issued_at from passenger_api.v_my_fines
+    `)) as unknown as { rows: MyFineRow[] };
+
     return {
-      total: fines.length,
-      fines,
+      total: result.rows.length,
+      fines: result.rows,
     };
   }
 
-  async getFine(userId: number, fineId: number) {
-    const fine = await this.finesService.findOneByUserId(userId, fineId);
+  async getFineDetails(fineId: number) {
+    const result = (await this.dbService.db.execute(sql`
+      select id, amount, reason, status, issued_at 
+      from passenger_api.v_my_fines 
+      where id = ${fineId}
+    `)) as unknown as { rows: MyFineRow[] };
 
+    const fine = result.rows[0];
     if (!fine) {
-      throw new NotFoundException(
-        `Fine ${fineId} not found for user ${userId}`,
-      );
+      throw new NotFoundException(`Fine ${fineId} not found`);
     }
 
     return fine;
   }
 
-  async createAppeal(userId: number, fineId: number, payload: CreateAppealDto) {
-    const fine = await this.finesService.findOneByUserId(userId, fineId);
+  async createAppeal(fineId: number, payload: CreateAppealDto) {
+    const result = (await this.dbService.db.execute(sql`
+      select passenger_api.submit_fine_appeal(${fineId}, ${payload.message})
+    `)) as unknown as { rows: { submit_fine_appeal: number }[] };
 
-    if (!fine) {
-      throw new NotFoundException(
-        `Fine ${fineId} not found for user ${userId}`,
-      );
-    }
-
-    return this.fineAppealsService.create({
-      fineId: fine.id,
-      message: payload.message,
-      status: 'Подано',
-    });
+    return { appealId: result.rows[0].submit_fine_appeal };
   }
 }

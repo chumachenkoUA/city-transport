@@ -5,10 +5,16 @@ import { RoutesListDto } from './dto/routes-list.dto';
 import { RoutesBetweenDto } from './dto/routes-between.dto';
 import { RouteScheduleDto } from './dto/route-schedule.dto';
 import { StopsNearDto } from './dto/stops-near.dto';
+import { CreateGuestComplaintDto } from './dto/create-complaint.dto';
 
 @Controller('guest')
 export class CtGuestController {
   constructor(private readonly ctGuestService: CtGuestService) {}
+
+  @Post('complaints')
+  submitComplaint(@Body() body: CreateGuestComplaintDto) {
+    return this.ctGuestService.submitComplaint(body);
+  }
 
   @Get('transport-types')
   listTransportTypes() {
@@ -38,6 +44,23 @@ export class CtGuestController {
   @Get('routes/points')
   getRoutePoints(@Query() query: RouteLookupDto) {
     return this.ctGuestService.getRoutePoints(query);
+  }
+
+  @Get('routes/geometry')
+  getRouteGeometry(@Query() query: RouteLookupDto) {
+    return this.ctGuestService.getRouteGeometry(query);
+  }
+
+  @Get('routes/geometries')
+  getAllRouteGeometries(@Query('transportTypeId') transportTypeId?: string) {
+    return this.ctGuestService.getAllRouteGeometries(
+      transportTypeId ? Number(transportTypeId) : undefined,
+    );
+  }
+
+  @Get('stops/geometries')
+  getStopGeometries() {
+    return this.ctGuestService.getStopGeometries();
   }
 
   @Get('routes/near')

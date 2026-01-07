@@ -23,17 +23,20 @@ export class CtDriverController {
 
   @Get('me')
   getProfile() {
-    return this.ctDriverService.getProfile(this.requireLogin());
+    this.requireLogin();
+    return this.ctDriverService.getProfile();
   }
 
   @Get('schedule')
   getScheduleByDate(@Query('date') date?: string) {
-    return this.ctDriverService.getScheduleByLogin(this.requireLogin(), date);
+    this.requireLogin();
+    return this.ctDriverService.getScheduleByLogin(date);
   }
 
   @Get('active-trip')
   getActiveTrip() {
-    return this.ctDriverService.getActiveTripByLogin(this.requireLogin());
+    this.requireLogin();
+    return this.ctDriverService.getActiveTripByLogin();
   }
 
   @Get('routes/stops')
@@ -48,22 +51,26 @@ export class CtDriverController {
 
   @Post('trips/start')
   startTrip(@Body() payload: StartTripDto) {
-    return this.ctDriverService.startTrip(this.requireLogin(), payload);
+    this.requireLogin();
+    return this.ctDriverService.startTrip(payload);
   }
 
   @Post('trips/finish')
   finishTrip(@Body() payload: FinishTripDto) {
-    return this.ctDriverService.finishTrip(this.requireLogin(), payload);
+    this.requireLogin();
+    return this.ctDriverService.finishTrip(payload);
   }
 
   @Post('trips/passengers')
   setPassengerCount(@Body() payload: PassengerCountDto) {
-    return this.ctDriverService.setPassengerCount(this.requireLogin(), payload);
+    this.requireLogin();
+    return this.ctDriverService.setPassengerCount(payload);
   }
 
   @Post('trips/gps')
   sendGps(@Body() payload: GpsLogDto) {
-    return this.ctDriverService.logGps(this.requireLogin(), payload);
+    this.requireLogin();
+    return this.ctDriverService.logGps(payload);
   }
 
   private requireLogin() {

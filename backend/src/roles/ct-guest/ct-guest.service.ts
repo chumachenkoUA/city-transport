@@ -9,6 +9,7 @@ import { RouteLookupDto } from './dto/route-lookup.dto';
 import { RoutesBetweenDto } from './dto/routes-between.dto';
 import { RouteScheduleDto } from './dto/route-schedule.dto';
 import { StopsNearDto } from './dto/stops-near.dto';
+import { CreateGuestComplaintDto } from './dto/create-complaint.dto';
 
 const AVERAGE_SPEED_KMH = 25;
 
@@ -56,11 +57,25 @@ type RouteStopRow = {
 
 type RoutePointRow = {
   id: number;
-  routeId: number;
+  route_id: number;
   lon: string;
   lat: string;
-  prevRoutePointId: number | null;
-  nextRoutePointId: number | null;
+  prev_route_point_id: number | null;
+  next_route_point_id: number | null;
+};
+
+type RouteGeometryRow = {
+  routeId: number;
+  number: string;
+  transportType: string;
+  direction: string;
+  geometry: any;
+};
+
+type StopGeometryRow = {
+  id: number;
+  name: string;
+  geometry: unknown;
 };
 
 type ScheduleRow = {
@@ -77,36 +92,31 @@ export class CtGuestService {
 
   async listTransportTypes() {
     const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        name as "name"
-      from guest_api.v_transport_types
-      order by id
+      select id as "id", name as "name" from guest_api.v_transport_types
     `)) as unknown as { rows: TransportTypeRow[] };
 
     return result.rows;
   }
 
   async listRoutes(transportTypeId?: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        number as "number",
-        direction as "direction",
-        transport_type_id as "transportTypeId",
-        transport_type as "transportType"
-      from guest_api.v_routes
-      ${transportTypeId ? sql`where transport_type_id = ${transportTypeId}` : sql``}
-      order by number
-    `)) as unknown as { rows: RouteRow[] };
+    const query = transportTypeId
+      ? sql`select id as "id", number as "number", direction as "direction", transport_type_id as "transportTypeId", transport_type_name as "transportType" from guest_api.v_routes where transport_type_id = ${transportTypeId}`
+      : sql`select id as "id", number as "number", direction as "direction", transport_type_id as "transportTypeId", transport_type_name as "transportType" from guest_api.v_routes`;
+
+    const result = (await this.dbService.db.execute(query)) as unknown as {
+      rows: RouteRow[];
+    };
 
     return result.rows;
   }
 
-  getStopsNear(query: StopsNearDto) {
-    const radius = query.radius ?? 500;
-    const limit = query.limit ?? 10;
-    return this.findStopsNear(query.lon, query.lat, radius, limit);
+  async getStopsNear(payload: StopsNearDto) {
+    return this.findStopsNear(
+      payload.lon,
+      payload.lat,
+      payload.radius ?? 500,
+      payload.limit ?? 10,
+    );
   }
 
   async getRoutesByStop(stopId: number) {
@@ -115,41 +125,23 @@ export class CtGuestService {
         rs.route_id as "routeId",
         r.number as "routeNumber",
         r.transport_type_id as "transportTypeId",
-        r.transport_type as "transportType",
+        tt.name as "transportType",
         r.direction as "direction",
-        sc.interval_min as "intervalMin"
+        s.interval_min as "intervalMin"
       from guest_api.v_route_stops rs
       join guest_api.v_routes r on r.id = rs.route_id
-      left join guest_api.v_schedules sc on sc.route_id = rs.route_id
+      join guest_api.v_transport_types tt on tt.id = r.transport_type_id
+      left join guest_api.v_schedules s on s.route_id = r.id
       where rs.stop_id = ${stopId}
     `)) as unknown as { rows: RouteByStopRow[] };
 
-    if (result.rows.length === 0) {
-      throw new NotFoundException(`No routes found for stop ${stopId}`);
-    }
-
-    return result.rows.map((route) => ({
-      routeId: route.routeId,
-      routeNumber: route.routeNumber,
-      transportTypeId: route.transportTypeId,
-      transportType: route.transportType,
-      direction: route.direction,
-      approxArrivalMin: route.intervalMin,
-    }));
+    return result.rows;
   }
 
   async getRouteStops(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
     const rows = await this.findRouteStops(routeId);
-    return this.orderRouteStops(rows).map((stop) => ({
-      id: stop.stopId,
-      name: stop.stopName,
-      lon: stop.lon,
-      lat: stop.lat,
-      distanceToNextKm: stop.distanceToNextKm
-        ? Number(stop.distanceToNextKm)
-        : null,
-    }));
+    return this.orderRouteStops(rows);
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
@@ -157,17 +149,87 @@ export class CtGuestService {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
-        route_id as "routeId",
+        route_id as "route_id",
         lon as "lon",
         lat as "lat",
-        prev_route_point_id as "prevRoutePointId",
-        next_route_point_id as "nextRoutePointId"
+        prev_route_point_id as "prev_route_point_id",
+        next_route_point_id as "next_route_point_id"
       from guest_api.v_route_points
       where route_id = ${routeId}
-      order by id
     `)) as unknown as { rows: RoutePointRow[] };
 
     return result.rows;
+  }
+
+  async getRouteGeometry(payload: RouteLookupDto) {
+    const routeId = await this.resolveRouteId(payload);
+    const result = (await this.dbService.db.execute(sql`
+      select
+        route_id as "routeId",
+        number as "number",
+        transport_type as "transportType",
+        direction as "direction",
+        geometry as "geometry"
+      from guest_api.v_route_geometries
+      where route_id = ${routeId}
+    `)) as unknown as { rows: RouteGeometryRow[] };
+
+    return result.rows[0] ?? null;
+  }
+
+  async getAllRouteGeometries(transportTypeId?: number) {
+    const query = transportTypeId
+      ? sql`
+      select
+        route_id as "routeId",
+        number as "number",
+        transport_type as "transportType",
+        direction as "direction",
+        geometry as "geometry"
+      from guest_api.v_route_geometries
+      join guest_api.v_routes r on r.id = route_id
+      where r.transport_type_id = ${transportTypeId}
+    `
+      : sql`
+      select
+        route_id as "routeId",
+        number as "number",
+        transport_type as "transportType",
+        direction as "direction",
+        geometry as "geometry"
+      from guest_api.v_route_geometries
+    `;
+
+    const result = (await this.dbService.db.execute(query)) as unknown as {
+      rows: RouteGeometryRow[];
+    };
+
+    return result.rows;
+  }
+
+  async getStopGeometries() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        name as "name",
+        geometry as "geometry"
+      from guest_api.v_stop_geometries
+    `)) as unknown as { rows: StopGeometryRow[] };
+
+    return result.rows;
+  }
+
+  async submitComplaint(payload: CreateGuestComplaintDto) {
+    await this.dbService.db.execute(sql`
+      select guest_api.submit_complaint(
+        ${payload.type},
+        ${payload.message},
+        ${payload.contactInfo ?? null},
+        ${payload.routeNumber ?? null},
+        ${payload.transportType ?? null},
+        ${payload.vehicleNumber ?? null}
+      )
+    `);
   }
 
   async getRoutesBetween(payload: RoutesBetweenDto) {
