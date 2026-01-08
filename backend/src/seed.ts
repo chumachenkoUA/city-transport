@@ -124,7 +124,8 @@ function formatDate(value: string | undefined) {
 // --- 3. Main Seed Function ---
 
 export async function seedDatabase() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl =
+    process.env.DATABASE_URL_MIGRATOR ?? process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is not set');
 
   const pool = new Pool({ connectionString: databaseUrl });
