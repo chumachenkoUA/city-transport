@@ -140,14 +140,14 @@ BEGIN
     -- Зазвичай cash flow - це поповнення. Revenue - це квитки.
     -- Давайте покажемо обидва, але позначимо поповнення як "Надходження коштів")
     RETURN QUERY
-        SELECT 'Поповнення карток'::text, COALESCE(SUM(amount), 0), 'income_flow'::text
-        FROM public.card_top_ups
+        SELECT 'Поповнення карток'::text, COALESCE(SUM(ct.amount), 0), 'income_flow'::text
+        FROM public.card_top_ups ct
         WHERE topped_up_at >= p_start_date AND topped_up_at < p_end_date + 1;
 
     -- Доходи: Штрафи (сплачені)
     RETURN QUERY
-        SELECT 'Штрафи'::text, COALESCE(SUM(amount), 0), 'income'::text
-        FROM public.fines
+        SELECT 'Штрафи'::text, COALESCE(SUM(f.amount), 0), 'income'::text
+        FROM public.fines f
         WHERE status = 'Оплачено' AND issued_at >= p_start_date AND issued_at < p_end_date + 1;
 
     -- Витрати: Операційні

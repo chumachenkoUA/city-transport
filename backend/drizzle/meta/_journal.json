@@ -120,6 +120,20 @@
       "when": 1767801807442,
       "tag": "0016_manager_api",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1767832613483,
+      "tag": "0017_fix_accountant_report",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1767832643260,
+      "tag": "0018_fix_controller_issue_fine.",
+      "breakpoints": true
     }
   ]
 }

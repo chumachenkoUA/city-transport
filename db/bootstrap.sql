@@ -89,6 +89,19 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Allow ct_migrator to grant roles from SECURITY DEFINER functions
+DO $$
+BEGIN
+  IF to_regrole('ct_migrator') IS NOT NULL THEN
+    IF to_regrole('ct_passenger_role') IS NOT NULL THEN
+      EXECUTE 'GRANT ct_passenger_role TO ct_migrator WITH ADMIN OPTION';
+    END IF;
+    IF to_regrole('ct_driver_role') IS NOT NULL THEN
+      EXECUTE 'GRANT ct_driver_role TO ct_migrator WITH ADMIN OPTION';
+    END IF;
+  END IF;
+END $$;
+
 -- -------------------------
 -- 3) Login roles (examples)
 -- -------------------------
