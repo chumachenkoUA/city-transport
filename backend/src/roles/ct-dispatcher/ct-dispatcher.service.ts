@@ -82,7 +82,7 @@ export class CtDispatcherService {
         number as "number",
         direction as "direction",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
+        transport_type_name as "transportType"
       from guest_api.v_routes
       order by number, direction
     `)) as unknown as {
@@ -213,9 +213,8 @@ export class CtDispatcherService {
       select
         id as "id",
         route_number as "routeNumber",
-        vehicle_id as "vehicleId",
         fleet_number as "fleetNumber",
-        current_driver_name as "driverName",
+        full_name as "driverName",
         starts_at as "startsAt"
       from dispatcher_api.v_active_trips
       order by starts_at desc
@@ -223,7 +222,6 @@ export class CtDispatcherService {
       rows: Array<{
         id: number;
         routeNumber: string;
-        vehicleId: number;
         fleetNumber: string;
         driverName: string;
         startsAt: Date;

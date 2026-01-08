@@ -79,7 +79,6 @@ type StopGeometryRow = {
 };
 
 type ScheduleRow = {
-  id: number;
   routeId: number;
   workStartTime: string;
   workEndTime: string;
@@ -181,13 +180,13 @@ export class CtGuestService {
     const query = transportTypeId
       ? sql`
       select
-        route_id as "routeId",
-        number as "number",
-        transport_type as "transportType",
-        direction as "direction",
-        geometry as "geometry"
-      from guest_api.v_route_geometries
-      join guest_api.v_routes r on r.id = route_id
+        g.route_id as "routeId",
+        g.number as "number",
+        g.transport_type as "transportType",
+        g.direction as "direction",
+        g.geometry as "geometry"
+      from guest_api.v_route_geometries g
+      join guest_api.v_routes r on r.id = g.route_id
       where r.transport_type_id = ${transportTypeId}
     `
       : sql`
@@ -418,7 +417,7 @@ export class CtGuestService {
         number as "number",
         direction as "direction",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
+        transport_type_name as "transportType"
       from guest_api.v_routes
       where number = ${payload.routeNumber}
         and transport_type_id = ${payload.transportTypeId}
@@ -513,7 +512,6 @@ export class CtGuestService {
   private async findScheduleByRouteId(routeId: number) {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
         route_id as "routeId",
         work_start_time as "workStartTime",
         work_end_time as "workEndTime",
@@ -533,7 +531,7 @@ export class CtGuestService {
         number as "number",
         direction as "direction",
         transport_type_id as "transportTypeId",
-        transport_type as "transportType"
+        transport_type_name as "transportType"
       from guest_api.v_routes
       where id = ${routeId}
       limit 1

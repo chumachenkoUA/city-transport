@@ -47,8 +47,8 @@ export class CtAccountantService {
       select accountant_api.add_expense(
         ${payload.category},
         ${payload.amount}::numeric,
-        ${payload.description},
-        ${payload.documentRef},
+        ${payload.description ?? null},
+        ${payload.documentRef ?? null},
         ${occurredAt}::timestamp
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };

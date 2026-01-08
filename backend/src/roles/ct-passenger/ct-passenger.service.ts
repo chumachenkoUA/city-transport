@@ -115,7 +115,6 @@ export class CtPassengerService {
       select passenger_api.submit_complaint(
         ${payload.type},
         ${payload.message},
-        null,
         ${payload.routeNumber ?? null},
         ${payload.transportType ?? null},
         ${payload.vehicleNumber ?? null}
