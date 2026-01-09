@@ -134,7 +134,85 @@ export class CtGuestService {
       where rs.stop_id = ${stopId}
     `)) as unknown as { rows: RouteByStopRow[] };
 
-    return result.rows;
+    // Calculate estimated arrival time for each route
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const enrichedResults = await Promise.all(
+      result.rows.map(async (route) => {
+        let nextArrivalMin: number | null = null;
+
+        try {
+          // Get ordered stops for this route
+          const orderedStops = this.orderRouteStops(
+            await this.findRouteStops(route.routeId),
+          );
+
+          // Find position of this stop in the route
+          const stopIndex = orderedStops.findIndex(
+            (stop) => stop.stopId === stopId,
+          );
+
+          if (stopIndex !== -1) {
+            // Calculate travel time from start to this stop
+            const segment = orderedStops.slice(0, stopIndex);
+            const hasMissingDistance = segment.some(
+              (stop) => stop.distanceToNextKm === null,
+            );
+
+            if (!hasMissingDistance) {
+              const distanceKm = segment.reduce(
+                (sum, stop) => sum + Number(stop.distanceToNextKm ?? 0),
+                0,
+              );
+              const travelTimeMin = (distanceKm / AVERAGE_SPEED_KMH) * 60;
+
+              // Get schedule for this route
+              const schedule = await this.findScheduleByRouteId(route.routeId);
+
+              if (schedule) {
+                const startMin = this.parseTimeToMinutes(
+                  schedule.workStartTime,
+                );
+                const endMin = this.parseTimeToMinutes(schedule.workEndTime);
+                const intervalMin = schedule.intervalMin;
+
+                // Find next departure from start
+                let nextDeparture = startMin;
+                while (nextDeparture < currentMinutes && nextDeparture < endMin) {
+                  nextDeparture += intervalMin;
+                }
+
+                if (nextDeparture <= endMin) {
+                  // Calculate arrival at this stop
+                  const arrivalAtStop = nextDeparture + travelTimeMin;
+                  nextArrivalMin = Math.round(arrivalAtStop - currentMinutes);
+
+                  // If negative, try next departure
+                  if (nextArrivalMin < 0 && nextDeparture + intervalMin <= endMin) {
+                    nextArrivalMin = Math.round(
+                      nextDeparture + intervalMin + travelTimeMin - currentMinutes,
+                    );
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error(
+            `Error calculating arrival for route ${route.routeId}:`,
+            error,
+          );
+        }
+
+        return {
+          ...route,
+          nextArrivalMin,
+        };
+      }),
+    );
+
+    return enrichedResults;
   }
 
   async getRouteStops(payload: RouteLookupDto) {
@@ -182,6 +260,7 @@ export class CtGuestService {
       select
         g.route_id as "routeId",
         g.number as "number",
+        r.transport_type_id as "transportTypeId",
         g.transport_type as "transportType",
         g.direction as "direction",
         g.geometry as "geometry"
@@ -191,12 +270,14 @@ export class CtGuestService {
     `
       : sql`
       select
-        route_id as "routeId",
-        number as "number",
-        transport_type as "transportType",
-        direction as "direction",
-        geometry as "geometry"
-      from guest_api.v_route_geometries
+        g.route_id as "routeId",
+        g.number as "number",
+        r.transport_type_id as "transportTypeId",
+        g.transport_type as "transportType",
+        g.direction as "direction",
+        g.geometry as "geometry"
+      from guest_api.v_route_geometries g
+      join guest_api.v_routes r on r.id = g.route_id
     `;
 
     const result = (await this.dbService.db.execute(query)) as unknown as {
@@ -320,6 +401,133 @@ export class CtGuestService {
       toStop: stopB,
       routes: results,
     };
+  }
+
+  async getRouteGeometryBetweenStops(
+    routeId: number,
+    fromStopId: number,
+    toStopId: number,
+  ) {
+    // Get ordered stops for this route
+    const orderedStops = this.orderRouteStops(
+      await this.findRouteStops(routeId),
+    );
+
+    const fromIndex = orderedStops.findIndex(
+      (stop) => stop.stopId === fromStopId,
+    );
+    const toIndex = orderedStops.findIndex((stop) => stop.stopId === toStopId);
+
+    if (fromIndex === -1 || toIndex === -1) {
+      throw new NotFoundException(
+        `One or both stops not found on route ${routeId}`,
+      );
+    }
+
+    if (fromIndex >= toIndex) {
+      throw new BadRequestException(
+        'From stop must come before to stop in route order',
+      );
+    }
+
+    // Get all route points
+    const allPoints = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        route_id as "route_id",
+        lon as "lon",
+        lat as "lat",
+        prev_route_point_id as "prev_route_point_id",
+        next_route_point_id as "next_route_point_id"
+      from guest_api.v_route_points
+      where route_id = ${routeId}
+      order by id
+    `)) as unknown as { rows: RoutePointRow[] };
+
+    if (allPoints.rows.length === 0) {
+      throw new NotFoundException(`No route points found for route ${routeId}`);
+    }
+
+    // Get coordinates of from and to stops
+    const fromStop = orderedStops[fromIndex];
+    const toStop = orderedStops[toIndex];
+
+    const fromCoords = { lon: Number(fromStop.lon), lat: Number(fromStop.lat) };
+    const toCoords = { lon: Number(toStop.lon), lat: Number(toStop.lat) };
+
+    // Find closest route points to stops
+    const findClosestPoint = (coords: { lon: number; lat: number }) => {
+      let closestPoint = allPoints.rows[0];
+      let minDistance = this.getDistance(
+        coords.lat,
+        coords.lon,
+        Number(closestPoint.lat),
+        Number(closestPoint.lon),
+      );
+
+      for (const point of allPoints.rows) {
+        const distance = this.getDistance(
+          coords.lat,
+          coords.lon,
+          Number(point.lat),
+          Number(point.lon),
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestPoint = point;
+        }
+      }
+
+      return closestPoint;
+    };
+
+    const fromPoint = findClosestPoint(fromCoords);
+    const toPoint = findClosestPoint(toCoords);
+
+    // Build ordered list of points from fromPoint to toPoint
+    const segmentPoints: RoutePointRow[] = [];
+    const pointsById = new Map(allPoints.rows.map((p) => [p.id, p]));
+
+    let currentPoint: RoutePointRow | undefined = fromPoint;
+    const visited = new Set<number>();
+
+    while (currentPoint && !visited.has(currentPoint.id)) {
+      segmentPoints.push(currentPoint);
+      visited.add(currentPoint.id);
+
+      if (currentPoint.id === toPoint.id) {
+        break;
+      }
+
+      currentPoint = currentPoint.next_route_point_id
+        ? pointsById.get(currentPoint.next_route_point_id)
+        : undefined;
+    }
+
+    // Convert to GeoJSON LineString
+    const coordinates = segmentPoints.map((p) => [
+      Number(p.lon),
+      Number(p.lat),
+    ]);
+
+    return {
+      type: 'LineString' as const,
+      coordinates,
+    };
+  }
+
+  private getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   }
 
   async getSchedule(payload: RouteScheduleDto) {
@@ -573,5 +781,51 @@ export class CtGuestService {
   private addMinutes(time: string, offsetMin: number) {
     const baseMinutes = this.parseTimeToMinutes(time);
     return this.formatMinutes(baseMinutes + Math.round(offsetMin));
+  }
+
+  // ================================================
+  // Route Planning (Thick Database Pattern)
+  // ================================================
+
+  /**
+   * Планування маршрутів між двома точками
+   * Вся логіка в PostgreSQL функції guest_api.plan_route()
+   */
+  async planRoute(payload: {
+    lonA: number;
+    latA: number;
+    lonB: number;
+    latB: number;
+    radius?: number;
+    maxWaitMin?: number;
+    maxResults?: number;
+  }) {
+    const result = await this.dbService.db.execute(sql`
+      SELECT route_option
+      FROM guest_api.plan_route(
+        ${payload.lonA},
+        ${payload.latA},
+        ${payload.lonB},
+        ${payload.latB},
+        ${payload.radius ?? 500},
+        ${payload.maxWaitMin ?? 10},
+        ${payload.maxResults ?? 5}
+      )
+    `);
+
+    return result.rows.map((row: any) => row.route_option);
+  }
+
+  /**
+   * Пошук зупинок за назвою
+   * Використовує PostgreSQL функцію guest_api.search_stops_by_name()
+   */
+  async searchStops(query: string, limit: number = 10) {
+    const result = await this.dbService.db.execute(sql`
+      SELECT id, name, lon, lat
+      FROM guest_api.search_stops_by_name(${query}, ${limit})
+    `);
+
+    return result.rows;
   }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourcePerFileMappings">
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/a94546c2-2055-4e71-808e-6700a9d0b87c/console.sql" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/a94546c2-2055-4e71-808e-6700a9d0b87c/console_1.sql" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/a94546c2-2055-4e71-808e-6700a9d0b87c/console_2.sql" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+    <file url="file://$PROJECT_DIR$/backend/src/modules/auth/auth.service.ts" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+    <file url="file://$PROJECT_DIR$/backend/src/roles/ct-driver/ct-driver.service.ts" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+    <file url="file://$PROJECT_DIR$/db/bootstrap.sql" value="a94546c2-2055-4e71-808e-6700a9d0b87c" />
+  </component>
+</project>

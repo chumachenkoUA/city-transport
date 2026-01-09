@@ -144,7 +144,7 @@ export async function seedDatabase() {
         route_stops, route_points, trips, schedules, 
         vehicles, vehicle_models, routes, stops, transport_types, 
         drivers, users
-      CASCADE
+      RESTART IDENTITY CASCADE
     `);
 
     // B. Locate GTFS files
@@ -220,7 +220,7 @@ export async function seedDatabase() {
 
     // D. Seed Transport Types
     console.log('🚌 Seeding Transport Types...');
-    const uniqueTypes = new Set(['Трамвай', 'Тролейбус', 'Автобус', 'Метро']);
+    const uniqueTypes = new Set(['Трамвай', 'Тролейбус', 'Автобус']);
     const ttMap = new Map<string, number>();
     const ttNameById = new Map<number, string>();
 
@@ -315,7 +315,12 @@ export async function seedDatabase() {
         r.route_short_name?.trim() || r.route_long_name?.trim() || r.route_id;
       if (!routeNumber) continue;
 
-      const ttName = getTransportTypeName(r.route_type);
+      let ttName = getTransportTypeName(r.route_type);
+      // Detect Trolleybus by 'Тр' prefix
+      if (routeNumber.toUpperCase().startsWith('ТР')) {
+        ttName = 'Тролейбус';
+      }
+
       const ttId = ttMap.get(ttName);
       if (!ttId) continue;
 
@@ -408,16 +413,20 @@ export async function seedDatabase() {
             );
 
           let prevPointId: number | null = null;
-          const seenPointKeys = new Set<string>();
+          let prevCoords: string | null = null;
+
           for (const pt of points) {
             const lat = Number(pt.shape_pt_lat);
             const lon = Number(pt.shape_pt_lon);
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
             const latValue = lat.toFixed(7);
             const lonValue = lon.toFixed(7);
-            const pointKey = `${lonValue}|${latValue}`;
-            if (seenPointKeys.has(pointKey)) continue;
-            seenPointKeys.add(pointKey);
+            const coordsKey = `${lonValue},${latValue}`;
+
+            // Skip consecutive duplicate coordinates
+            if (coordsKey === prevCoords) {
+              continue;
+            }
 
             const newPtRows = (await db
               .insert(schema.routePoints)
@@ -443,6 +452,7 @@ export async function seedDatabase() {
                         `);
             }
             prevPointId = newPt.id;
+            prevCoords = coordsKey;
           }
         }
 

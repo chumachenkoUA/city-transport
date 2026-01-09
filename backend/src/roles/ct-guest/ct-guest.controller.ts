@@ -6,6 +6,7 @@ import { RoutesBetweenDto } from './dto/routes-between.dto';
 import { RouteScheduleDto } from './dto/route-schedule.dto';
 import { StopsNearDto } from './dto/stops-near.dto';
 import { CreateGuestComplaintDto } from './dto/create-complaint.dto';
+import { RoutePlannerDto, SearchStopsDto } from './dto/route-planner.dto';
 
 @Controller('guest')
 export class CtGuestController {
@@ -71,5 +72,32 @@ export class CtGuestController {
   @Get('routes/schedule')
   getSchedule(@Query() query: RouteScheduleDto) {
     return this.ctGuestService.getSchedule(query);
+  }
+
+  @Get('routes/geometry-between')
+  getRouteGeometryBetweenStops(
+    @Query('routeId') routeId: string,
+    @Query('fromStopId') fromStopId: string,
+    @Query('toStopId') toStopId: string,
+  ) {
+    return this.ctGuestService.getRouteGeometryBetweenStops(
+      Number(routeId),
+      Number(fromStopId),
+      Number(toStopId),
+    );
+  }
+
+  // ================================================
+  // Route Planning Endpoints
+  // ================================================
+
+  @Get('routes/plan')
+  planRoute(@Query() query: RoutePlannerDto) {
+    return this.ctGuestService.planRoute(query);
+  }
+
+  @Get('stops/search')
+  searchStops(@Query() query: SearchStopsDto) {
+    return this.ctGuestService.searchStops(query.q, query.limit ?? 10);
   }
 }

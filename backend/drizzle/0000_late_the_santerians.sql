@@ -90,10 +90,7 @@ CREATE TABLE "route_points" (
 	"lon" numeric(10, 7) NOT NULL,
 	"lat" numeric(10, 7) NOT NULL,
 	"prev_route_point_id" bigint,
-	"next_route_point_id" bigint,
-	CONSTRAINT "route_points_prev_route_point_id_unique" UNIQUE("prev_route_point_id"),
-	CONSTRAINT "route_points_next_route_point_id_unique" UNIQUE("next_route_point_id"),
-	CONSTRAINT "route_points_route_lon_lat_unique" UNIQUE("route_id","lon","lat")
+	"next_route_point_id" integer
 );
 --> statement-breakpoint
 CREATE TABLE "route_stops" (

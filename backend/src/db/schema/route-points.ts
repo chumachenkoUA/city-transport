@@ -25,9 +25,6 @@ export const routePoints = pgTable(
     }).unique(),
   },
   (table) => ({
-    routePointsRouteLonLatUnique: unique(
-      'route_points_route_lon_lat_unique',
-    ).on(table.routeId, table.lon, table.lat),
     routePointsPrevPointFk: foreignKey({
       columns: [table.prevRoutePointId],
       foreignColumns: [table.id],

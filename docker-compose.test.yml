@@ -41,4 +41,4 @@ services:
       redis-test:
         condition: service_healthy
     command: >
-      sh -c "pnpm run drizzle:migrate && pnpm run test:e2e:report"
+      sh -c "pnpm run test:e2e:report"
