@@ -1,14 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import maplibregl from 'maplibre-gl';
 import {
-  Map,
+  Map as MapContainer,
   MapControls,
   MapMarker,
   MarkerContent,
   MarkerPopup,
   MapRoute,
-  MapClusterLayer,
+  useMap,
 } from '@/components/ui/map';
 import {
   planRoute,
@@ -16,9 +17,12 @@ import {
   getAllRouteGeometries,
   getTransportTypes,
   getRoutes,
+  getRoutesByStop,
   type RouteOption,
   type StopGeometry,
 } from '@/lib/guest-api';
+import { groupRoutesByNumber } from '@/lib/route-utils';
+import { getRouteColor, getTransportTypeColor } from '@/lib/map-colors';
 import { RouteSearch } from '@/components/route-planner/route-search';
 import { RouteCard } from '@/components/route-planner/route-card';
 import { RouteMapView } from '@/components/route-planner/route-map-view';
@@ -30,7 +34,6 @@ import {
   Train,
   ChevronDown,
   ChevronUp,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -38,14 +41,50 @@ export const Route = createFileRoute('/map')({
   component: MapPage,
 });
 
-const UKRAINE_CENTER: [number, number] = [31.1656, 48.3794];
+const LVIV_CENTER: [number, number] = [24.0316, 49.8429];
 
 type MapMode = 'browse' | 'plan';
+
+// Helper component to handle map clicks for point selection
+function MapClickHandler({
+  isSelectingPoint,
+  onPointSelected,
+}: {
+  isSelectingPoint: 'A' | 'B' | null;
+  onPointSelected: (point: 'A' | 'B', coords: { lon: number; lat: number }) => void;
+}) {
+  const { map } = useMap();
+
+  useEffect(() => {
+    if (!map || !isSelectingPoint) return;
+
+    const handleClick = (e: maplibregl.MapMouseEvent) => {
+      const { lng, lat } = e.lngLat;
+      onPointSelected(isSelectingPoint, { lon: lng, lat });
+    };
+
+    map.on('click', handleClick);
+
+    // Change cursor to crosshair when selecting
+    map.getCanvas().style.cursor = 'crosshair';
+
+    return () => {
+      map.off('click', handleClick);
+      map.getCanvas().style.cursor = '';
+    };
+  }, [map, isSelectingPoint, onPointSelected]);
+
+  return null;
+}
 
 function MapPage() {
   const [mode, setMode] = useState<MapMode>('browse');
   const [selectedTransportType, setSelectedTransportType] = useState<number | null>(null);
-  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
+  const [selectedRouteNumbers, setSelectedRouteNumbers] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [showAllRoutes, setShowAllRoutes] = useState(false);
+  const [clickedStopId, setClickedStopId] = useState<number | null>(null);
   const [selectedStop, setSelectedStop] = useState<StopGeometry | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState(true);
 
@@ -57,6 +96,9 @@ function MapPage() {
     latB: number;
   } | null>(null);
   const [selectedPlanRoute, setSelectedPlanRoute] = useState<RouteOption | null>(null);
+  const [planPointA, setPlanPointA] = useState<{ lon: number; lat: number } | null>(null);
+  const [planPointB, setPlanPointB] = useState<{ lon: number; lat: number } | null>(null);
+  const [isSelectingPoint, setIsSelectingPoint] = useState<'A' | 'B' | null>(null);
 
   // Fetch data
   const { data: transportTypes } = useQuery({
@@ -85,42 +127,101 @@ function MapPage() {
     enabled: !!searchParams && mode === 'plan',
   });
 
-  // Convert stops to GeoJSON for clustering
-  const stopsGeoJSON = useMemo(() => {
-    if (!stopGeometries) return null;
-    return {
-      type: 'FeatureCollection' as const,
-      features: stopGeometries.map((stop) => ({
-        type: 'Feature' as const,
-        properties: {
-          id: stop.id,
-          name: stop.name,
-        },
-        geometry: stop.geometry,
-      })),
-    };
-  }, [stopGeometries]);
+  const groupedRoutes = useMemo(() => {
+    if (!routes) return [];
+    return groupRoutesByNumber(routes);
+  }, [routes]);
 
-  // Get selected route geometry
-  const selectedRouteGeometry = useMemo(() => {
-    if (!selectedRouteId || !routeGeometries) return null;
-    return routeGeometries.find((r) => r.routeId === selectedRouteId);
-  }, [selectedRouteId, routeGeometries]);
+  const routeIdToGroupKey = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const group of groupedRoutes) {
+      const groupKey = `${group.number}-${group.transportTypeId}`;
+      for (const routeId of group.routeIds) {
+        map.set(routeId, groupKey);
+      }
+    }
+    return map;
+  }, [groupedRoutes]);
 
+  const selectedRouteGeometries = useMemo(() => {
+    if (!routeGeometries) return [];
+    if (showAllRoutes) return routeGeometries;
+    if (selectedRouteNumbers.size === 0) return [];
+    return routeGeometries.filter((geom) => {
+      const groupKey = routeIdToGroupKey.get(geom.routeId);
+      return groupKey ? selectedRouteNumbers.has(groupKey) : false;
+    });
+  }, [routeGeometries, showAllRoutes, selectedRouteNumbers, routeIdToGroupKey]);
+
+  const { data: routesAtStop, isLoading: routesAtStopLoading } = useQuery({
+    queryKey: ['routes-at-stop', clickedStopId],
+    queryFn: () => getRoutesByStop(clickedStopId!),
+    enabled: !!clickedStopId,
+  });
 
   const handleStopClick = useCallback(
     (feature: GeoJSON.Feature<GeoJSON.Point, { id: number; name: string }>) => {
       const stop = stopGeometries?.find((s) => s.id === feature.properties.id);
       if (stop) {
         setSelectedStop(stop);
+        setClickedStopId(stop.id);
       }
     },
     [stopGeometries]
   );
 
-  const handleRouteSelect = useCallback((routeId: number) => {
-    setSelectedRouteId((prev) => (prev === routeId ? null : routeId));
-    setSelectedStop(null);
+  const handleRouteToggle = useCallback(
+    (routeNumber: string, transportTypeId: number) => {
+      if (showAllRoutes) return;
+
+      const groupKey = `${routeNumber}-${transportTypeId}`;
+      setSelectedRouteNumbers((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupKey)) {
+          next.delete(groupKey);
+        } else {
+          next.add(groupKey);
+        }
+        return next;
+      });
+    },
+    [showAllRoutes]
+  );
+
+  const handleShowAllToggle = useCallback(() => {
+    setShowAllRoutes((prev) => !prev);
+    if (!showAllRoutes) {
+      setSelectedRouteNumbers(new Set());
+    }
+  }, [showAllRoutes]);
+
+  const handleSetPointA = useCallback(() => {
+    setIsSelectingPoint('A');
+  }, []);
+
+  const handleSetPointB = useCallback(() => {
+    setIsSelectingPoint('B');
+  }, []);
+
+  const handleClearPointA = useCallback(() => {
+    setPlanPointA(null);
+    setSearchParams(null);
+    setSelectedPlanRoute(null);
+  }, []);
+
+  const handleClearPointB = useCallback(() => {
+    setPlanPointB(null);
+    setSearchParams(null);
+    setSelectedPlanRoute(null);
+  }, []);
+
+  const handlePointSelected = useCallback((point: 'A' | 'B', coords: { lon: number; lat: number }) => {
+    if (point === 'A') {
+      setPlanPointA(coords);
+    } else {
+      setPlanPointB(coords);
+    }
+    setIsSelectingPoint(null);
   }, []);
 
   const getTransportIcon = (typeId: number) => {
@@ -163,8 +264,10 @@ function MapPage() {
             }`}
             onClick={() => {
               setMode('plan');
-              setSelectedRouteId(null);
+              setSelectedRouteNumbers(new Set());
+              setShowAllRoutes(false);
               setSelectedStop(null);
+              setClickedStopId(null);
             }}
           >
             <Navigation className="h-4 w-4 inline-block mr-2" />
@@ -202,6 +305,17 @@ function MapPage() {
               </div>
             </div>
 
+            {/* Show All Routes Toggle */}
+            <div className="px-4 py-3 border-b">
+              <Button
+                variant={showAllRoutes ? 'default' : 'outline'}
+                className="w-full"
+                onClick={handleShowAllToggle}
+              >
+                {showAllRoutes ? 'Приховати всі маршрути' : 'Показати всі маршрути'}
+              </Button>
+            </div>
+
             {/* Routes List */}
             <div className="flex-1 overflow-auto">
               <button
@@ -209,7 +323,7 @@ function MapPage() {
                 onClick={() => setExpandedRoutes(!expandedRoutes)}
               >
                 <span className="font-medium text-gray-900 dark:text-white">
-                  Маршрути ({routes?.length ?? 0})
+                  Маршрути ({groupedRoutes.length})
                 </span>
                 {expandedRoutes ? (
                   <ChevronUp className="h-4 w-4 text-gray-500" />
@@ -226,73 +340,66 @@ function MapPage() {
                     </div>
                   )}
 
-                  {routes?.map((route) => {
-                    const routeId = route.routeId ?? route.id;
-                    const routeNumber = route.number ?? route.routeNumber;
+                  {groupedRoutes?.map((group) => {
+                    const groupKey = `${group.number}-${group.transportTypeId}`;
+                    const isSelected = selectedRouteNumbers.has(groupKey);
+                    const isDisabled = showAllRoutes;
+                    const color = getTransportTypeColor(group.transportTypeId);
+
                     return (
-                      <button
-                        key={`${routeId}-${route.direction}`}
-                        className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                          selectedRouteId === routeId
+                      <div
+                        key={groupKey}
+                        className={`px-4 py-3 flex items-center gap-3 transition-colors ${
+                          isSelected && !isDisabled
                             ? 'bg-blue-50 dark:bg-blue-950'
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                        onClick={() => handleRouteSelect(routeId!)}
+                        } ${isDisabled ? 'opacity-50' : ''}`}
                       >
+                        <input
+                          type="checkbox"
+                          checked={isSelected || showAllRoutes}
+                          disabled={isDisabled}
+                          onChange={() =>
+                            handleRouteToggle(group.number, group.transportTypeId)
+                          }
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                        />
+
+                        <div
+                          className="h-3 w-3 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+
                         <span
-                          className={`px-2 py-1 text-sm font-medium rounded border ${
-                            selectedRouteId === routeId
-                              ? 'border-blue-500 bg-blue-100 dark:bg-blue-900'
-                              : 'border-gray-300 dark:border-gray-600'
-                          }`}
+                          className="px-2 py-1 text-sm font-medium rounded border flex-shrink-0"
+                          style={{
+                            borderColor: color,
+                            backgroundColor: isSelected ? `${color}20` : 'transparent',
+                          }}
                         >
-                          {routeNumber}
+                          {group.number}
                         </span>
+
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-900 dark:text-white truncate">
-                            {route.transportType}
+                            {group.transportType}
                           </p>
-                          {route.direction && (
-                            <p className="text-xs text-gray-500 truncate">
-                              {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
-                            </p>
-                          )}
+                          <p className="text-xs text-gray-500">
+                            {group.routes.length} напрямки
+                          </p>
                         </div>
-                        {route.intervalMin && (
-                          <span className="text-xs text-gray-500">
-                            ~{route.intervalMin} хв
+
+                        {group.intervalMin && (
+                          <span className="text-xs text-gray-500 flex-shrink-0">
+                            ~{group.intervalMin} хв
                           </span>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </div>
-
-            {/* Selected Stop Info */}
-            {selectedStop && (
-              <div className="border-t p-4 bg-gray-50 dark:bg-gray-800">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">
-                      {selectedStop.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {selectedStop.geometry.coordinates[1].toFixed(5)},{' '}
-                      {selectedStop.geometry.coordinates[0].toFixed(5)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setSelectedStop(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -308,7 +415,16 @@ function MapPage() {
               </p>
             </div>
 
-            <RouteSearch onSearch={setSearchParams} />
+            <RouteSearch
+              onSearch={setSearchParams}
+              pointA={planPointA}
+              pointB={planPointB}
+              onSetPointA={handleSetPointA}
+              onSetPointB={handleSetPointB}
+              onClearPointA={handleClearPointA}
+              onClearPointB={handleClearPointB}
+              isSelectingPoint={isSelectingPoint}
+            />
 
             <div className="flex-1 overflow-auto p-4">
               {planLoading && (
@@ -360,63 +476,279 @@ function MapPage() {
 
       {/* Map */}
       <div className="flex-1 relative">
-        <Map center={UKRAINE_CENTER} zoom={12}>
+        <MapContainer center={LVIV_CENTER} zoom={12}>
           <MapControls showLocate showFullscreen />
 
-          {/* Browse Mode: Show stops as clusters */}
-          {mode === 'browse' && stopsGeoJSON && !selectedRouteId && (
-            <MapClusterLayer
-              data={stopsGeoJSON}
-              clusterMaxZoom={14}
-              clusterRadius={50}
-              pointColor="#3b82f6"
-              onPointClick={handleStopClick}
+          {/* Map click handler for point selection in plan mode */}
+          {mode === 'plan' && (
+            <MapClickHandler
+              isSelectingPoint={isSelectingPoint}
+              onPointSelected={handlePointSelected}
             />
           )}
 
-          {/* Browse Mode: Show selected route */}
-          {mode === 'browse' && selectedRouteGeometry && (
+          {/* Browse Mode: Show ALL stops as individual markers (NO clustering) */}
+          {mode === 'browse' && stopGeometries && (
             <>
-              <MapRoute
-                coordinates={
-                  selectedRouteGeometry.geometry.coordinates as [number, number][]
-                }
-                color="#3B82F6"
-                width={5}
-              />
+              {stopGeometries.map((stop) => {
+                const stopRoutesLoading = clickedStopId === stop.id && routesAtStopLoading;
+                const stopRoutes = clickedStopId === stop.id ? routesAtStop : null;
+
+                return (
+                  <MapMarker
+                    key={stop.id}
+                    longitude={stop.geometry.coordinates[0]}
+                    latitude={stop.geometry.coordinates[1]}
+                    onClick={() => {
+                      const feature: GeoJSON.Feature<
+                        GeoJSON.Point,
+                        { id: number; name: string }
+                      > = {
+                        type: 'Feature',
+                        properties: { id: stop.id, name: stop.name },
+                        geometry: stop.geometry,
+                      };
+                      handleStopClick(feature);
+                    }}
+                  >
+                    <MarkerContent>
+                      <div
+                        className={`h-2 w-2 rounded-full border border-white shadow-sm transition-all cursor-pointer ${
+                          selectedStop?.id === stop.id
+                            ? 'bg-green-500 h-3 w-3'
+                            : 'bg-blue-500 hover:h-2.5 hover:w-2.5'
+                        }`}
+                      />
+                    </MarkerContent>
+
+                    {selectedStop?.id === stop.id && (
+                      <MarkerPopup closeButton>
+                        <div className="min-w-[250px] max-w-[300px]">
+                          <h3 className="font-medium text-base mb-1">{stop.name}</h3>
+                          <p className="text-xs text-gray-500 mb-3">
+                            ID: {stop.id} • {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
+                          </p>
+
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">
+                            Маршрути через цю зупинку:
+                          </h4>
+
+                          {stopRoutesLoading && (
+                            <div className="flex items-center justify-center py-3">
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                            </div>
+                          )}
+
+                          {stopRoutes && stopRoutes.length === 0 && (
+                            <p className="text-sm text-gray-500">Маршрути не знайдено</p>
+                          )}
+
+                          {stopRoutes && stopRoutes.length > 0 && (
+                            <div className="space-y-1.5 max-h-[200px] overflow-auto">
+                              {stopRoutes.map((route) => {
+                                const routeNumber = route.number ?? route.routeNumber;
+                                const routeId = route.routeId ?? route.id;
+                                const color = getTransportTypeColor(route.transportTypeId);
+
+                                return (
+                                  <div
+                                    key={`${routeId}-${route.direction}`}
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 rounded border border-gray-200"
+                                  >
+                                    <div
+                                      className="h-2 w-2 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: color }}
+                                    />
+                                    <span className="font-medium text-sm">{routeNumber}</span>
+                                    <span className="text-xs text-gray-500 flex-1 truncate">
+                                      {route.transportType} •{' '}
+                                      {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
+                                    </span>
+                                    {route.intervalMin && (
+                                      <span className="text-xs text-gray-500 flex-shrink-0">
+                                        ~{route.intervalMin} хв
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </MarkerPopup>
+                    )}
+                  </MapMarker>
+                );
+              })}
             </>
           )}
 
-          {/* Browse Mode: Selected stop marker */}
-          {mode === 'browse' && selectedStop && (
+          {/* Plan Mode: Show ALL stops as individual markers */}
+          {mode === 'plan' && stopGeometries && (
+            <>
+              {stopGeometries.map((stop) => {
+                const stopRoutesLoading = clickedStopId === stop.id && routesAtStopLoading;
+                const stopRoutes = clickedStopId === stop.id ? routesAtStop : null;
+
+                return (
+                  <MapMarker
+                    key={stop.id}
+                    longitude={stop.geometry.coordinates[0]}
+                    latitude={stop.geometry.coordinates[1]}
+                    onClick={() => {
+                      const feature: GeoJSON.Feature<
+                        GeoJSON.Point,
+                        { id: number; name: string }
+                      > = {
+                        type: 'Feature',
+                        properties: { id: stop.id, name: stop.name },
+                        geometry: stop.geometry,
+                      };
+                      handleStopClick(feature);
+                    }}
+                  >
+                    <MarkerContent>
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full border border-white shadow-sm cursor-pointer ${
+                          selectedStop?.id === stop.id
+                            ? 'bg-blue-500 h-2.5 w-2.5'
+                            : 'bg-gray-400 hover:bg-gray-500'
+                        }`}
+                      />
+                    </MarkerContent>
+
+                    {selectedStop?.id === stop.id && (
+                      <MarkerPopup closeButton>
+                        <div className="min-w-[250px] max-w-[300px]">
+                          <h3 className="font-medium text-base mb-1">{stop.name}</h3>
+                          <p className="text-xs text-gray-500 mb-3">
+                            ID: {stop.id} • {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
+                          </p>
+
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">
+                            Маршрути через цю зупинку:
+                          </h4>
+
+                          {stopRoutesLoading && (
+                            <div className="flex items-center justify-center py-3">
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                            </div>
+                          )}
+
+                          {stopRoutes && stopRoutes.length === 0 && (
+                            <p className="text-sm text-gray-500">Маршрути не знайдено</p>
+                          )}
+
+                          {stopRoutes && stopRoutes.length > 0 && (
+                            <div className="space-y-1.5 max-h-[200px] overflow-auto">
+                              {stopRoutes.map((route) => {
+                                const routeNumber = route.number ?? route.routeNumber;
+                                const routeId = route.routeId ?? route.id;
+                                const color = getTransportTypeColor(route.transportTypeId);
+
+                                return (
+                                  <div
+                                    key={`${routeId}-${route.direction}`}
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 rounded border border-gray-200"
+                                  >
+                                    <div
+                                      className="h-2 w-2 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: color }}
+                                    />
+                                    <span className="font-medium text-sm">{routeNumber}</span>
+                                    <span className="text-xs text-gray-500 flex-1 truncate">
+                                      {route.transportType} •{' '}
+                                      {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
+                                    </span>
+                                    {route.intervalMin && (
+                                      <span className="text-xs text-gray-500 flex-shrink-0">
+                                        ~{route.intervalMin} хв
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </MarkerPopup>
+                    )}
+                  </MapMarker>
+                );
+              })}
+            </>
+          )}
+
+          {/* Plan Mode: Show point A marker */}
+          {mode === 'plan' && planPointA && (
             <MapMarker
-              longitude={selectedStop.geometry.coordinates[0]}
-              latitude={selectedStop.geometry.coordinates[1]}
+              longitude={planPointA.lon}
+              latitude={planPointA.lat}
             >
               <MarkerContent>
-                <div className="h-6 w-6 rounded-full bg-blue-500 border-2 border-white shadow-lg flex items-center justify-center">
-                  <MapPin className="h-3 w-3 text-white" />
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-500 border-2 border-white shadow-lg">
+                  <span className="text-white font-bold text-sm">А</span>
                 </div>
               </MarkerContent>
-              <MarkerPopup closeButton>
-                <div className="p-2 min-w-[150px]">
-                  <h4 className="font-medium text-sm">{selectedStop.name}</h4>
+              <MarkerPopup>
+                <div className="p-2">
+                  <p className="font-medium text-sm">Точка А (початок)</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Зупинка #{selectedStop.id}
+                    {planPointA.lat.toFixed(5)}, {planPointA.lon.toFixed(5)}
                   </p>
                 </div>
               </MarkerPopup>
             </MapMarker>
           )}
 
+          {/* Plan Mode: Show point B marker */}
+          {mode === 'plan' && planPointB && (
+            <MapMarker
+              longitude={planPointB.lon}
+              latitude={planPointB.lat}
+            >
+              <MarkerContent>
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-500 border-2 border-white shadow-lg">
+                  <span className="text-white font-bold text-sm">Б</span>
+                </div>
+              </MarkerContent>
+              <MarkerPopup>
+                <div className="p-2">
+                  <p className="font-medium text-sm">Точка Б (кінець)</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {planPointB.lat.toFixed(5)}, {planPointB.lon.toFixed(5)}
+                  </p>
+                </div>
+              </MarkerPopup>
+            </MapMarker>
+          )}
+
+          {/* Browse Mode: Show multiple selected routes with colors */}
+          {mode === 'browse' && selectedRouteGeometries.length > 0 && (
+            <>
+              {selectedRouteGeometries.map((geom) => (
+                <MapRoute
+                  key={`${geom.routeId}-${geom.direction || 'unknown'}`}
+                  coordinates={geom.geometry.coordinates as [number, number][]}
+                  color={getRouteColor(geom.transportTypeId, geom.direction)}
+                  width={4}
+                  opacity={0.7}
+                />
+              ))}
+            </>
+          )}
+
           {/* Plan Mode: Show selected planned route */}
           {mode === 'plan' && selectedPlanRoute && (
             <RouteMapView route={selectedPlanRoute} />
           )}
-        </Map>
+        </MapContainer>
 
         {/* Hint overlay */}
-        {mode === 'browse' && !selectedRouteId && !selectedStop && (
+        {mode === 'browse' &&
+          selectedRouteNumbers.size === 0 &&
+          !showAllRoutes &&
+          !selectedStop && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 px-4 py-2 rounded-md shadow-lg border border-gray-200 dark:border-gray-700">
             <p className="text-sm text-gray-600 dark:text-gray-300">
               Оберіть маршрут зі списку або клікніть на зупинку

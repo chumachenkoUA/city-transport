@@ -47,9 +47,9 @@ export class CtPassengerController {
     return this.ctPassengerService.createComplaint(payload);
   }
 
-  @Get('cards')
-  getMyCards() {
-    return this.ctPassengerService.getMyCards();
+  @Get('card')
+  getMyCard() {
+    return this.ctPassengerService.getMyCard();
   }
 
   @Post('cards/:cardNumber/top-up')

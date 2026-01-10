@@ -159,10 +159,9 @@ export class CtMunicipalityService {
         distance_to_next_km as "distanceToNextKm"
       from guest_api.v_route_stops
       where route_id = ${routeId}
-      order by id
     `)) as unknown as { rows: RouteStopRow[] };
 
-    return result.rows;
+    return this.orderRouteStops(result.rows);
   }
 
   async listRoutePoints(routeId: number) {
@@ -176,10 +175,9 @@ export class CtMunicipalityService {
         next_route_point_id as "nextRoutePointId"
       from guest_api.v_route_points
       where route_id = ${routeId}
-      order by id
     `)) as unknown as { rows: RoutePointRow[] };
 
-    return result.rows;
+    return this.orderRoutePoints(result.rows);
   }
 
   async createRoute(payload: CreateMunicipalityRouteDto) {
@@ -304,5 +302,67 @@ export class CtMunicipalityService {
     }
 
     return { from: query.from, to: query.to };
+  }
+
+  private orderRouteStops(rows: RouteStopRow[]) {
+    if (rows.length === 0) {
+      return rows;
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRouteStopId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: RouteStopRow[] = [];
+    const visited = new Set<number>();
+    let current: RouteStopRow | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRouteStopId
+        ? byId.get(current.nextRouteStopId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
+  }
+
+  private orderRoutePoints(rows: RoutePointRow[]) {
+    if (rows.length === 0) {
+      return rows;
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRoutePointId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: RoutePointRow[] = [];
+    const visited = new Set<number>();
+    let current: RoutePointRow | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRoutePointId
+        ? byId.get(current.nextRoutePointId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
   }
 }

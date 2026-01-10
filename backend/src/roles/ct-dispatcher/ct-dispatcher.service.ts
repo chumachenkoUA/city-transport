@@ -315,7 +315,6 @@ export class CtDispatcherService {
 
   async getScheduleDetails(id: number) {
     const schedule = await this.findScheduleById(id);
-    const route = await this.findRouteById(schedule.routeId);
 
     const stopsResult = (await this.dbService.db.execute(sql`
       select
@@ -325,7 +324,7 @@ export class CtDispatcherService {
         lon as "lon",
         lat as "lat"
       from guest_api.v_route_stops
-      where route_id = ${route.id}
+      where route_id = ${schedule.routeId}
       order by id
     `)) as unknown as { rows: StopRow[] };
 
@@ -348,9 +347,8 @@ export class CtDispatcherService {
 
     return {
       id: schedule.id,
-      routeNumber: route.number,
-      transportType: (await this.findTransportTypeById(route.transportTypeId))
-        .name,
+      routeNumber: schedule.routeNumber,
+      transportType: schedule.transportType,
       workStartTime: schedule.workStartTime,
       workEndTime: schedule.workEndTime,
       intervalMin: schedule.intervalMin,
@@ -474,17 +472,19 @@ export class CtDispatcherService {
     const result = (await this.dbService.db.execute(sql`
       select
         id as "id",
-        route_id as "routeId",
+        route_number as "routeNumber",
+        transport_type as "transportType",
         work_start_time as "workStartTime",
         work_end_time as "workEndTime",
         interval_min as "intervalMin"
-      from public.schedules
+      from dispatcher_api.v_schedules_list
       where id = ${id}
       limit 1
     `)) as unknown as {
       rows: Array<{
         id: number;
-        routeId: number;
+        routeNumber: string;
+        transportType: string;
         workStartTime: string;
         workEndTime: string;
         intervalMin: number;
@@ -496,7 +496,53 @@ export class CtDispatcherService {
       throw new NotFoundException(`Schedule ${id} not found`);
     }
 
-    return schedule;
+    const route = await this.findRouteByNumberAndType(
+      schedule.routeNumber,
+      schedule.transportType,
+    );
+
+    return {
+      id: schedule.id,
+      routeId: route.id,
+      routeNumber: schedule.routeNumber,
+      transportType: schedule.transportType,
+      workStartTime: schedule.workStartTime,
+      workEndTime: schedule.workEndTime,
+      intervalMin: schedule.intervalMin,
+    };
+  }
+
+  private async findRouteByNumberAndType(
+    routeNumber: string,
+    transportType: string,
+  ) {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id as "id",
+        number as "number",
+        transport_type_id as "transportTypeId",
+        direction as "direction"
+      from guest_api.v_routes
+      where number = ${routeNumber}
+        and transport_type_name = ${transportType}
+      limit 1
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        number: string;
+        transportTypeId: number;
+        direction: string;
+      }>;
+    };
+
+    const route = result.rows[0];
+    if (!route) {
+      throw new NotFoundException(
+        `Route ${routeNumber} (${transportType}) not found`,
+      );
+    }
+
+    return route;
   }
 
   private async resolveDriverId(payload: {

@@ -800,6 +800,7 @@ export class CtGuestService {
     maxWaitMin?: number;
     maxResults?: number;
   }) {
+    console.log('Planning route:', payload);
     const result = await this.dbService.db.execute(sql`
       SELECT route_option
       FROM guest_api.plan_route(
@@ -807,7 +808,7 @@ export class CtGuestService {
         ${payload.latA},
         ${payload.lonB},
         ${payload.latB},
-        ${payload.radius ?? 500},
+        ${payload.radius ?? 1000},
         ${payload.maxWaitMin ?? 10},
         ${payload.maxResults ?? 5}
       )

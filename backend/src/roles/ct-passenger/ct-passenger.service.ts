@@ -122,12 +122,23 @@ export class CtPassengerService {
     `);
   }
 
-  async getMyCards() {
+  async getMyCard() {
     const result = (await this.dbService.db.execute(sql`
       select id, card_number, balance, last_top_up from passenger_api.v_my_cards
     `)) as unknown as { rows: MyCardRow[] };
 
-    return result.rows;
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      cardNumber: row.card_number,
+      balance: row.balance,
+      lastUsedAt: row.last_top_up,
+      issuedAt: new Date().toISOString(), // Placeholder
+    };
   }
 
   async topUpCard(cardNumber: string, payload: TopUpDto) {
@@ -150,10 +161,14 @@ export class CtPassengerService {
       from passenger_api.v_my_trips
     `)) as unknown as { rows: MyTripRow[] };
 
-    return {
-      total: result.rows.length,
-      trips: result.rows,
-    };
+    return result.rows.map((row) => ({
+      id: row.ticket_id,
+      routeNumber: row.route_number,
+      transportType: row.transport_type,
+      cost: row.price,
+      startedAt: row.starts_at,
+      endedAt: null,
+    }));
   }
 
   async getMyFines() {
@@ -161,10 +176,13 @@ export class CtPassengerService {
       select id, amount, reason, status, issued_at from passenger_api.v_my_fines
     `)) as unknown as { rows: MyFineRow[] };
 
-    return {
-      total: result.rows.length,
-      fines: result.rows,
-    };
+    return result.rows.map((row) => ({
+      id: row.id,
+      amount: row.amount,
+      reason: row.reason,
+      status: row.status,
+      issuedAt: row.issued_at,
+    }));
   }
 
   async getFineDetails(fineId: number) {
@@ -179,7 +197,13 @@ export class CtPassengerService {
       throw new NotFoundException(`Fine ${fineId} not found`);
     }
 
-    return fine;
+    return {
+      id: fine.id,
+      amount: fine.amount,
+      reason: fine.reason,
+      status: fine.status,
+      issuedAt: fine.issued_at,
+    };
   }
 
   async createAppeal(fineId: number, payload: CreateAppealDto) {

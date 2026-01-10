@@ -28,15 +28,24 @@ export function LocationInput({
   placeholder = "Введіть назву зупинки..."
 }: LocationInputProps) {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [isLoadingGeo, setIsLoadingGeo] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
   // Пошук зупинок
   const { data: stops, isLoading: isLoadingStops } = useQuery({
-    queryKey: ['stops-search', query],
-    queryFn: () => searchStops({ q: query }),
-    enabled: query.length >= 2,
+    queryKey: ['stops-search', debouncedQuery],
+    queryFn: () => searchStops({ q: debouncedQuery }),
+    enabled: debouncedQuery.length >= 2,
   });
 
   // Оновити query коли value змінюється
@@ -164,6 +173,19 @@ export function LocationInput({
           </Button>
         )}
       </div>
+
+      {query.length > 0 && query.length < 2 && (
+        <p className="text-xs text-gray-500 mt-1">
+          Введіть мінімум 2 символи для пошуку
+        </p>
+      )}
+
+      {query.length >= 2 && query !== debouncedQuery && (
+        <p className="text-xs text-blue-500 mt-1 flex items-center gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Пошук...
+        </p>
+      )}
 
       {/* Відображення вибраної локації */}
       {value && (

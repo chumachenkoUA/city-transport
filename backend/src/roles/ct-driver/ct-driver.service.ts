@@ -44,6 +44,12 @@ type RouteStopRow = {
   distanceToNextKm: string | null;
 };
 
+type OrderedRouteStopRow = RouteStopRow & {
+  id: number;
+  prevRouteStopId: number | null;
+  nextRouteStopId: number | null;
+};
+
 type ScheduleRow = {
   workStartTime: string;
   workEndTime: string;
@@ -133,17 +139,19 @@ export class CtDriverService {
     for (const routeId of routeIds) {
       const stopsResult = (await this.dbService.db.execute(sql`
         select
+          id as "id",
           stop_id as "stopId",
           stop_name as "stopName",
           lon as "lon",
           lat as "lat",
-          distance_to_next_km as "distanceToNextKm"
+          distance_to_next_km as "distanceToNextKm",
+          prev_route_stop_id as "prevRouteStopId",
+          next_route_stop_id as "nextRouteStopId"
         from guest_api.v_route_stops
         where route_id = ${routeId}
-        order by id
-      `)) as unknown as { rows: RouteStopRow[] };
+      `)) as unknown as { rows: (RouteStopRow & { id: number; prevRouteStopId: number | null; nextRouteStopId: number | null })[] };
 
-      stopsByRouteId.set(routeId, stopsResult.rows);
+      stopsByRouteId.set(routeId, this.orderRouteStops(stopsResult.rows));
     }
 
     const tripsWithStops = trips.map((trip) => {
@@ -263,6 +271,7 @@ export class CtDriverService {
     const routeId = await this.resolveRouteId(payload);
     const result = (await this.dbService.db.execute(sql`
       select
+        id as "id",
         route_id as "routeId",
         stop_id as "stopId",
         stop_name as "stopName",
@@ -273,10 +282,9 @@ export class CtDriverService {
         next_route_stop_id as "nextRouteStopId"
       from guest_api.v_route_stops
       where route_id = ${routeId}
-      order by id
-    `)) as unknown as { rows: Array<Record<string, unknown>> };
+    `)) as unknown as { rows: OrderedRouteStopRow[] };
 
-    return result.rows;
+    return this.orderRouteStops(result.rows);
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
@@ -291,10 +299,9 @@ export class CtDriverService {
         next_route_point_id as "nextRoutePointId"
       from guest_api.v_route_points
       where route_id = ${routeId}
-      order by id
     `)) as unknown as { rows: RoutePointRow[] };
 
-    return result.rows;
+    return this.orderRoutePoints(result.rows);
   }
 
   async startTrip(payload: StartTripDto) {
@@ -342,6 +349,69 @@ export class CtDriverService {
       )
     `);
     return { ok: true };
+  }
+
+  private orderRouteStops<T extends { id: number; prevRouteStopId: number | null; nextRouteStopId: number | null }>(rows: T[]): T[] {
+    if (rows.length === 0) {
+      return rows;
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRouteStopId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: T[] = [];
+    const visited = new Set<number>();
+    let current: T | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRouteStopId
+        ? byId.get(current.nextRouteStopId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
+  }
+
+  private orderRoutePoints(rows: RoutePointRow[]): RoutePointRow[] {
+    if (rows.length === 0) {
+      return rows;
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const start = rows.find((row) => row.prevRoutePointId === null);
+
+    if (!start) {
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    const ordered: RoutePointRow[] = [];
+    const visited = new Set<number>();
+    let current: RoutePointRow | undefined = start;
+
+    while (current && !visited.has(current.id)) {
+      ordered.push(current);
+      visited.add(current.id);
+      current = current.nextRoutePointId
+        ? byId.get(current.nextRoutePointId)
+        : undefined;
+    }
+
+    if (ordered.length !== rows.length) {
+      // Fallback if chain is broken
+      return rows.sort((a, b) => a.id - b.id);
+    }
+
+    return ordered;
   }
 
   private async resolveRouteId(payload: RouteLookupDto) {

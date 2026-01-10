@@ -141,6 +141,20 @@
       "when": 1736445000000,
       "tag": "0019_route_planning",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1736534400000,
+      "tag": "0020_fix_route_planning",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1736534500000,
+      "tag": "0021_fix_permissions",
+      "breakpoints": true
     }
   ]
 }

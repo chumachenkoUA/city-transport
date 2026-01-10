@@ -13,6 +13,15 @@ export const apiClient = axios.create({
   timeout: 10000,
 });
 
+// Request interceptor for auth token
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Custom error class
 export class ApiError extends Error {
   status: number;
@@ -70,6 +79,15 @@ export async function apiPut<T>(
   config?: AxiosRequestConfig
 ): Promise<T> {
   const response = await apiClient.put<T>(endpoint, body, config);
+  return response.data;
+}
+
+export async function apiPatch<T>(
+  endpoint: string,
+  body?: unknown,
+  config?: AxiosRequestConfig
+): Promise<T> {
+  const response = await apiClient.patch<T>(endpoint, body, config);
   return response.data;
 }
 
