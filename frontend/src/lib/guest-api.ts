@@ -14,24 +14,26 @@ export interface Route {
   number?: string;
   routeNumber?: string;
   transportTypeId: number;
-  transportType: string;
+  transportType?: string;
+  transportTypeName?: string;
   direction?: string;
   intervalMin?: number | null;
   nextArrivalMin?: number | null;
 }
 
 export interface Stop {
-  stop_id: number;
+  id: number;
   name: string;
-  longitude: number;
-  latitude: number;
+  lon: number;
+  lat: number;
+  distanceM?: number;
 }
 
 export interface RouteGeometry {
   routeId: number;
   number: string;
-  transportTypeId: number;
-  transportType: string;
+  transportTypeId?: number;
+  transportType?: string;
   direction?: string;
   geometry: GeoJSON.LineString;
 }
@@ -43,9 +45,12 @@ export interface StopGeometry {
 }
 
 export interface ComplaintDto {
-  description: string;
-  route_id?: number;
-  stop_id?: number;
+  type: 'complaint' | 'suggestion';
+  message: string;
+  contactInfo?: string;
+  routeNumber?: string;
+  transportType?: string;
+  vehicleNumber?: string;
 }
 
 // API functions
@@ -62,7 +67,11 @@ export function getStopsNear(params: {
   latitude: number;
   radiusMeters: number;
 }) {
-  return apiGet<Stop[]>('/guest/stops/near', params);
+  return apiGet<Stop[]>('/guest/stops/near', {
+    lon: params.longitude,
+    lat: params.latitude,
+    radius: params.radiusMeters,
+  });
 }
 
 export function getRoutesByStop(stopId: number) {
@@ -120,7 +129,7 @@ export function getRouteSchedule(params: {
 export interface RouteSegment {
   routeId: number;
   routeNumber: string;
-  transportType: string;
+  transportTypeName: string;
   transportTypeId: number;
   direction: string;
   fromStop: {
@@ -153,6 +162,13 @@ export interface RouteOption {
     lat: number;
     waitTimeMin: number;
   };
+  transfers?: Array<{
+    stopId: number;
+    stopName: string;
+    lon: number;
+    lat: number;
+    waitTimeMin: number;
+  }>;
 }
 
 export interface StopSearchResult {
@@ -179,4 +195,34 @@ export function searchStops(params: {
   limit?: number;
 }) {
   return apiGet<StopSearchResult[]>('/guest/stops/search', params);
+}
+
+// Additional endpoints
+
+export interface RoutePoint {
+  id: number;
+  routeId: number;
+  lon: string;
+  lat: string;
+  prevRoutePointId: number | null;
+  nextRoutePointId: number | null;
+}
+
+export function getRoutePoints(params: {
+  routeId?: number;
+  routeNumber?: string;
+  transportTypeId?: number;
+  direction?: string;
+}) {
+  return apiGet<RoutePoint[]>('/guest/routes/points', params);
+}
+
+export function getRoutesBetween(params: {
+  fromLon: number;
+  fromLat: number;
+  toLon: number;
+  toLat: number;
+  radius?: number;
+}) {
+  return apiGet<Route[]>('/guest/routes/near', params);
 }

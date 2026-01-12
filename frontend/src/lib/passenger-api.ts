@@ -27,7 +27,7 @@ export interface Fine {
   reason: string;
   issuedAt: string;
   paidAt?: string;
-  status: 'PENDING' | 'PAID' | 'APPEALED' | 'CANCELLED';
+  status: string;
 }
 
 export interface CreateAppealDto {
@@ -63,6 +63,10 @@ export function getMyFines() {
   return apiGet<Fine[]>('/passenger/fines');
 }
 
+export function payFine(fineId: number, cardId: number) {
+  return apiPost(`/passenger/fines/${fineId}/pay`, { cardId });
+}
+
 export function createAppeal(fineId: number, message: string) {
   return apiPost<void>(`/passenger/fines/${fineId}/appeals`, { message });
 }
@@ -72,10 +76,140 @@ export function createPassengerComplaint(data: CreatePassengerComplaintDto) {
 }
 
 // Reuse guest types for stops if needed, or define specific ones
-export function getPassengerStopsNear(params: {
+export function getStopsNear(params: {
   longitude: number;
   latitude: number;
   radiusMeters: number;
 }) {
-  return apiGet<Stop[]>('/passenger/stops/near', params);
+  return apiGet<Stop[]>('/passenger/stops/near', {
+    lon: params.longitude,
+    lat: params.latitude,
+    radius: params.radiusMeters,
+  });
+}
+
+// Additional route endpoints
+
+export interface PassengerRoute {
+  routeId?: number;
+  id?: number;
+  number?: string;
+  routeNumber?: string;
+  transportTypeId: number;
+  transportType?: string;
+  transportTypeName?: string;
+  direction?: string;
+  intervalMin?: number | null;
+  nextArrivalMin?: number | null;
+}
+
+export interface PassengerRouteStop {
+  id: number;
+  name: string;
+  lon: string;
+  lat: string;
+  distanceToNextKm: number | null;
+}
+
+export interface PassengerRoutePoint {
+  id: number;
+  routeId: number;
+  lon: string;
+  lat: string;
+}
+
+export interface PassengerRouteSegment {
+  routeId: number;
+  routeNumber: string;
+  transportTypeName: string;
+  transportTypeId: number;
+  direction: string;
+  fromStop: {
+    id: number;
+    name: string;
+    lon: number;
+    lat: number;
+  };
+  toStop: {
+    id: number;
+    name: string;
+    lon: number;
+    lat: number;
+  };
+  distanceKm: number;
+  travelTimeMin: number;
+  departureTime: string;
+  arrivalTime: string;
+}
+
+export interface PassengerRouteOption {
+  totalTimeMin: number;
+  totalDistanceKm: number;
+  transferCount: number;
+  segments: PassengerRouteSegment[];
+}
+
+export interface FineDetails extends Fine {
+  cardNumber?: string;
+  routeNumber?: string;
+  fleetNumber?: string;
+  controllerName?: string;
+}
+
+export interface BuyTicketDto {
+  cardNumber: string;
+  routeId?: number;
+  routeNumber?: string;
+  tripId?: number;
+}
+
+export function getRoutesByStop(stopId: number) {
+  return apiGet<PassengerRoute[]>(`/passenger/stops/${stopId}/routes`);
+}
+
+export function getRouteStops(params: {
+  routeId?: number;
+  routeNumber?: string;
+  transportTypeId?: number;
+  direction?: string;
+}) {
+  return apiGet<PassengerRouteStop[]>('/passenger/routes/stops', params);
+}
+
+export function getRoutePoints(params: {
+  routeId?: number;
+  routeNumber?: string;
+  transportTypeId?: number;
+  direction?: string;
+}) {
+  return apiGet<PassengerRoutePoint[]>('/passenger/routes/points', params);
+}
+
+export function planRoute(params: {
+  lonA: number;
+  latA: number;
+  lonB: number;
+  latB: number;
+  radius?: number;
+  maxWaitMin?: number;
+  maxResults?: number;
+}) {
+  return apiGet<PassengerRouteOption[]>('/passenger/routes/plan', params);
+}
+
+export function getSchedule(params: {
+  routeId?: number;
+  routeNumber?: string;
+  transportTypeId?: number;
+  direction?: string;
+}) {
+  return apiGet('/passenger/routes/schedule', params);
+}
+
+export function buyTicket(payload: BuyTicketDto) {
+  return apiPost<{ ticketId: number }>('/passenger/tickets/buy', payload);
+}
+
+export function getFineDetails(fineId: number) {
+  return apiGet<FineDetails>(`/passenger/fines/${fineId}`);
 }

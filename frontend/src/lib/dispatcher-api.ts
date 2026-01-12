@@ -9,16 +9,20 @@ export interface DispatcherRoute {
   number: string;
   direction: DispatcherDirection;
   transportTypeId: number;
-  transportType: string;
+  transportTypeName: string;
 }
 
 export interface DispatcherScheduleListItem {
   id: number;
+  routeId: number;
   routeNumber: string;
+  direction: DispatcherDirection;
   transportType: string;
   workStartTime: string;
   workEndTime: string;
   intervalMin: number;
+  vehicleId: number | null;
+  fleetNumber: string | null;
 }
 
 export interface DispatcherScheduleStop {
@@ -33,10 +37,15 @@ export interface DispatcherScheduleStop {
 export interface DispatcherScheduleDetails {
   id: number;
   routeNumber: string;
+  routeDirection: DispatcherDirection;
   transportType: string;
+  fleetNumber: string | null;
   workStartTime: string;
   workEndTime: string;
   intervalMin: number;
+  routeDurationMin: number | null;
+  routeEndTime: string | null;
+  departures: string[];
   stops: DispatcherScheduleStop[];
 }
 
@@ -89,12 +98,12 @@ export interface DispatcherDashboard {
 }
 
 export interface DispatcherDeviationItem {
+  tripId: number;
   fleetNumber: string;
   routeNumber: string;
-  transportType: string;
-  lastRecordedAt: string;
-  status: string;
   driverName: string;
+  startsAt: string;
+  delayMinutes: number | null;
 }
 
 export interface DispatcherRoutePoint {
@@ -106,14 +115,17 @@ export interface DispatcherRoutePoint {
 
 export interface DispatcherVehicleMonitoring {
   vehicle: {
+    vehicleId: number;
     fleetNumber: string;
+    routeId: number;
     routeNumber: string;
+    routeDirection: DispatcherDirection;
     transportType: string;
-    lon: string;
-    lat: string;
-    recordedAt: string;
+    lon: string | null;
+    lat: string | null;
+    recordedAt: string | null;
     status: string;
-    driverName: string;
+    driverName: string | null;
   };
   routePoints: DispatcherRoutePoint[];
 }
@@ -121,12 +133,16 @@ export interface DispatcherVehicleMonitoring {
 export interface DispatcherDeviationCheck {
   fleetNumber: string;
   status: string;
-  deviation: string;
-  details: DispatcherVehicleMonitoring['vehicle'];
+  tripId: number;
+  routeNumber: string;
+  driverName: string;
+  startsAt: string;
+  delayMinutes: number | null;
 }
 
 export interface CreateSchedulePayload {
   routeId?: number;
+  vehicleId?: number;
   transportTypeId?: number;
   routeNumber?: string;
   direction?: DispatcherDirection;
@@ -138,9 +154,11 @@ export interface CreateSchedulePayload {
 
 export interface UpdateSchedulePayload {
   routeId?: number;
+  vehicleId?: number;
   transportTypeId?: number;
   routeNumber?: string;
   direction?: DispatcherDirection;
+  fleetNumber?: string;
   workStartTime?: string;
   workEndTime?: string;
   intervalMin?: number;
@@ -213,10 +231,14 @@ export function getDispatcherVehicleMonitoring(fleetNumber: string) {
 
 export function detectDispatcherDeviation(
   fleetNumber: string,
-  payload?: { currentTime?: string }
+  payload?: { currentTime?: string; lon?: number; lat?: number }
 ) {
   return apiPost<DispatcherDeviationCheck>(
     `/dispatcher/vehicles/${fleetNumber}/deviation`,
     payload
   );
+}
+
+export function getDispatcherRoutePoints(routeId: number) {
+  return apiGet<DispatcherRoutePoint[]>(`/dispatcher/routes/${routeId}/points`);
 }
