@@ -4,6 +4,15 @@ import { apiGet, apiPost } from './api';
 import type { Stop } from './guest-api';
 
 // Types
+export interface PassengerProfile {
+  id: number;
+  login: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  registeredAt: string;
+}
+
 export interface PassengerCard {
   id: number;
   cardNumber: string;
@@ -46,6 +55,10 @@ export interface CreatePassengerComplaintDto {
 }
 
 // API functions
+
+export function getMyProfile() {
+  return apiGet<PassengerProfile | null>('/passenger/profile');
+}
 
 export function getMyCard() {
   return apiGet<PassengerCard | null>('/passenger/card');

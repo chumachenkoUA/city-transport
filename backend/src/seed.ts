@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -121,6 +121,24 @@ function formatDate(value: string | undefined) {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 }
 
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomChoice<T>(items: T[]): T {
+  return items[randomInt(0, items.length - 1)];
+}
+
+function daysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
 // --- 3. Main Seed Function ---
 
 export async function seedDatabase() {
@@ -231,6 +249,26 @@ export async function seedDatabase() {
         .returning();
       ttMap.set(name, res.id);
       ttNameById.set(res.id, name);
+    }
+
+    // D2. Seed Vehicle Models from File
+    const modelsFile = path.join(staticDir, 'vehicle_models.txt');
+    if (fs.existsSync(modelsFile)) {
+      console.log('🚌 Seeding Vehicle Models from file...');
+      const modelsData = await readCsv(modelsFile);
+      for (const m of modelsData) {
+        const typeId = ttMap.get(m.transport_type);
+        if (typeId) {
+          await db
+            .insert(schema.vehicleModels)
+            .values({
+              name: m.model_name,
+              typeId: typeId,
+              capacity: Number(m.capacity),
+            })
+            .onConflictDoNothing();
+        }
+      }
     }
 
     // E. Seed Stops
@@ -599,15 +637,16 @@ export async function seedDatabase() {
       }
     }
 
-    await ensureRole('driver1', 'ct_driver_role');
-    await ensureRole('passenger1', 'ct_passenger_role');
+    // Create test users for all roles
+    await ensureRole('manager1', 'ct_manager_role');
     await ensureRole('dispatcher1', 'ct_dispatcher_role');
+    await ensureRole('municipality1', 'ct_municipality_role');
+    await ensureRole('accountant1', 'ct_accountant_role');
     await ensureRole('controller1', 'ct_controller_role');
+    // driver1 and passenger1 will be created in the loops below with all other drivers/passengers
 
-    // Insert Users/Drivers
-    const [driver] = await db
-      .insert(schema.drivers)
-      .values({
+    const driverSeeds = [
+      {
         login: 'driver1',
         email: 'driver1@ct.com',
         phone: '+380991112233',
@@ -615,85 +654,798 @@ export async function seedDatabase() {
         driverLicenseNumber: 'ABC123456',
         licenseCategories: ['B', 'D'],
         passportData: { series: 'AA', number: '123456' },
-      })
-      .onConflictDoUpdate({
-        target: schema.drivers.login,
-        set: { email: 'driver1@ct.com' },
-      })
-      .returning();
+      },
+      {
+        login: 'driver2',
+        email: 'driver2@ct.com',
+        phone: '+380991112234',
+        fullName: 'Kovalchuk Andrii',
+        driverLicenseNumber: 'DEF654321',
+        licenseCategories: ['B', 'D'],
+        passportData: { series: 'AB', number: '234567' },
+      },
+      {
+        login: 'driver3',
+        email: 'driver3@ct.com',
+        phone: '+380991112235',
+        fullName: 'Shevchenko Olha',
+        driverLicenseNumber: 'GHI987654',
+        licenseCategories: ['B', 'C', 'D'],
+        passportData: { series: 'AC', number: '345678' },
+      },
+      {
+        login: 'driver4',
+        email: 'driver4@ct.com',
+        phone: '+380991112236',
+        fullName: 'Melnyk Ivan',
+        driverLicenseNumber: 'JKL123789',
+        licenseCategories: ['B', 'D'],
+        passportData: { series: 'AD', number: '456789' },
+      },
+      {
+        login: 'driver5',
+        email: 'driver5@ct.com',
+        phone: '+380991112237',
+        fullName: 'Tkachenko Yuliia',
+        driverLicenseNumber: 'MNO456123',
+        licenseCategories: ['B', 'D'],
+        passportData: { series: 'AE', number: '567890' },
+      },
+    ];
 
-    const [passenger] = await db
-      .insert(schema.users)
-      .values({
+    const passengerSeeds = [
+      {
         login: 'passenger1',
         email: 'pass@ct.com',
         phone: '+380501112233',
         fullName: 'Ivanov Ivan',
-        registeredAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: schema.users.login,
-        set: { email: 'pass@ct.com' },
-      })
-      .returning();
+      },
+      {
+        login: 'passenger2',
+        email: 'passenger2@ct.com',
+        phone: '+380501112234',
+        fullName: 'Kravchenko Mariia',
+      },
+      {
+        login: 'passenger3',
+        email: 'passenger3@ct.com',
+        phone: '+380501112235',
+        fullName: 'Bondarenko Oleksii',
+      },
+      {
+        login: 'passenger4',
+        email: 'passenger4@ct.com',
+        phone: '+380501112236',
+        fullName: 'Poliakov Dmytro',
+      },
+      {
+        login: 'passenger5',
+        email: 'passenger5@ct.com',
+        phone: '+380501112237',
+        fullName: 'Moroz Olena',
+      },
+      {
+        login: 'passenger6',
+        email: 'passenger6@ct.com',
+        phone: '+380501112238',
+        fullName: 'Petrova Iryna',
+      },
+      {
+        login: 'passenger7',
+        email: 'passenger7@ct.com',
+        phone: '+380501112239',
+        fullName: 'Savchenko Maksym',
+      },
+      {
+        login: 'passenger8',
+        email: 'passenger8@ct.com',
+        phone: '+380501112240',
+        fullName: 'Zaitseva Viktoriia',
+      },
+      {
+        login: 'passenger9',
+        email: 'passenger9@ct.com',
+        phone: '+380501112241',
+        fullName: 'Honchar Oleh',
+      },
+      {
+        login: 'passenger10',
+        email: 'passenger10@ct.com',
+        phone: '+380501112242',
+        fullName: 'Rudenko Sofia',
+      },
+      {
+        login: 'passenger11',
+        email: 'passenger11@ct.com',
+        phone: '+380501112243',
+        fullName: 'Klymenko Pavlo',
+      },
+      {
+        login: 'passenger12',
+        email: 'passenger12@ct.com',
+        phone: '+380501112244',
+        fullName: 'Koval Iryna',
+      },
+    ];
 
-    if (passenger) {
+    const extraDriverCount = 7;
+    for (let i = 0; i < extraDriverCount; i++) {
+      const index = i + 6;
+      driverSeeds.push({
+        login: `driver${index}`,
+        email: `driver${index}@ct.com`,
+        phone: `+3809911122${index.toString().padStart(2, '0')}`,
+        fullName: `Driver ${index}`,
+        driverLicenseNumber: `DRV${index.toString().padStart(6, '0')}`,
+        licenseCategories: ['B', 'D'],
+        passportData: { series: 'AF', number: `${index}`.padStart(6, '0') },
+      });
+    }
+
+    const extraPassengerCount = 18;
+    for (let i = 0; i < extraPassengerCount; i++) {
+      const index = i + 13;
+      passengerSeeds.push({
+        login: `passenger${index}`,
+        email: `passenger${index}@ct.com`,
+        phone: `+3805011122${index.toString().padStart(2, '0')}`,
+        fullName: `Passenger ${index}`,
+      });
+    }
+
+    for (const seed of driverSeeds) {
+      await ensureRole(seed.login, 'ct_driver_role');
+    }
+
+    for (const seed of passengerSeeds) {
+      await ensureRole(seed.login, 'ct_passenger_role');
+    }
+
+    const drivers: Array<typeof schema.drivers.$inferSelect> = [];
+    for (const seed of driverSeeds) {
+      const [created] = await db
+        .insert(schema.drivers)
+        .values(seed)
+        .onConflictDoUpdate({
+          target: schema.drivers.login,
+          set: { email: seed.email },
+        })
+        .returning();
+      if (created) {
+        drivers.push(created);
+      }
+    }
+
+    const passengers: Array<typeof schema.users.$inferSelect> = [];
+    for (const seed of passengerSeeds) {
+      const [created] = await db
+        .insert(schema.users)
+        .values({ ...seed, registeredAt: new Date() })
+        .onConflictDoUpdate({
+          target: schema.users.login,
+          set: { email: seed.email },
+        })
+        .returning();
+      if (created) {
+        passengers.push(created);
+      }
+    }
+
+    const passenger = passengers.find((item) => item.login === 'passenger1');
+    const driver = drivers.find((item) => item.login === 'driver1');
+
+    const cardSeeds: Array<typeof schema.transportCards.$inferInsert> =
+      passengers.map((p, index) => ({
+        userId: p.id,
+        cardNumber: `CARD-${String(index + 1).padStart(4, '0')}`,
+        balance:
+          p.login === 'passenger1' ? '100.00' : randomInt(0, 500).toFixed(2),
+      }));
+
+    if (cardSeeds.length > 0) {
       await db
         .insert(schema.transportCards)
-        .values({
-          userId: passenger.id,
-          cardNumber: 'CARD-0001',
-          balance: '100.00',
-        })
+        .values(cardSeeds)
         .onConflictDoNothing();
+    }
+
+    const cards = await db.select().from(schema.transportCards);
+    const cardTopUps: Array<typeof schema.cardTopUps.$inferInsert> = [];
+    for (const card of cards) {
+      const topUpCount = randomInt(3, 6);
+      for (let i = 0; i < topUpCount; i++) {
+        const days = randomInt(1, 28);
+        cardTopUps.push({
+          cardId: card.id,
+          amount: randomInt(50, 200).toFixed(2),
+          toppedUpAt: daysAgo(days),
+        });
+      }
+    }
+
+    if (cardTopUps.length > 0) {
+      await db.insert(schema.cardTopUps).values(cardTopUps);
     }
 
     // I. Vehicles & Active Data
     console.log('🚌 Seeding Vehicles...');
-    const someRoute = await db.query.routes.findFirst();
+    const someRoutes = await db
+      .select()
+      .from(schema.routes)
+      .orderBy(asc(schema.routes.id))
+      .limit(8);
 
-    if (someRoute && driver) {
-      const ttName = ttNameById.get(someRoute.transportTypeId) || 'Автобус';
+    const vehicles: Array<typeof schema.vehicles.$inferSelect> = [];
+    const vehiclesByRoute = new Map<
+      number,
+      Array<typeof schema.vehicles.$inferSelect>
+    >();
+    const vehicleModelsByType = new Map<number, number>();
 
-      const [model] = await db
-        .insert(schema.vehicleModels)
-        .values({
-          name: 'Default Model',
-          typeId: someRoute.transportTypeId,
-          capacity: getTransportCapacity(ttName),
-        })
-        .returning();
+    const vehiclesPerRoute = 2;
+    let vehicleIndex = 0;
+    for (const route of someRoutes) {
+      const typeName = ttNameById.get(route.transportTypeId) || 'Автобус';
+      let modelId = vehicleModelsByType.get(route.transportTypeId);
 
-      const [veh] = await db
-        .insert(schema.vehicles)
-        .values({
-          fleetNumber: '1001',
-          routeId: someRoute.id,
-          vehicleModelId: model.id,
-        })
-        .onConflictDoNothing()
-        .returning();
-
-      if (veh) {
-        await db
-          .insert(schema.driverVehicleAssignments)
+      if (!modelId) {
+        const [model] = await db
+          .insert(schema.vehicleModels)
           .values({
-            driverId: driver.id,
-            vehicleId: veh.id,
-            assignedAt: new Date(),
+            name: `Seed ${typeName} Model`,
+            typeId: route.transportTypeId,
+            capacity: getTransportCapacity(typeName),
           })
-          .onConflictDoNothing();
+          .returning();
+        modelId = model.id;
+        vehicleModelsByType.set(route.transportTypeId, modelId);
+      }
 
-        // One Active Trip
-        await db.insert(schema.trips).values({
-          routeId: someRoute.id,
-          vehicleId: veh.id,
-          driverId: driver.id,
-          startsAt: new Date(),
-          passengerCount: 0,
-        });
+      for (let i = 0; i < vehiclesPerRoute; i++) {
+        const [vehicle] = await db
+          .insert(schema.vehicles)
+          .values({
+            fleetNumber: `SEED-${String(vehicleIndex + 1).padStart(3, '0')}`,
+            routeId: route.id,
+            vehicleModelId: modelId,
+          })
+          .onConflictDoNothing()
+          .returning();
+
+        if (vehicle) {
+          vehicles.push(vehicle);
+          const list = vehiclesByRoute.get(route.id) ?? [];
+          list.push(vehicle);
+          vehiclesByRoute.set(route.id, list);
+        }
+        vehicleIndex++;
       }
     }
+
+    for (let index = 0; index < vehicles.length; index++) {
+      const driverEntry = drivers[index % drivers.length];
+      if (!driverEntry) continue;
+      await db
+        .insert(schema.driverVehicleAssignments)
+        .values({
+          driverId: driverEntry.id,
+          vehicleId: vehicles[index].id,
+          assignedAt: new Date(),
+        })
+        .onConflictDoNothing();
+    }
+
+    // J. Passenger History (passenger1)
+    console.log('🧾 Seeding passenger1 history...');
+    if (!passenger || !driver) {
+      console.warn('⚠️ passenger1 or driver1 missing, skipping history seed.');
+    } else {
+      const [card] = await db
+        .select()
+        .from(schema.transportCards)
+        .where(eq(schema.transportCards.userId, passenger.id))
+        .limit(1);
+
+      if (!card) {
+        console.warn('⚠️ transport card not found for passenger1.');
+      } else {
+        const historyRoutes = await db
+          .select()
+          .from(schema.routes)
+          .where(eq(schema.routes.isActive, true))
+          .orderBy(asc(schema.routes.id))
+          .limit(6);
+
+        if (historyRoutes.length === 0) {
+          console.warn('⚠️ No routes available for passenger history.');
+        } else {
+          const modelByTypeId = new Map<number, number>();
+          const vehicleByRouteId = new Map<number, number>();
+          let fleetNumberCounter = 2001;
+
+          for (const route of historyRoutes) {
+            const typeName = ttNameById.get(route.transportTypeId) || 'Автобус';
+            let modelId = modelByTypeId.get(route.transportTypeId);
+
+            if (!modelId) {
+              const [newModel] = await db
+                .insert(schema.vehicleModels)
+                .values({
+                  name: `History ${typeName} Model`,
+                  typeId: route.transportTypeId,
+                  capacity: getTransportCapacity(typeName),
+                })
+                .returning();
+
+              modelId = newModel.id;
+              modelByTypeId.set(route.transportTypeId, modelId);
+            }
+
+            const [vehicle] = await db
+              .insert(schema.vehicles)
+              .values({
+                fleetNumber: `H-${fleetNumberCounter++}`,
+                routeId: route.id,
+                vehicleModelId: modelId,
+              })
+              .returning();
+
+            if (vehicle) {
+              vehicleByRouteId.set(route.id, vehicle.id);
+            }
+          }
+
+          const historyTripCount = 12;
+          const baseDate = new Date();
+          baseDate.setDate(baseDate.getDate() - 29);
+          const startHours = [6, 7, 9, 11, 13, 15, 17, 19, 21];
+          const tripsToInsert: Array<typeof schema.trips.$inferInsert> = [];
+          const tripTimes: Array<{
+            startsAt: Date;
+            endsAt: Date;
+            durationMin: number;
+          }> = [];
+
+          for (let i = 0; i < historyTripCount; i++) {
+            const route = historyRoutes[i % historyRoutes.length];
+            const vehicleId = vehicleByRouteId.get(route.id);
+            if (!vehicleId) continue;
+
+            const tripDate = new Date(baseDate);
+            tripDate.setDate(baseDate.getDate() + i * 2);
+            const startHour = startHours[i % startHours.length];
+            const startMinute = (i * 7) % 50;
+            tripDate.setHours(startHour, startMinute, 0, 0);
+
+            const durationMinutes = 18 + (i % 5) * 7;
+            const endsAt = new Date(
+              tripDate.getTime() + durationMinutes * 60 * 1000,
+            );
+
+            tripsToInsert.push({
+              routeId: route.id,
+              vehicleId,
+              driverId: driver.id,
+              startsAt: new Date(tripDate),
+              endsAt,
+              passengerCount: 5 + (i % 12),
+            });
+            tripTimes.push({
+              startsAt: new Date(tripDate),
+              endsAt,
+              durationMin: durationMinutes,
+            });
+          }
+
+          if (tripsToInsert.length > 0) {
+            const insertedTrips = await db
+              .insert(schema.trips)
+              .values(tripsToInsert)
+              .returning();
+
+            const ticketsToInsert: Array<typeof schema.tickets.$inferInsert> =
+              [];
+            const finesToInsert: Array<typeof schema.fines.$inferInsert> = [];
+
+            insertedTrips.forEach((trip, index) => {
+              const meta = tripTimes[index];
+              if (!meta) return;
+              const purchaseOffsetMin = Math.min(
+                7,
+                Math.max(3, Math.floor(meta.durationMin / 3)),
+              );
+              const purchasedAt = new Date(
+                meta.startsAt.getTime() + purchaseOffsetMin * 60 * 1000,
+              );
+
+              ticketsToInsert.push({
+                tripId: trip.id,
+                cardId: card.id,
+                price: (8 + (index % 4) * 2).toFixed(2),
+                purchasedAt,
+              });
+            });
+
+            if (ticketsToInsert.length > 0) {
+              await db.insert(schema.tickets).values(ticketsToInsert);
+            }
+
+            const fineTripIndexes = [
+              1,
+              Math.floor(insertedTrips.length / 2),
+              insertedTrips.length - 1,
+            ].filter(
+              (value, index, array) =>
+                value >= 0 &&
+                value < insertedTrips.length &&
+                array.indexOf(value) === index,
+            );
+
+            const fineStatuses: Array<
+              'Оплачено' | 'Очікує сплати' | 'Відмінено'
+            > = ['Оплачено', 'Очікує сплати', 'Відмінено'];
+            const fineReasons = [
+              'Проїзд без квитка',
+              'Непідтверджена оплата',
+              'Порушення правил перевезення',
+            ];
+            const fineAmounts = ['60.00', '80.00', '50.00'];
+
+            fineTripIndexes.forEach((tripIndex, index) => {
+              const trip = insertedTrips[tripIndex];
+              const meta = tripTimes[tripIndex];
+              if (!trip || !meta) return;
+
+              const issuedAt = new Date(
+                meta.startsAt.getTime() +
+                  Math.floor(meta.durationMin / 2) * 60 * 1000,
+              );
+
+              finesToInsert.push({
+                userId: passenger.id,
+                tripId: trip.id,
+                status: fineStatuses[index] ?? 'Очікує сплати',
+                amount: fineAmounts[index] ?? '50.00',
+                reason: fineReasons[index] ?? 'Порушення правил проїзду',
+                issuedAt,
+              });
+            });
+
+            if (finesToInsert.length > 0) {
+              await db.insert(schema.fines).values(finesToInsert);
+            }
+          }
+        }
+      }
+    }
+
+    // K. Extended Operational Data
+    console.log('📊 Seeding extended operational data...');
+    const historicalTrips: Array<typeof schema.trips.$inferSelect> = [];
+
+    if (someRoutes.length > 0 && vehicles.length > 0 && drivers.length > 0) {
+      const historicalTripCount = 120;
+      const tripInserts: Array<typeof schema.trips.$inferInsert> = [];
+
+      for (let i = 0; i < historicalTripCount; i++) {
+        const route = someRoutes[i % someRoutes.length];
+        const routeVehicles = vehiclesByRoute.get(route.id);
+        if (!routeVehicles || routeVehicles.length === 0) {
+          continue;
+        }
+        const vehicle = routeVehicles[i % routeVehicles.length];
+        const driverEntry = drivers[i % drivers.length];
+        const daysBack = randomInt(1, 30);
+        const startDate = daysAgo(daysBack);
+        startDate.setHours(randomInt(6, 22), randomInt(0, 50), 0, 0);
+        const durationMinutes = randomInt(20, 60);
+
+        tripInserts.push({
+          routeId: route.id,
+          vehicleId: vehicle.id,
+          driverId: driverEntry.id,
+          startsAt: startDate,
+          endsAt: addMinutes(startDate, durationMinutes),
+          passengerCount: randomInt(10, 80),
+        });
+      }
+
+      if (tripInserts.length > 0) {
+        const inserted = await db
+          .insert(schema.trips)
+          .values(tripInserts)
+          .returning();
+        historicalTrips.push(...inserted);
+      }
+
+      const activeTripsCount = Math.min(5, vehicles.length);
+      for (let i = 0; i < activeTripsCount; i++) {
+        const route = someRoutes[i % someRoutes.length];
+        const routeVehicles = vehiclesByRoute.get(route.id);
+        if (!routeVehicles || routeVehicles.length === 0) {
+          continue;
+        }
+        const vehicle = routeVehicles[i % routeVehicles.length];
+        const driverEntry = drivers[i % drivers.length];
+        const startsAt =
+          i === 0 ? addMinutes(new Date(), -20) : addMinutes(new Date(), -2);
+
+        const [activeTrip] = await db
+          .insert(schema.trips)
+          .values({
+            routeId: route.id,
+            vehicleId: vehicle.id,
+            driverId: driverEntry.id,
+            startsAt,
+            passengerCount: randomInt(5, 20),
+          })
+          .returning();
+
+        if (activeTrip) {
+          const firstStopResult = (await db.execute(sql`
+            SELECT s.lon, s.lat
+            FROM ${sql.raw('route_stops')} rs
+            JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
+            WHERE rs.route_id = ${route.id}
+              AND rs.prev_route_stop_id IS NULL
+            LIMIT 1
+          `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
+          const firstStop = firstStopResult.rows[0];
+
+          if (firstStop?.lon && firstStop?.lat) {
+            for (let j = 0; j < 4; j++) {
+              await db.insert(schema.vehicleGpsLogs).values({
+                vehicleId: vehicle.id,
+                lon: firstStop.lon,
+                lat: firstStop.lat,
+                recordedAt: addMinutes(new Date(), -j * 3),
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // L. Finance & Tickets
+    console.log('💳 Seeding finance data...');
+    const expensesCategories = ['Паливо', 'Ремонт', 'Мийка', 'Запчастини'];
+    const expensesToInsert: Array<typeof schema.expenses.$inferInsert> = [];
+    const expensesCount = randomInt(20, 30);
+
+    for (let i = 0; i < expensesCount; i++) {
+      expensesToInsert.push({
+        category: randomChoice(expensesCategories),
+        amount: randomInt(500, 5000).toFixed(2),
+        description: 'Seed expense',
+        occurredAt: daysAgo(randomInt(1, 30)),
+      });
+    }
+
+    if (expensesToInsert.length > 0) {
+      await db.insert(schema.expenses).values(expensesToInsert);
+    }
+
+    const salaryPayments: Array<typeof schema.salaryPayments.$inferInsert> = [];
+    const previousMonth = new Date();
+    previousMonth.setMonth(previousMonth.getMonth() - 1);
+
+    for (const driverEntry of drivers) {
+      const rate = randomInt(120, 200);
+      const units = randomInt(120, 180);
+      salaryPayments.push({
+        driverId: driverEntry.id,
+        employeeRole: 'Водій',
+        rate: rate.toFixed(2),
+        units,
+        total: (rate * units).toFixed(2),
+        paidAt: new Date(
+          previousMonth.getFullYear(),
+          previousMonth.getMonth(),
+          randomInt(20, 28),
+        ),
+      });
+    }
+
+    if (salaryPayments.length > 0) {
+      await db.insert(schema.salaryPayments).values(salaryPayments);
+    }
+
+    const ticketTrips = historicalTrips.length
+      ? historicalTrips
+      : await db
+          .select()
+          .from(schema.trips)
+          .where(sql`${schema.trips.endsAt} is not null`);
+    const ticketCards = cards.length
+      ? cards
+      : await db.select().from(schema.transportCards);
+
+    if (ticketTrips.length > 0 && ticketCards.length > 0) {
+      const ticketsToInsert: Array<typeof schema.tickets.$inferInsert> = [];
+      for (let i = 0; i < 300; i++) {
+        const trip = randomChoice(ticketTrips);
+        const card = randomChoice(ticketCards);
+        const start = new Date(trip.startsAt);
+        const end = trip.endsAt ? new Date(trip.endsAt) : addMinutes(start, 30);
+        const maxMinutes = Math.max(
+          3,
+          Math.round((end.getTime() - start.getTime()) / 60000) - 2,
+        );
+        const purchasedAt = addMinutes(start, randomInt(2, maxMinutes));
+
+        ticketsToInsert.push({
+          tripId: trip.id,
+          cardId: card.id,
+          price: randomChoice(['8.00', '10.00', '12.00']),
+          purchasedAt,
+        });
+      }
+
+      await db.insert(schema.tickets).values(ticketsToInsert);
+    }
+
+    // M. Fines & Complaints
+    console.log('🧾 Seeding fines and complaints...');
+    if (ticketTrips.length > 0 && passengers.length > 0) {
+      const fineStatuses: Array<(typeof schema.fines.$inferInsert)['status']> =
+        ['Очікує сплати', 'Оплачено', 'В процесі'];
+      const fineReasons = [
+        'Проїзд без квитка',
+        'Непідтверджена оплата',
+        'Порушення правил перевезення',
+      ];
+      const fineCount = randomInt(12, 18);
+      const finesToInsert: Array<typeof schema.fines.$inferInsert> = [];
+
+      for (let i = 0; i < fineCount; i++) {
+        const trip = randomChoice(ticketTrips);
+        const user = randomChoice(passengers);
+        finesToInsert.push({
+          userId: user.id,
+          tripId: trip.id,
+          status: fineStatuses[i % fineStatuses.length],
+          amount: randomChoice(['60.00', '80.00', '50.00']),
+          reason: fineReasons[i % fineReasons.length],
+          issuedAt: addMinutes(new Date(trip.startsAt), randomInt(5, 20)),
+        });
+      }
+
+      const insertedFines = await db
+        .insert(schema.fines)
+        .values(finesToInsert)
+        .returning();
+
+      const appealsToInsert: Array<typeof schema.fineAppeals.$inferInsert> = [];
+      const appealStatuses = [
+        'Подано',
+        'Перевіряється',
+        'Відхилено',
+        'Прийнято',
+      ];
+      for (const fine of insertedFines) {
+        if (fine.status !== 'В процесі') continue;
+        appealsToInsert.push({
+          fineId: fine.id,
+          message: 'Seed appeal message',
+          status: randomChoice(appealStatuses),
+          createdAt: addMinutes(new Date(fine.issuedAt), randomInt(10, 120)),
+        });
+      }
+
+      if (appealsToInsert.length > 0) {
+        await db.insert(schema.fineAppeals).values(appealsToInsert);
+      }
+    }
+
+    const complaintTopics = [
+      'Брудний салон',
+      'Водій палив',
+      'Запізнення',
+      'Пропозиція маршруту',
+    ];
+    const complaintStatuses = ['Подано', 'Розглянуто'];
+    const complaintsCount = randomInt(15, 25);
+    const complaintsToInsert: Array<
+      typeof schema.complaintsSuggestions.$inferInsert
+    > = [];
+
+    for (let i = 0; i < complaintsCount; i++) {
+      const route = someRoutes.length ? randomChoice(someRoutes) : undefined;
+      const vehicle = vehicles.length ? randomChoice(vehicles) : undefined;
+      const user = passengers.length ? randomChoice(passengers) : undefined;
+      const isSuggestion =
+        complaintTopics[i % complaintTopics.length] === 'Пропозиція маршруту';
+      complaintsToInsert.push({
+        userId: user?.id,
+        type: isSuggestion ? 'Пропозиція' : 'Скарга',
+        message: complaintTopics[i % complaintTopics.length],
+        status: randomChoice(complaintStatuses),
+        routeId: route?.id,
+        vehicleId: vehicle?.id,
+        contactInfo: user ? user.email : 'guest@ct.com',
+        createdAt: daysAgo(randomInt(1, 30)),
+      });
+    }
+
+    if (complaintsToInsert.length > 0) {
+      await db.insert(schema.complaintsSuggestions).values(complaintsToInsert);
+    }
+
+    // N. Additional logs and budgets
+    console.log('📍 Seeding GPS logs and budgets...');
+    const stopCoords = Array.from(stopCoordsMap.values());
+    if (stopCoords.length > 0 && passengers.length > 0) {
+      const userGpsLogs: Array<typeof schema.userGpsLogs.$inferInsert> = [];
+      for (const user of passengers) {
+        const logCount = randomInt(3, 6);
+        for (let i = 0; i < logCount; i++) {
+          const coords = randomChoice(stopCoords);
+          userGpsLogs.push({
+            userId: user.id,
+            lon: coords.lon.toFixed(7),
+            lat: coords.lat.toFixed(7),
+            recordedAt: daysAgo(randomInt(0, 20)),
+          });
+        }
+      }
+      await db.insert(schema.userGpsLogs).values(userGpsLogs);
+    }
+
+    if (vehicles.length > 0 && stopCoords.length > 0) {
+      const vehicleGpsLogs: Array<typeof schema.vehicleGpsLogs.$inferInsert> =
+        [];
+      for (const vehicle of vehicles) {
+        const logCount = randomInt(4, 8);
+        for (let i = 0; i < logCount; i++) {
+          const coords = randomChoice(stopCoords);
+          vehicleGpsLogs.push({
+            vehicleId: vehicle.id,
+            lon: coords.lon.toFixed(7),
+            lat: coords.lat.toFixed(7),
+            recordedAt: daysAgo(randomInt(0, 15)),
+          });
+        }
+      }
+      await db.insert(schema.vehicleGpsLogs).values(vehicleGpsLogs);
+    }
+
+    // Budget entries with government subsidies breakdown
+    const budgetEntries: Array<typeof schema.budgets.$inferInsert> = [];
+    const currentMonth = new Date();
+    const budgetNotes = [
+      'Держбюджет: 180,000 грн | Власні доходи: квитки + штрафи',
+      'Держбюджет: 175,000 грн | Субвенція на оновлення парку',
+      'Держбюджет: 190,000 грн | Компенсація пільгових перевезень',
+      'Держбюджет: 185,000 грн | Базове фінансування',
+      'Держбюджет: 200,000 грн | Цільова дотація на паливо',
+      'Держбюджет: 170,000 грн | Квартальне фінансування',
+    ];
+
+    for (let i = 0; i < 6; i++) {
+      const monthDate = new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() - i,
+        1,
+      );
+      // Government budget base: 170-200k, operational income: 50-150k
+      const govBudget = randomInt(170000, 200000);
+      const operationalIncome = randomInt(50000, 150000);
+      const totalIncome = govBudget + operationalIncome;
+      // Expenses: salaries ~60%, fuel ~25%, maintenance ~15%
+      const salaryExpenses = randomInt(100000, 150000);
+      const fuelExpenses = randomInt(40000, 70000);
+      const maintenanceExpenses = randomInt(20000, 40000);
+      const totalExpenses = salaryExpenses + fuelExpenses + maintenanceExpenses;
+
+      budgetEntries.push({
+        month: monthDate.toISOString().slice(0, 10),
+        income: totalIncome.toFixed(2),
+        expenses: totalExpenses.toFixed(2),
+        note: budgetNotes[i] || 'Плановий бюджет',
+      });
+    }
+
+    await db.insert(schema.budgets).values(budgetEntries).onConflictDoNothing();
 
     console.log('🏁 Seed completed successfully!');
   } catch (e) {

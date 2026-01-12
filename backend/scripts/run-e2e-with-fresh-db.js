@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+1#!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const { Client } = require('pg');
@@ -33,12 +33,30 @@ const env = {
 const scriptName = process.argv[2] ?? 'test:e2e:jest';
 const scriptArgs = process.argv.slice(3);
 
+async function waitForDb(connectionString, retries = 30, interval = 1000) {
+  for (let i = 0; i < retries; i++) {
+    const client = new Client({ connectionString });
+    try {
+      await client.connect();
+      await client.end();
+      return;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.log(`Database not ready, retrying in ${interval}ms... (${i + 1}/${retries})`);
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  }
+}
+
 async function main() {
   let adminClient;
   let created = false;
   let exitCode = 1;
 
   try {
+    // Wait for DB availability using a fresh client each time
+    await waitForDb(adminUrl.toString());
+
     adminClient = new Client({ connectionString: adminUrl.toString() });
     await adminClient.connect();
 

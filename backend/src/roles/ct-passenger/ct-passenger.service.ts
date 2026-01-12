@@ -10,6 +10,8 @@ import { CreatePassengerComplaintDto } from './dto/create-complaint.dto';
 import { TopUpDto } from './dto/top-up.dto';
 import { BuyTicketDto } from './dto/buy-ticket.dto';
 
+import { PayFineDto } from './dto/pay-fine.dto';
+
 type MyCardRow = {
   id: number;
   card_number: string;
@@ -65,6 +67,12 @@ export class CtPassengerService {
     private readonly guestService: CtGuestService,
   ) {}
 
+  async payFine(fineId: number, payload: PayFineDto) {
+    await this.dbService.db.execute(sql`
+      select passenger_api.pay_fine(${fineId}::bigint, ${payload.cardId}::bigint)
+    `);
+  }
+
   async getStopsNear(payload: StopsNearDto) {
     const result = (await this.dbService.db.execute(sql`
       select id, name, lon, lat, distance_m
@@ -93,17 +101,16 @@ export class CtPassengerService {
     return this.guestService.getRoutePoints(query);
   }
 
-  async getRoutesBetween(payload: RoutesBetweenDto) {
-    const result = (await this.dbService.db.execute(sql`
-      select route_id, route_number, transport_type, start_stop_name, end_stop_name
-      from passenger_api.find_routes_between(
-        ${payload.lonA}, ${payload.latA},
-        ${payload.lonB}, ${payload.latB},
-        ${payload.radius ?? 800}
-      )
-    `)) as unknown as { rows: RouteBetweenRow[] };
-
-    return result.rows;
+  async planRoute(payload: {
+    lonA: number;
+    latA: number;
+    lonB: number;
+    latB: number;
+    radius?: number;
+    maxWaitMin?: number;
+    maxResults?: number;
+  }) {
+    return this.guestService.planRoute(payload);
   }
 
   getSchedule(query: RouteLookupDto) {
@@ -113,13 +120,41 @@ export class CtPassengerService {
   async createComplaint(payload: CreatePassengerComplaintDto) {
     await this.dbService.db.execute(sql`
       select passenger_api.submit_complaint(
-        ${payload.type},
-        ${payload.message},
-        ${payload.routeNumber ?? null},
-        ${payload.transportType ?? null},
-        ${payload.vehicleNumber ?? null}
+        ${payload.type}::text,
+        ${payload.message}::text,
+        ${payload.routeNumber ?? null}::text,
+        ${payload.transportType ?? null}::text,
+        ${payload.vehicleNumber ?? null}::text
       )
     `);
+  }
+
+  async getMyProfile() {
+    const result = (await this.dbService.db.execute(sql`
+      SELECT id, login, full_name, email, phone, registered_at
+      FROM passenger_api.v_my_profile
+    `)) as unknown as { rows: Array<{
+      id: number;
+      login: string;
+      full_name: string;
+      email: string;
+      phone: string;
+      registered_at: string;
+    }> };
+
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      login: row.login,
+      fullName: row.full_name,
+      email: row.email,
+      phone: row.phone,
+      registeredAt: row.registered_at,
+    };
   }
 
   async getMyCard() {
@@ -143,13 +178,13 @@ export class CtPassengerService {
 
   async topUpCard(cardNumber: string, payload: TopUpDto) {
     await this.dbService.db.execute(sql`
-      select passenger_api.top_up_card(${cardNumber}, ${payload.amount})
+      select passenger_api.top_up_card(${cardNumber}::text, ${payload.amount}::numeric)
     `);
   }
 
   async buyTicket(payload: BuyTicketDto) {
     const result = (await this.dbService.db.execute(sql`
-      select passenger_api.buy_ticket(${payload.cardId}, ${payload.tripId}, ${payload.price})
+      select passenger_api.buy_ticket(${payload.cardId}::bigint, ${payload.tripId}::bigint, ${payload.price}::numeric)
     `)) as unknown as { rows: { buy_ticket: number }[] };
 
     return { ticketId: result.rows[0].buy_ticket };
@@ -208,7 +243,7 @@ export class CtPassengerService {
 
   async createAppeal(fineId: number, payload: CreateAppealDto) {
     const result = (await this.dbService.db.execute(sql`
-      select passenger_api.submit_fine_appeal(${fineId}, ${payload.message})
+      select passenger_api.submit_fine_appeal(${fineId}::bigint, ${payload.message}::text)
     `)) as unknown as { rows: { submit_fine_appeal: number }[] };
 
     return { appealId: result.rows[0].submit_fine_appeal };

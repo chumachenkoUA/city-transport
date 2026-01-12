@@ -21,6 +21,12 @@ export class UpdateDispatcherScheduleDto {
   @IsInt()
   @Min(1)
   @IsOptional()
+  vehicleId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
   transportTypeId?: number;
 
   @IsString()
@@ -29,17 +35,21 @@ export class UpdateDispatcherScheduleDto {
 
   @IsString()
   @IsOptional()
+  fleetNumber?: string;
+
+  @IsString()
+  @IsOptional()
   @IsIn(ROUTE_DIRECTIONS)
   direction?: (typeof ROUTE_DIRECTIONS)[number];
 
   @IsString()
   @IsOptional()
-  @Matches(/^\d{2}:\d{2}:\d{2}$/)
+  @Matches(/^\d{2}:\d{2}(:\d{2})?$/)
   workStartTime?: string;
 
   @IsString()
   @IsOptional()
-  @Matches(/^\d{2}:\d{2}:\d{2}$/)
+  @Matches(/^\d{2}:\d{2}(:\d{2})?$/)
   workEndTime?: string;
 
   @Type(() => Number)

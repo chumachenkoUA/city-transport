@@ -9,7 +9,6 @@ CREATE SCHEMA IF NOT EXISTS controller_api AUTHORIZATION ct_migrator;
 CREATE SCHEMA IF NOT EXISTS dispatcher_api AUTHORIZATION ct_migrator;
 CREATE SCHEMA IF NOT EXISTS municipality_api AUTHORIZATION ct_migrator;
 CREATE SCHEMA IF NOT EXISTS accountant_api AUTHORIZATION ct_migrator;
-CREATE SCHEMA IF NOT EXISTS admin_api AUTHORIZATION ct_migrator;
 
 -- 2. Setup Public Tables Ownership (Ensures Migrator can manage objects created in 0000)
 DO $$
@@ -29,7 +28,7 @@ END $$;
 ALTER SCHEMA public OWNER TO ct_migrator;
 
 -- 3. Grant Usage on Schemas
-GRANT USAGE ON SCHEMA public TO ct_admin_role, ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_manager_role, ct_municipality_role;
+GRANT USAGE ON SCHEMA public TO ct_accountant_role, ct_dispatcher_role, ct_controller_role, ct_driver_role, ct_passenger_role, ct_guest_role, ct_manager_role, ct_municipality_role;
 GRANT USAGE ON SCHEMA auth TO ct_guest_role, ct_passenger_role;
 GRANT USAGE ON SCHEMA guest_api TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;
 GRANT USAGE ON SCHEMA driver_api TO ct_driver_role;
@@ -39,7 +38,6 @@ GRANT USAGE ON SCHEMA controller_api TO ct_controller_role;
 GRANT USAGE ON SCHEMA dispatcher_api TO ct_dispatcher_role;
 GRANT USAGE ON SCHEMA municipality_api TO ct_municipality_role;
 GRANT USAGE ON SCHEMA accountant_api TO ct_accountant_role;
-GRANT USAGE ON SCHEMA admin_api TO ct_admin_role;
 
 -- 4. Auth registration logic
 CREATE OR REPLACE FUNCTION auth.register_passenger(
@@ -90,7 +88,6 @@ ALTER TABLE trips ENABLE ROW LEVEL SECURITY;
 -- 2. RLS Policies
 CREATE POLICY passenger_cards_select ON transport_cards FOR SELECT TO ct_passenger_role USING (user_id = (SELECT id FROM users WHERE login = session_user));
 CREATE POLICY staff_cards_select ON transport_cards FOR SELECT TO ct_controller_role, ct_dispatcher_role USING (true);
-CREATE POLICY admin_cards_all ON transport_cards FOR ALL TO ct_admin_role USING (true) WITH CHECK (true);
 
 CREATE POLICY passenger_topups_select ON card_top_ups FOR SELECT TO ct_passenger_role USING (EXISTS (SELECT 1 FROM transport_cards tc WHERE tc.id = card_top_ups.card_id AND tc.user_id = (SELECT id FROM users WHERE login = session_user)));
 CREATE POLICY staff_topups_select ON card_top_ups FOR SELECT TO ct_accountant_role USING (true);
@@ -99,10 +96,22 @@ CREATE POLICY passenger_tickets_select ON tickets FOR SELECT TO ct_passenger_rol
 CREATE POLICY staff_tickets_select ON tickets FOR SELECT TO ct_controller_role, ct_accountant_role USING (true);
 
 CREATE POLICY passenger_fines_select ON fines FOR SELECT TO ct_passenger_role USING (user_id = (SELECT id FROM users WHERE login = session_user));
-CREATE POLICY staff_fines_select ON fines FOR SELECT TO ct_controller_role, ct_accountant_role, ct_admin_role USING (true);
+CREATE POLICY staff_fines_select ON fines FOR SELECT TO ct_controller_role, ct_accountant_role USING (true);
 
 CREATE POLICY driver_trips_select ON trips FOR SELECT TO ct_driver_role USING (driver_id = (SELECT id FROM drivers WHERE login = session_user));
-CREATE POLICY staff_trips_select ON trips FOR SELECT TO ct_dispatcher_role, ct_admin_role USING (true);
+CREATE POLICY staff_trips_select ON trips FOR SELECT TO ct_dispatcher_role USING (true);
+
+-- fine_appeals policies
+CREATE POLICY passenger_appeals_select ON fine_appeals FOR SELECT TO ct_passenger_role USING (fine_id IN (SELECT id FROM fines WHERE user_id = (SELECT id FROM users WHERE login = session_user)));
+CREATE POLICY staff_appeals_select ON fine_appeals FOR SELECT TO ct_controller_role, ct_accountant_role USING (true);
+
+-- complaints_suggestions policies
+CREATE POLICY passenger_complaints_select ON complaints_suggestions FOR SELECT TO ct_passenger_role USING (user_id = (SELECT id FROM users WHERE login = session_user));
+CREATE POLICY municipality_complaints_select ON complaints_suggestions FOR SELECT TO ct_municipality_role USING (true);
+
+-- user_gps_logs policies
+CREATE POLICY driver_gps_select ON user_gps_logs FOR SELECT TO ct_driver_role USING (user_id = (SELECT id FROM users WHERE login = session_user));
+CREATE POLICY dispatcher_gps_select ON user_gps_logs FOR SELECT TO ct_dispatcher_role USING (true);
 
 -- 3. Final REVOKE (Thick Database principle: No direct public table access)
 DO $$

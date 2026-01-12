@@ -1,0 +1,1280 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Map as MapLibreMap } from 'maplibre-gl'
+import { Loader2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Map as MapView,
+  MapControls,
+  MapMarker,
+  MarkerContent,
+  MapRoute,
+} from '@/components/ui/map'
+import {
+  assignDispatcherDriver,
+  createDispatcherSchedule,
+  detectDispatcherDeviation,
+  getDispatcherSchedule,
+  getDispatcherVehicleMonitoring,
+  listDispatcherActiveTrips,
+  listDispatcherAssignments,
+  listDispatcherDeviations,
+  listDispatcherDrivers,
+  listDispatcherRoutes,
+  listDispatcherSchedules,
+  listDispatcherVehicles,
+  updateDispatcherSchedule,
+  getDispatcherDashboard,
+  type DispatcherDirection,
+  type DispatcherRoute,
+} from '@/lib/dispatcher-api'
+
+export const Route = createFileRoute('/dispatcher')({
+  component: DispatcherPage,
+})
+
+const UKRAINE_CENTER: [number, number] = [31.1656, 48.3794]
+const directionLabels: Record<DispatcherDirection, string> = {
+  forward: 'Прямий',
+  reverse: 'Зворотній',
+}
+
+function DispatcherPage() {
+  const queryClient = useQueryClient()
+  const mapRef = useRef<MapLibreMap | null>(null)
+
+  const [createRouteId, setCreateRouteId] = useState('')
+  const [createVehicleId, setCreateVehicleId] = useState('')
+  const [createStartTime, setCreateStartTime] = useState('')
+  const [createEndTime, setCreateEndTime] = useState('')
+  const [createInterval, setCreateInterval] = useState('')
+
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
+  const [updateRouteId, setUpdateRouteId] = useState('')
+  const [updateVehicleId, setUpdateVehicleId] = useState('')
+  const [updateStartTime, setUpdateStartTime] = useState<string | null>(null)
+  const [updateEndTime, setUpdateEndTime] = useState<string | null>(null)
+  const [updateInterval, setUpdateInterval] = useState<string | null>(null)
+
+  const [selectedDriverId, setSelectedDriverId] = useState('')
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
+  const [assignmentTime, setAssignmentTime] = useState('')
+
+  const [monitorFleetNumber, setMonitorFleetNumber] = useState('')
+  const [deviationFleetNumber, setDeviationFleetNumber] = useState('')
+  const [deviationTime, setDeviationTime] = useState('')
+
+  const { data: dashboard } = useQuery({
+    queryKey: ['dispatcher-dashboard'],
+    queryFn: getDispatcherDashboard,
+  })
+
+  const { data: routes } = useQuery({
+    queryKey: ['dispatcher-routes'],
+    queryFn: listDispatcherRoutes,
+  })
+
+  const {
+    data: schedules,
+    isLoading: schedulesLoading,
+    error: schedulesError,
+  } = useQuery({
+    queryKey: ['dispatcher-schedules'],
+    queryFn: listDispatcherSchedules,
+  })
+
+  const resolvedScheduleId = useMemo(() => {
+    if (selectedScheduleId && schedules?.some((s) => s.id === Number(selectedScheduleId))) {
+      return selectedScheduleId
+    }
+    const fallback = schedules?.[0]?.id
+    return fallback ? String(fallback) : null
+  }, [schedules, selectedScheduleId])
+
+  const selectedSchedule = useMemo(() => {
+    if (!resolvedScheduleId || !schedules?.length) return null
+    return schedules.find((schedule) => schedule.id === Number(resolvedScheduleId)) ?? null
+  }, [resolvedScheduleId, schedules])
+
+  useEffect(() => {
+    if (!selectedSchedule) return
+    setUpdateRouteId(String(selectedSchedule.routeId))
+    setUpdateVehicleId(selectedSchedule.vehicleId ? String(selectedSchedule.vehicleId) : '')
+  }, [selectedSchedule?.id])
+
+  useEffect(() => {
+    if (!selectedSchedule) {
+      setUpdateRouteId('')
+      setUpdateVehicleId('')
+    }
+  }, [selectedSchedule])
+
+  const displayUpdateStartTime =
+    updateStartTime ??
+    (selectedSchedule ? toTimeInputValue(selectedSchedule.workStartTime) : '')
+  const displayUpdateEndTime =
+    updateEndTime ?? (selectedSchedule ? toTimeInputValue(selectedSchedule.workEndTime) : '')
+  const displayUpdateInterval =
+    updateInterval ?? (selectedSchedule ? String(selectedSchedule.intervalMin) : '')
+
+  const {
+    data: scheduleDetails,
+    isLoading: scheduleDetailsLoading,
+    error: scheduleDetailsError,
+  } = useQuery({
+    queryKey: ['dispatcher-schedule-details', resolvedScheduleId],
+    queryFn: () => getDispatcherSchedule(Number(resolvedScheduleId)),
+    enabled: !!resolvedScheduleId,
+  })
+
+  const { data: drivers } = useQuery({
+    queryKey: ['dispatcher-drivers'],
+    queryFn: listDispatcherDrivers,
+  })
+
+  const { data: vehicles } = useQuery({
+    queryKey: ['dispatcher-vehicles'],
+    queryFn: listDispatcherVehicles,
+  })
+
+  const routeById = useMemo(() => {
+    const map = new Map<number, DispatcherRoute>()
+    routes?.forEach((route) => {
+      map.set(route.id, route)
+    })
+    return map
+  }, [routes])
+
+  const createVehicles = useMemo(() => {
+    if (!vehicles || vehicles.length === 0) return []
+    if (!createRouteId) return vehicles
+    const routeId = Number(createRouteId)
+    return vehicles.filter((vehicle) => vehicle.routeId === routeId)
+  }, [vehicles, createRouteId])
+
+  const updateVehicles = useMemo(() => {
+    if (!vehicles || vehicles.length === 0) return []
+    if (!updateRouteId) return vehicles
+    const routeId = Number(updateRouteId)
+    return vehicles.filter((vehicle) => vehicle.routeId === routeId)
+  }, [vehicles, updateRouteId])
+
+  const selectedAssignmentVehicle = useMemo(() => {
+    if (!vehicles?.length || !selectedVehicleId) return null
+    return (
+      vehicles.find((vehicle) => vehicle.id === Number(selectedVehicleId)) ??
+      null
+    )
+  }, [vehicles, selectedVehicleId])
+
+  const selectedAssignmentRoute = useMemo(() => {
+    if (!selectedAssignmentVehicle || !routes?.length) return null
+    return (
+      routes.find((route) => route.id === selectedAssignmentVehicle.routeId) ??
+      null
+    )
+  }, [routes, selectedAssignmentVehicle])
+
+  const { data: assignments } = useQuery({
+    queryKey: ['dispatcher-assignments'],
+    queryFn: listDispatcherAssignments,
+  })
+
+  const { data: activeTrips } = useQuery({
+    queryKey: ['dispatcher-active-trips'],
+    queryFn: listDispatcherActiveTrips,
+  })
+
+  const {
+    data: deviations,
+    isLoading: deviationsLoading,
+  } = useQuery({
+    queryKey: ['dispatcher-deviations'],
+    queryFn: listDispatcherDeviations,
+  })
+
+  const {
+    data: monitoring,
+    isLoading: monitoringLoading,
+    error: monitoringError,
+  } = useQuery({
+    queryKey: ['dispatcher-monitoring', monitorFleetNumber],
+    queryFn: () => getDispatcherVehicleMonitoring(monitorFleetNumber),
+    enabled: !!monitorFleetNumber,
+    refetchInterval: monitorFleetNumber ? 10000 : false,
+  })
+
+  const createScheduleMutation = useMutation({
+    mutationFn: createDispatcherSchedule,
+    onSuccess: () => {
+      setCreateRouteId('')
+      setCreateVehicleId('')
+      setCreateStartTime('')
+      setCreateEndTime('')
+      setCreateInterval('')
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-schedules'] })
+    },
+  })
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: (payload: { id: number; data: Record<string, unknown> }) =>
+      updateDispatcherSchedule(payload.id, payload.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-schedules'] })
+      if (resolvedScheduleId) {
+        queryClient.invalidateQueries({
+          queryKey: ['dispatcher-schedule-details', resolvedScheduleId],
+        })
+      }
+    },
+  })
+
+  const assignDriverMutation = useMutation({
+    mutationFn: assignDispatcherDriver,
+    onSuccess: () => {
+      setSelectedDriverId('')
+      setSelectedVehicleId('')
+      setAssignmentTime('')
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-assignments'] })
+    },
+  })
+
+  const deviationMutation = useMutation({
+    mutationFn: ({
+      fleetNumber,
+      currentTime,
+    }: {
+      fleetNumber: string
+      currentTime?: string
+    }) => detectDispatcherDeviation(fleetNumber, { currentTime }),
+  })
+
+  const handleCreateSchedule = () => {
+    if (
+      !createRouteId ||
+      !createVehicleId ||
+      !createStartTime ||
+      !createEndTime ||
+      !createInterval
+    )
+      return
+    createScheduleMutation.mutate({
+      routeId: Number(createRouteId),
+      vehicleId: Number(createVehicleId),
+      workStartTime: normalizeTime(createStartTime),
+      workEndTime: normalizeTime(createEndTime),
+      intervalMin: Number(createInterval),
+    })
+  }
+
+  const handleUpdateSchedule = () => {
+    if (!resolvedScheduleId) return
+    const payload: Record<string, unknown> = {}
+    const startValue = updateStartTime?.trim()
+    const endValue = updateEndTime?.trim()
+    const intervalValue = updateInterval?.trim()
+    if (updateRouteId) payload.routeId = Number(updateRouteId)
+    if (updateVehicleId) payload.vehicleId = Number(updateVehicleId)
+    if (startValue) payload.workStartTime = normalizeTime(startValue)
+    if (endValue) payload.workEndTime = normalizeTime(endValue)
+    if (intervalValue) payload.intervalMin = Number(intervalValue)
+    if (Object.keys(payload).length === 0) return
+    updateScheduleMutation.mutate({ id: Number(resolvedScheduleId), data: payload })
+  }
+
+  const handleScheduleSelect = (value: string) => {
+    setSelectedScheduleId(value)
+    setUpdateStartTime(null)
+    setUpdateEndTime(null)
+    setUpdateInterval(null)
+  }
+
+  const handleAssignDriver = () => {
+    if (!selectedDriverId || !selectedVehicleId) return
+    assignDriverMutation.mutate({
+      driverId: Number(selectedDriverId),
+      vehicleId: Number(selectedVehicleId),
+      routeNumber: selectedAssignmentRoute?.number,
+      direction: selectedAssignmentRoute?.direction,
+      transportTypeId: selectedAssignmentRoute?.transportTypeId,
+      assignedAt: assignmentTime ? new Date(assignmentTime).toISOString() : undefined,
+    })
+  }
+
+  const handleDeviationCheck = () => {
+    if (!deviationFleetNumber) return
+    deviationMutation.mutate({
+      fleetNumber: deviationFleetNumber,
+      currentTime: deviationTime ? normalizeTime(deviationTime) : undefined,
+    })
+  }
+
+  const monitoringCoordinates = useMemo(() => {
+    if (!monitoring?.routePoints?.length) return []
+    return monitoring.routePoints
+      .map((point) => [Number(point.lon), Number(point.lat)] as [number, number])
+      .filter(
+        (coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1])
+      )
+  }, [monitoring])
+
+  const vehicleLocation = useMemo(() => {
+    if (monitoring?.vehicle?.lon == null || monitoring?.vehicle?.lat == null) return null
+    const lon = Number(monitoring.vehicle.lon)
+    const lat = Number(monitoring.vehicle.lat)
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null
+    return { lon, lat }
+  }, [monitoring])
+
+  const monitoringBounds = useMemo(() => {
+    if (monitoringCoordinates.length === 0) return null
+    let minLng = monitoringCoordinates[0][0]
+    let maxLng = monitoringCoordinates[0][0]
+    let minLat = monitoringCoordinates[0][1]
+    let maxLat = monitoringCoordinates[0][1]
+
+    for (const [lng, lat] of monitoringCoordinates) {
+      minLng = Math.min(minLng, lng)
+      maxLng = Math.max(maxLng, lng)
+      minLat = Math.min(minLat, lat)
+      maxLat = Math.max(maxLat, lat)
+    }
+
+    return [
+      [minLng, minLat],
+      [maxLng, maxLat],
+    ] as [[number, number], [number, number]]
+  }, [monitoringCoordinates])
+
+  const monitoringCenter = useMemo(() => {
+    if (monitoringCoordinates.length > 0) return monitoringCoordinates[0]
+    if (vehicleLocation) return [vehicleLocation.lon, vehicleLocation.lat] as [number, number]
+    return UKRAINE_CENTER
+  }, [monitoringCoordinates, vehicleLocation])
+
+  useEffect(() => {
+    if (!monitoringBounds || !mapRef.current) return
+    const mapInstance = mapRef.current
+    const fitToBounds = () => {
+      mapInstance.fitBounds(monitoringBounds, {
+        padding: 48,
+        duration: 600,
+        maxZoom: 15,
+      })
+    }
+    if (mapInstance.isStyleLoaded()) {
+      fitToBounds()
+    } else {
+      mapInstance.once('load', fitToBounds)
+    }
+  }, [monitoringBounds])
+
+  const summaryItems = dashboard
+    ? [
+        { label: 'Активні рейси', value: dashboard.activeTrips },
+        { label: 'Відхилення', value: dashboard.deviations },
+        { label: 'Розклади', value: dashboard.schedulesToday },
+        { label: 'Вільні водії', value: dashboard.unassignedDrivers },
+        { label: 'Вільні транспортні засоби', value: dashboard.unassignedVehicles },
+      ]
+    : []
+
+  return (
+    <div className="px-4 py-8 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold">Кабінет диспетчера</h1>
+          <p className="text-muted-foreground">
+            Управління розкладом, призначеннями та моніторингом транспорту.
+          </p>
+        </div>
+
+        {summaryItems.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {summaryItems.map((item) => (
+              <Card key={item.label}>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground">{item.label}</p>
+                  <p className="text-2xl font-semibold">{item.value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Створення розкладу</CardTitle>
+              <CardDescription>Новий графік для маршруту</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Маршрут</Label>
+                <Select
+                  value={createRouteId || undefined}
+                  onValueChange={(value) => {
+                    setCreateRouteId(value)
+                    setCreateVehicleId('')
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть маршрут" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {routes?.map((route) => (
+                      <SelectItem key={route.id} value={String(route.id)}>
+                        {route.number} • {route.direction === 'forward' ? 'Прямий' : 'Зворотній'} •{' '}
+                        {route.transportTypeName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Транспорт</Label>
+                <Select
+                  value={createVehicleId || undefined}
+                  onValueChange={setCreateVehicleId}
+                  disabled={!createRouteId}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        createRouteId ? 'Оберіть транспорт' : 'Спочатку оберіть маршрут'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {createVehicles.map((vehicle) => {
+                      const route = routeById.get(vehicle.routeId)
+                      const direction = route ? directionLabels[route.direction] : null
+                      return (
+                        <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                          {vehicle.fleetNumber}
+                          {route && (
+                            <>
+                              {' '}
+                              • {route.number}
+                              {direction ? ` • ${direction}` : ''}
+                            </>
+                          )}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-start">Початок руху</Label>
+                  <Input
+                    id="create-start"
+                    type="time"
+                    value={createStartTime}
+                    onChange={(event) => setCreateStartTime(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-end">Кінець руху</Label>
+                  <Input
+                    id="create-end"
+                    type="time"
+                    value={createEndTime}
+                    onChange={(event) => setCreateEndTime(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-interval">Інтервал, хв</Label>
+                <Input
+                  id="create-interval"
+                  type="number"
+                  min={1}
+                  value={createInterval}
+                  onChange={(event) => setCreateInterval(event.target.value)}
+                />
+              </div>
+              <Button
+                onClick={handleCreateSchedule}
+                disabled={
+                  createScheduleMutation.isPending ||
+                  !createRouteId ||
+                  !createVehicleId ||
+                  !createStartTime ||
+                  !createEndTime ||
+                  !createInterval
+                }
+              >
+                {createScheduleMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Створити розклад
+              </Button>
+              {createScheduleMutation.error && (
+                <p className="text-sm text-red-500">
+                  {getErrorMessage(createScheduleMutation.error)}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Редагування розкладу</CardTitle>
+              <CardDescription>Оновлення часу та інтервалів</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Розклад</Label>
+                <Select
+                  value={resolvedScheduleId || undefined}
+                  onValueChange={handleScheduleSelect}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть розклад" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schedules?.map((schedule) => (
+                      <SelectItem key={schedule.id} value={String(schedule.id)}>
+                        {schedule.routeNumber} • {directionLabels[schedule.direction]} •{' '}
+                        {schedule.transportType}
+                        {schedule.fleetNumber ? ` • ${schedule.fleetNumber}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Маршрут</Label>
+                  <Select
+                    value={updateRouteId || undefined}
+                    onValueChange={(value) => {
+                      setUpdateRouteId(value)
+                      setUpdateVehicleId('')
+                    }}
+                    disabled={!resolvedScheduleId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Оберіть маршрут" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {routes?.map((route) => (
+                        <SelectItem key={route.id} value={String(route.id)}>
+                          {route.number} • {directionLabels[route.direction]} •{' '}
+                          {route.transportTypeName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Транспорт</Label>
+                  <Select
+                    value={updateVehicleId || undefined}
+                    onValueChange={setUpdateVehicleId}
+                    disabled={!updateRouteId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          updateRouteId
+                            ? 'Оберіть транспорт'
+                            : 'Спочатку оберіть маршрут'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {updateVehicles.map((vehicle) => {
+                        const route = routeById.get(vehicle.routeId)
+                        const direction = route ? directionLabels[route.direction] : null
+                        return (
+                          <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                            {vehicle.fleetNumber}
+                            {route && (
+                              <>
+                                {' '}
+                                • {route.number}
+                                {direction ? ` • ${direction}` : ''}
+                              </>
+                            )}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="update-start">Початок</Label>
+                  <Input
+                    id="update-start"
+                    type="time"
+                    value={displayUpdateStartTime}
+                    onChange={(event) => setUpdateStartTime(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="update-end">Кінець</Label>
+                  <Input
+                    id="update-end"
+                    type="time"
+                    value={displayUpdateEndTime}
+                    onChange={(event) => setUpdateEndTime(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="update-interval">Інтервал, хв</Label>
+                <Input
+                  id="update-interval"
+                  type="number"
+                  min={1}
+                  value={displayUpdateInterval}
+                  onChange={(event) => setUpdateInterval(event.target.value)}
+                />
+              </div>
+              <Button
+                onClick={handleUpdateSchedule}
+                disabled={updateScheduleMutation.isPending || !resolvedScheduleId}
+              >
+                {updateScheduleMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Оновити розклад
+              </Button>
+              {updateScheduleMutation.error && (
+                <p className="text-sm text-red-500">
+                  {getErrorMessage(updateScheduleMutation.error)}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Список розкладів</CardTitle>
+              <CardDescription>Перелік усіх активних розкладів</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {schedulesLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Завантаження розкладів...
+                </div>
+              )}
+              {schedulesError && (
+                <p className="text-sm text-red-500">Не вдалося завантажити розклади.</p>
+              )}
+              {schedules && (
+                <div className="rounded-md border max-h-[320px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Маршрут</TableHead>
+                        <TableHead>Напрямок</TableHead>
+                        <TableHead>Транспорт</TableHead>
+                        <TableHead>Тип</TableHead>
+                        <TableHead>Початок</TableHead>
+                        <TableHead>Кінець</TableHead>
+                        <TableHead>Інтервал</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {schedules.map((schedule) => (
+                        <TableRow
+                          key={schedule.id}
+                          className={
+                            resolvedScheduleId === String(schedule.id)
+                              ? 'bg-muted/40'
+                              : undefined
+                          }
+                          onClick={() => handleScheduleSelect(String(schedule.id))}
+                        >
+                          <TableCell>{schedule.routeNumber}</TableCell>
+                          <TableCell>{directionLabels[schedule.direction]}</TableCell>
+                          <TableCell>{schedule.fleetNumber ?? '—'}</TableCell>
+                          <TableCell>{schedule.transportType}</TableCell>
+                          <TableCell>{toTimeInputValue(schedule.workStartTime)}</TableCell>
+                          <TableCell>{toTimeInputValue(schedule.workEndTime)}</TableCell>
+                          <TableCell>{schedule.intervalMin} хв</TableCell>
+                        </TableRow>
+                      ))}
+                      {schedules.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={7}
+                            className="text-center h-24 text-muted-foreground"
+                          >
+                            Розкладів не знайдено
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Деталі розкладу</CardTitle>
+              <CardDescription>Зупинки та інтервали</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!resolvedScheduleId && (
+                <p className="text-sm text-muted-foreground">
+                  Оберіть розклад зі списку.
+                </p>
+              )}
+              {resolvedScheduleId && scheduleDetailsLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Завантаження деталей...
+                </div>
+              )}
+              {scheduleDetailsError && (
+                <p className="text-sm text-red-500">Не вдалося завантажити деталі.</p>
+              )}
+              {scheduleDetails && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant="outline">Маршрут {scheduleDetails.routeNumber}</Badge>
+                    <Badge variant="secondary">
+                      {directionLabels[scheduleDetails.routeDirection]}
+                    </Badge>
+                    <Badge variant="outline">{scheduleDetails.transportType}</Badge>
+                    {scheduleDetails.fleetNumber && (
+                      <Badge variant="outline">Транспорт {scheduleDetails.fleetNumber}</Badge>
+                    )}
+                  </div>
+                  <div className="grid gap-2 text-sm md:grid-cols-2">
+                    <div className="text-muted-foreground">
+                      Графік: {toTimeInputValue(scheduleDetails.workStartTime)} -{' '}
+                      {toTimeInputValue(scheduleDetails.workEndTime)}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Кінець маршруту:{' '}
+                      {scheduleDetails.routeEndTime
+                        ? toTimeInputValue(scheduleDetails.routeEndTime)
+                        : '—'}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Інтервал {scheduleDetails.intervalMin} хв
+                    </div>
+                    <div className="text-muted-foreground">
+                      Тривалість маршруту:{' '}
+                      {scheduleDetails.routeDurationMin != null
+                        ? `${scheduleDetails.routeDurationMin} хв`
+                        : '—'}
+                    </div>
+                  </div>
+                  {scheduleDetails.departures.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Відправлення</p>
+                      <div className="rounded-md border p-2 max-h-[140px] overflow-auto">
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {scheduleDetails.departures.map((time) => (
+                            <Badge key={time} variant="outline">
+                              {time}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="rounded-md border max-h-[320px] overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Зупинка</TableHead>
+                          <TableHead>Інтервал</TableHead>
+                          <TableHead>Координати</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {scheduleDetails.stops.map((stop) => (
+                          <TableRow key={stop.id}>
+                            <TableCell>{stop.name}</TableCell>
+                            <TableCell>
+                              {stop.minutesToNextStop != null
+                                ? `${stop.minutesToNextStop} хв`
+                                : '—'}
+                            </TableCell>
+                            <TableCell>
+                              {formatCoord(stop.lat)}, {formatCoord(stop.lon)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {scheduleDetails.stops.length === 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={3}
+                              className="text-center h-24 text-muted-foreground"
+                            >
+                              Зупинок не знайдено
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Призначення водія</CardTitle>
+            <CardDescription>Закріплення водія за транспортом</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Водій</Label>
+                <Select
+                  value={selectedDriverId || undefined}
+                  onValueChange={setSelectedDriverId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть водія" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {drivers?.map((driver) => (
+                      <SelectItem key={driver.id} value={String(driver.id)}>
+                        {driver.fullName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Транспорт</Label>
+                <Select
+                  value={selectedVehicleId || undefined}
+                  onValueChange={setSelectedVehicleId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Оберіть транспорт" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles?.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                        {vehicle.fleetNumber}
+                        {vehicle.routeId && (
+                          <>
+                            {' '}
+                            • {vehicle.routeNumber}
+                            {routeById.get(vehicle.routeId)
+                              ? ` • ${directionLabels[routeById.get(vehicle.routeId)!.direction]}`
+                              : ''}
+                          </>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assignment-time">Час призначення (опційно)</Label>
+                <Input
+                  id="assignment-time"
+                  type="datetime-local"
+                  value={assignmentTime}
+                  onChange={(event) => setAssignmentTime(event.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              onClick={handleAssignDriver}
+              disabled={
+                assignDriverMutation.isPending ||
+                !selectedDriverId ||
+                !selectedVehicleId
+              }
+            >
+              {assignDriverMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Призначити
+            </Button>
+            {assignDriverMutation.error && (
+              <p className="text-sm text-red-500">
+                {getErrorMessage(assignDriverMutation.error)}
+              </p>
+            )}
+            {assignments && assignments.length > 0 && (
+              <div className="rounded-md border max-h-[240px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Водій</TableHead>
+                      <TableHead>Транспорт</TableHead>
+                      <TableHead>Маршрут</TableHead>
+                      <TableHead>Час</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {assignments.slice(0, 8).map((assignment) => (
+                      <TableRow key={assignment.id}>
+                        <TableCell>{assignment.driverName}</TableCell>
+                        <TableCell>{assignment.fleetNumber}</TableCell>
+                        <TableCell>{assignment.routeNumber}</TableCell>
+                        <TableCell>{formatDateTime(assignment.assignedAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Моніторинг транспорту</CardTitle>
+            <CardDescription>Поточні позиції та маршрут</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="space-y-2">
+                <Label>Транспорт</Label>
+                <Select
+                  value={monitorFleetNumber || undefined}
+                  onValueChange={setMonitorFleetNumber}
+                >
+                  <SelectTrigger className="min-w-[220px]">
+                    <SelectValue placeholder="Оберіть транспорт" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles?.map((vehicle) => (
+                      <SelectItem key={vehicle.fleetNumber} value={vehicle.fleetNumber}>
+                        {vehicle.fleetNumber}
+                        {vehicle.routeId && (
+                          <>
+                            {' '}
+                            • {vehicle.routeNumber}
+                            {routeById.get(vehicle.routeId)
+                              ? ` • ${directionLabels[routeById.get(vehicle.routeId)!.direction]}`
+                              : ''}
+                          </>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  monitorFleetNumber &&
+                  queryClient.invalidateQueries({
+                    queryKey: ['dispatcher-monitoring', monitorFleetNumber],
+                  })
+                }
+                disabled={!monitorFleetNumber}
+              >
+                Оновити
+              </Button>
+            </div>
+
+            {!monitorFleetNumber && (
+              <p className="text-sm text-muted-foreground">
+                Оберіть транспорт для відображення на мапі.
+              </p>
+            )}
+
+            {monitorFleetNumber && (
+              <div className="space-y-2">
+                {monitoringLoading && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Завантаження моніторингу...
+                  </div>
+                )}
+                {monitoringError && (
+                  <p className="text-sm text-red-500">Не вдалося завантажити дані.</p>
+                )}
+                {monitoring && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant="outline">{monitoring.vehicle.routeNumber}</Badge>
+                    <Badge variant="secondary">
+                      {directionLabels[monitoring.vehicle.routeDirection]}
+                    </Badge>
+                    <Badge variant="outline">{monitoring.vehicle.transportType}</Badge>
+                    <span className="text-muted-foreground">
+                      {monitoring.vehicle.driverName || 'Невідомий водій'}
+                    </span>
+                    <span className="text-muted-foreground">
+                      Оновлено: {formatDateTime(monitoring.vehicle.recordedAt)}
+                    </span>
+                  </div>
+                )}
+                <div className="rounded-md border overflow-hidden">
+                  <div className="h-[360px]">
+                    <MapView ref={mapRef} center={monitoringCenter} zoom={12}>
+                      <MapControls showFullscreen />
+                      {monitoringCoordinates.length >= 2 && (
+                        <MapRoute
+                          coordinates={monitoringCoordinates}
+                          color="#2563EB"
+                          width={4}
+                          opacity={0.85}
+                        />
+                      )}
+                      {vehicleLocation && (
+                        <MapMarker
+                          longitude={vehicleLocation.lon}
+                          latitude={vehicleLocation.lat}
+                        >
+                          <MarkerContent>
+                            <div className="h-3 w-3 rounded-full bg-emerald-500 border-2 border-white shadow-md" />
+                          </MarkerContent>
+                        </MapMarker>
+                      )}
+                    </MapView>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {monitoringCoordinates.length >= 2
+                    ? 'Маршрут показано в масштабі повної траси.'
+                    : 'Недостатньо точок маршруту для відображення.'}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Активні рейси</CardTitle>
+              <CardDescription>Останні запуски</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border max-h-[280px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Маршрут</TableHead>
+                      <TableHead>Транспорт</TableHead>
+                      <TableHead>Водій</TableHead>
+                      <TableHead>Початок</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeTrips?.map((trip) => (
+                      <TableRow key={trip.id}>
+                        <TableCell>{trip.routeNumber}</TableCell>
+                        <TableCell>{trip.fleetNumber}</TableCell>
+                        <TableCell>{trip.driverName}</TableCell>
+                        <TableCell>{formatDateTime(trip.startsAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {activeTrips?.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center h-24 text-muted-foreground"
+                        >
+                          Активних рейсів немає
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Контроль відхилень</CardTitle>
+              <CardDescription>Перевірка актуальних відхилень</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3 items-end">
+                <div className="space-y-2">
+                  <Label>Транспорт</Label>
+                  <Select
+                    value={deviationFleetNumber || undefined}
+                    onValueChange={setDeviationFleetNumber}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Оберіть транспорт" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicles?.map((vehicle) => (
+                        <SelectItem key={vehicle.fleetNumber} value={vehicle.fleetNumber}>
+                          {vehicle.fleetNumber}
+                          {vehicle.routeId && (
+                            <>
+                              {' '}
+                              • {vehicle.routeNumber}
+                              {routeById.get(vehicle.routeId)
+                                ? ` • ${directionLabels[routeById.get(vehicle.routeId)!.direction]}`
+                                : ''}
+                            </>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deviation-time">Час (опційно)</Label>
+                  <Input
+                    id="deviation-time"
+                    type="time"
+                    value={deviationTime}
+                    onChange={(event) => setDeviationTime(event.target.value)}
+                  />
+                </div>
+                <Button
+                  onClick={handleDeviationCheck}
+                  disabled={deviationMutation.isPending || !deviationFleetNumber}
+                >
+                  {deviationMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Перевірити
+                </Button>
+              </div>
+
+              {deviationMutation.data && (
+                <div className="rounded-md border p-3 text-sm space-y-1">
+                  <p>
+                    <span className="font-medium">Статус:</span>{' '}
+                    {deviationMutation.data.status}
+                  </p>
+                  <p>
+                    <span className="font-medium">Рейс:</span>{' '}
+                    {deviationMutation.data.routeNumber} • {deviationMutation.data.fleetNumber}
+                  </p>
+                  <p>
+                    <span className="font-medium">Водій:</span>{' '}
+                    {deviationMutation.data.driverName}
+                  </p>
+                  <p>
+                    <span className="font-medium">Початок:</span>{' '}
+                    {formatDateTime(deviationMutation.data.startsAt)}
+                  </p>
+                  <p>
+                    <span className="font-medium">Різниця, хв:</span>{' '}
+                    {deviationMutation.data.delayMinutes ?? '—'}
+                  </p>
+                </div>
+              )}
+
+              <div className="rounded-md border max-h-[240px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Транспорт</TableHead>
+                      <TableHead>Маршрут</TableHead>
+                      <TableHead>Початок рейсу</TableHead>
+                      <TableHead>Водій</TableHead>
+                      <TableHead>Запізнення</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {deviationsLoading && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center h-24">
+                          <Loader2 className="h-5 w-5 animate-spin inline-block" />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {deviations?.map((item) => (
+                      <TableRow key={item.tripId}>
+                        <TableCell>{item.fleetNumber}</TableCell>
+                        <TableCell>
+                          {item.routeNumber}
+                        </TableCell>
+                        <TableCell>{formatDateTime(item.startsAt)}</TableCell>
+                        <TableCell>{item.driverName}</TableCell>
+                        <TableCell>
+                          {item.delayMinutes != null ? `${item.delayMinutes} хв` : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!deviationsLoading && deviations?.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center h-24 text-muted-foreground"
+                        >
+                          Активних відхилень немає
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function normalizeTime(value: string) {
+  if (!value) return value
+  return value.length === 5 ? `${value}:00` : value
+}
+
+function toTimeInputValue(value: string) {
+  if (!value) return ''
+  return value.length >= 5 ? value.slice(0, 5) : value
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('uk-UA', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+function formatCoord(value?: string | number | null) {
+  if (value == null) return '—'
+  const numberValue = Number(value)
+  if (Number.isNaN(numberValue)) return String(value)
+  return numberValue.toFixed(5)
+}
+
+function getErrorMessage(error: unknown) {
+  if (!error) return ''
+  if (error instanceof Error) return error.message
+  return ''
+}

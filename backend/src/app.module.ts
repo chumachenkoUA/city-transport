@@ -28,7 +28,6 @@ import { UserGpsLogsModule } from './modules/user-gps-logs/user-gps-logs.module'
 import { UsersModule } from './modules/users/users.module';
 import { VehicleGpsLogsModule } from './modules/vehicle-gps-logs/vehicle-gps-logs.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
-import { CtAdminModule } from './roles/ct-admin/ct-admin.module';
 import { CtControllerModule } from './roles/ct-controller/ct-controller.module';
 import { CtAccountantModule } from './roles/ct-accountant/ct-accountant.module';
 import { CtDispatcherModule } from './roles/ct-dispatcher/ct-dispatcher.module';
@@ -66,7 +65,6 @@ import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
     ComplaintsSuggestionsModule,
     UserGpsLogsModule,
     VehicleGpsLogsModule,
-    CtAdminModule,
     CtControllerModule,
     CtAccountantModule,
     CtDispatcherModule,

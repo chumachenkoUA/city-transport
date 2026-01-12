@@ -14,6 +14,8 @@ import { CtMunicipalityService } from './ct-municipality.service';
 import { MunicipalityComplaintsQueryDto } from './dto/complaints-query.dto';
 import { CreateMunicipalityRouteDto } from './dto/create-route.dto';
 import { PassengerFlowQueryDto } from './dto/passenger-flow-query.dto';
+import { UpdateComplaintStatusDto } from './dto/update-complaint-status.dto';
+import { UpdateRouteStatusDto } from './dto/update-route-status.dto';
 
 @Controller('municipality')
 export class CtMunicipalityController {
@@ -47,6 +49,14 @@ export class CtMunicipalityController {
     return this.ctMunicipalityService.listRoutes();
   }
 
+  @Patch('routes/:routeId/active')
+  setRouteActive(
+    @Param('routeId', ParseIntPipe) routeId: number,
+    @Body() payload: UpdateRouteStatusDto,
+  ) {
+    return this.ctMunicipalityService.setRouteActive(routeId, payload.isActive);
+  }
+
   @Post('routes')
   createRoute(@Body() payload: CreateMunicipalityRouteDto) {
     return this.ctMunicipalityService.createRoute(payload);
@@ -70,5 +80,13 @@ export class CtMunicipalityController {
   @Get('complaints')
   getComplaints(@Query() query: MunicipalityComplaintsQueryDto) {
     return this.ctMunicipalityService.getComplaints(query);
+  }
+
+  @Patch('complaints/:id/status')
+  updateComplaintStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() payload: UpdateComplaintStatusDto,
+  ) {
+    return this.ctMunicipalityService.updateComplaintStatus(id, payload.status);
   }
 }

@@ -8,9 +8,21 @@ import { RoutesBetweenDto } from '../ct-guest/dto/routes-between.dto';
 import { StopsNearDto } from '../ct-guest/dto/stops-near.dto';
 import { BuyTicketDto } from './dto/buy-ticket.dto';
 
+import { PayFineDto } from './dto/pay-fine.dto';
+
 @Controller('passenger')
 export class CtPassengerController {
   constructor(private readonly ctPassengerService: CtPassengerService) {}
+
+  @Get('profile')
+  getMyProfile() {
+    return this.ctPassengerService.getMyProfile();
+  }
+
+  @Post('fines/:fineId/pay')
+  payFine(@Param('fineId') fineId: string, @Body() payload: PayFineDto) {
+    return this.ctPassengerService.payFine(Number(fineId), payload);
+  }
 
   @Get('stops/near')
   getStopsNear(@Query() query: StopsNearDto) {
@@ -32,9 +44,17 @@ export class CtPassengerController {
     return this.ctPassengerService.getRoutePoints(query);
   }
 
-  @Get('routes/near')
-  getRoutesBetween(@Query() query: RoutesBetweenDto) {
-    return this.ctPassengerService.getRoutesBetween(query);
+  @Get('routes/plan')
+  planRoute(@Query() query: any) {
+    return this.ctPassengerService.planRoute({
+      lonA: Number(query.lonA),
+      latA: Number(query.latA),
+      lonB: Number(query.lonB),
+      latB: Number(query.latB),
+      radius: query.radius ? Number(query.radius) : undefined,
+      maxWaitMin: query.maxWaitMin ? Number(query.maxWaitMin) : undefined,
+      maxResults: query.maxResults ? Number(query.maxResults) : undefined,
+    });
   }
 
   @Get('routes/schedule')

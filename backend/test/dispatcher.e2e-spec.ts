@@ -54,6 +54,7 @@ describe('CtDispatcher (e2e)', () => {
       .set(authHeader(token))
       .send({
         routeId: seed.routeId,
+        fleetNumber: seed.vehicles[0].fleetNumber,
         workStartTime: '07:00',
         workEndTime: '20:00',
         intervalMin: 12,

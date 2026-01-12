@@ -21,6 +21,46 @@ export type IssueFinePayload = {
   issuedAt?: string
 }
 
+export type Route = {
+  id: number
+  number: string
+  transportType: string
+}
+
+export type Vehicle = {
+  id: number
+  fleetNumber: string
+  routeId: number
+  routeNumber: string
+  transportType: string
+  modelName: string
+}
+
+export type ControllerTrip = {
+  tripId: number
+  startsAt: string
+  endsAt: string | null
+  routeNumber: string
+  transportType: string
+  driverName: string
+}
+
+export function getRoutes() {
+  return apiGet<Route[]>('/controller/routes')
+}
+
+export function getVehicles(routeId?: number) {
+  const query = routeId ? `?routeId=${routeId}` : ''
+  return apiGet<Vehicle[]>(`/controller/vehicles${query}`)
+}
+
+export function getActiveTrips(fleetNumber: string, checkedAt?: string) {
+  const query = checkedAt ? `?checkedAt=${encodeURIComponent(checkedAt)}` : ''
+  return apiGet<ControllerTrip[]>(
+    `/controller/vehicles/${encodeURIComponent(fleetNumber)}/trips${query}`,
+  )
+}
+
 export function checkControllerCard(cardNumber: string) {
   return apiGet<ControllerCardDetails>(`/controller/cards/${cardNumber}/check`)
 }

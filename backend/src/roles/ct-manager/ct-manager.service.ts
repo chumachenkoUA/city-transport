@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateDriverDto } from '../../modules/drivers/dto/create-driver.dto';
@@ -34,13 +30,13 @@ export class CtManagerService {
   async listDrivers() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        login as "login",
-        full_name as "fullName",
-        email as "email",
-        phone as "phone",
-        driver_license_number as "driverLicenseNumber",
-        license_categories as "licenseCategories"
+        id,
+        login,
+        full_name,
+        email,
+        phone,
+        driver_license_number,
+        license_categories
       from manager_api.v_drivers
       order by id desc
     `)) as unknown as { rows: ManagerDriverRow[] };
@@ -51,12 +47,12 @@ export class CtManagerService {
   async listVehicles() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        fleet_number as "fleetNumber",
-        route_number as "routeNumber",
-        transport_type as "transportType",
-        model_name as "modelName",
-        capacity as "capacity"
+        id,
+        fleet_number,
+        route_number,
+        transport_type,
+        model_name,
+        capacity
       from manager_api.v_vehicles
       order by id desc
     `)) as unknown as { rows: ManagerVehicleRow[] };
@@ -67,11 +63,11 @@ export class CtManagerService {
   async listRoutes() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        number as "number",
-        direction as "direction",
-        transport_type_id as "transportTypeId",
-        transport_type_name as "transportType"
+        id,
+        number,
+        direction,
+        transport_type_id,
+        transport_type_name
       from guest_api.v_routes
       order by number
     `)) as unknown as { rows: Record<string, unknown>[] };
@@ -82,10 +78,25 @@ export class CtManagerService {
   async listTransportTypes() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        name as "name"
+        id,
+        name
       from guest_api.v_transport_types
       order by id
+    `)) as unknown as { rows: Record<string, unknown>[] };
+
+    return result.rows;
+  }
+
+  async listModels() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id,
+        name,
+        capacity,
+        type_id,
+        transport_type
+      from manager_api.v_vehicle_models
+      order by name
     `)) as unknown as { rows: Record<string, unknown>[] };
 
     return result.rows;
@@ -111,37 +122,16 @@ export class CtManagerService {
   }
 
   async addVehicle(payload: CreateManagerVehicleDto) {
-    const ttResult = (await this.dbService.db.execute(sql`
-       select name from public.transport_types where id = ${payload.transportTypeId}
-    `)) as unknown as { rows: { name: string }[] };
-
-    const ttName = ttResult.rows[0]?.name;
-    if (!ttName)
-      throw new NotFoundException(
-        `Transport Type ${payload.transportTypeId} not found`,
-      );
-
-    let routeNumber = payload.routeNumber;
-    if (!routeNumber && payload.routeId) {
-      const rResult = (await this.dbService.db.execute(sql`
-            select number from public.routes where id = ${payload.routeId}
-         `)) as unknown as { rows: { number: string }[] };
-      routeNumber = rResult.rows[0]?.number;
+    if (!payload.routeId && !payload.routeNumber) {
+      throw new BadRequestException('routeId or routeNumber is required');
     }
-
-    if (!routeNumber) {
-      throw new BadRequestException('routeNumber or valid routeId is required');
-    }
-
-    const modelName = 'Default Model';
 
     const result = (await this.dbService.db.execute(sql`
-      select manager_api.add_vehicle(
+      select manager_api.add_vehicle_v2(
         ${payload.fleetNumber},
-        ${ttName},
-        ${routeNumber},
-        ${payload.capacity},
-        ${modelName}
+        ${payload.modelId},
+        ${payload.routeId ?? null},
+        ${payload.routeNumber ?? null}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 

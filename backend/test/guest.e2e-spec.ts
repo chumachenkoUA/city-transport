@@ -112,21 +112,26 @@ describe('CtGuest (e2e)', () => {
     expect(geometries.length).toBeGreaterThan(0);
   });
 
-  it('finds routes between points', async () => {
+  it('finds routes between points (plan)', async () => {
     const from = seed.stops[0];
     const to = seed.stops[1];
     const response = await request(app.getHttpServer())
-      .get('/guest/routes/near')
+      .get('/guest/routes/plan')
       .query({
         lonA: from.lon,
         latA: from.lat,
         lonB: to.lon,
         latB: to.lat,
-        radius: 700,
+        radius: 1000,
+        maxResults: 3,
       })
       .expect(200);
 
-    expect(response.body).toHaveProperty('routes');
+    expect(Array.isArray(response.body)).toBe(true);
+    if (response.body.length > 0) {
+      expect(response.body[0]).toHaveProperty('totalTimeMin');
+      expect(response.body[0]).toHaveProperty('segments');
+    }
   });
 
   it('returns route schedule', async () => {

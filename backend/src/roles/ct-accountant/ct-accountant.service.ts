@@ -34,7 +34,7 @@ export class CtAccountantService {
 
   async listBudgets(query: BudgetQueryDto) {
     const result = (await this.dbService.db.execute(sql`
-      select id, month, planned_income as "plannedIncome", planned_expenses as "plannedExpenses", note
+      select id, month, planned_income, planned_expenses, note
       from accountant_api.v_budgets
       limit ${query.limit ?? 50}
     `)) as unknown as { rows: Record<string, unknown>[] };
@@ -81,7 +81,7 @@ export class CtAccountantService {
 
   async getSalaries(query: SalariesQueryDto) {
     const result = (await this.dbService.db.execute(sql`
-      select id, paid_at as "paidAt", employee_name as "employeeName", role, total
+      select id, paid_at, employee_name, role, total
       from accountant_api.v_salary_history
       limit ${query.limit ?? 50}
     `)) as unknown as { rows: Record<string, unknown>[] };

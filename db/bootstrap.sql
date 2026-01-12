@@ -19,7 +19,6 @@ DECLARE
   role_name text;
 BEGIN
   FOREACH role_name IN ARRAY ARRAY[
-    'ct_admin_role',
     'ct_accountant_role',
     'ct_dispatcher_role',
     'ct_controller_role',
@@ -79,7 +78,7 @@ DECLARE
 BEGIN
   EXECUTE format('REVOKE ALL ON DATABASE %I FROM PUBLIC', db_name);
   
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO 
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO
     ct_migrator,
     ct_guest_role,
     ct_passenger_role,
@@ -88,8 +87,7 @@ BEGIN
     ct_controller_role,
     ct_manager_role,
     ct_municipality_role,
-    ct_accountant_role,
-    ct_admin_role', db_name);
+    ct_accountant_role', db_name);
 END $$;
 
 -- 6. Helper for Local Development (Grant guest role to current dev user if exists)

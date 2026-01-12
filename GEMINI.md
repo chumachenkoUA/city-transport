@@ -43,13 +43,13 @@ Infra:
 - ct_admin_role
 
 Чек:
-- [ ] Усі ролі створені
-- [ ] Є GRANT CONNECT на БД
-- [ ] Є GRANT USAGE на *_api схеми
-- [ ] Є GRANT SELECT на потрібні views
-- [ ] Є GRANT EXECUTE на потрібні функції
-- [ ] Жодна бізнес-роль не має BYPASSRLS
-- [ ] Бек не запускається під superuser
+- [x] Усі ролі створені
+- [x] Є GRANT CONNECT на БД
+- [x] Є GRANT USAGE на *_api схеми
+- [x] Є GRANT SELECT на потрібні views
+- [x] Є GRANT EXECUTE на потрібні функції
+- [x] Жодна бізнес-роль не має BYPASSRLS
+- [x] Бек не запускається під superuser
 
 ## 4. Архітектура БД - thick database
 ### 4.1 API-схеми
@@ -70,9 +70,9 @@ Infra:
 
 ### 4.2 REVOKE доступу до public.*
 Після переходу бекенду на *_api:
-- [ ] REVOKE SELECT/INSERT/UPDATE/DELETE на public таблиці для бізнес-ролей
-- [ ] REVOKE на sequences (де треба)
-- [ ] public залишається доступним тільки для адміна або мігратора (за потребою)
+- [x] REVOKE SELECT/INSERT/UPDATE/DELETE на public таблиці для бізнес-ролей
+- [x] REVOKE на sequences (де треба)
+- [x] public залишається доступним тільки для адміна або мігратора (за потребою)
 
 Важливо:
 - поки бек ще лізе напряму в public - REVOKE не вмикати (інакше все впаде)
@@ -83,16 +83,16 @@ Infra:
 - або ізоляція через REVOKE + views/функції (без агресивного FORCE).
 
 Чек:
-- [ ] Для таблиць з RLS: ENABLE ROW LEVEL SECURITY
-- [ ] FORCE ROW LEVEL SECURITY використовувати обережно
-- [ ] Якщо SECURITY DEFINER функції читають/оновлюють таблицю (напр trips):
+- [x] Для таблиць з RLS: ENABLE ROW LEVEL SECURITY
+- [x] FORCE ROW LEVEL SECURITY використовувати обережно
+- [x] Якщо SECURITY DEFINER функції читають/оновлюють таблицю (напр trips):
     - або є коректні RLS політики під цей кейс
     - або на таблиці використано NO FORCE ROW LEVEL SECURITY
-- [ ] Не використовувати хаотично SET row_security = off як -фікс- (потрібно узгоджувати модель доступу)
+- [x] Не використовувати хаотично SET row_security = off як -фікс- (потрібно узгоджувати модель доступу)
 
 Стабільність:
-- [ ] driver_api.finish_trip і start_trip працюють без помилок RLS
-- [ ] controller_api.issue_fine працює без прямого доступу до public
+- [x] driver_api.finish_trip і start_trip працюють без помилок RLS
+- [x] controller_api.issue_fine працює без прямого доступу до public
 
 ## 6. Міграції без superuser
 Підхід:
@@ -131,17 +131,19 @@ Drizzle:
 - [x] REVOKE public.* для бізнес-ролей після переходу
 - [x] Controller + Driver переведені на *_api views/функції
 - [x] Redis session + реальний DB-login
+- [x] municipality_api: stops, routes designer, passenger-flow, complaints
+- [x] accountant_api: expenses, salaries, report
+- [x] Фронт сторінки для municipality + accountant
 
 Треба зробити далі:
-- [ ] municipality_api: stops (list/create/update), routes designer (create route зі stops + points), passenger-flow, complaints
-- [ ] accountant_api: expenses (create/list), salaries (create/list), report
-- [ ] фронт сторінки для municipality + accountant під ці контракти
-- [ ] фінальні перевірки RLS/FORCE, щоб функції не ламалися і бек не падав
+- [ ] Фінальні перевірки RLS/FORCE, щоб функції не ламалися і бек не падав
+- [ ] Оптимізація продуктивності GPS-трекінгу (якщо знадобиться)
+- [ ] Тестування сценаріїв з великою кількістю одночасних поїздок
 
 ## 10. Головний sanity checklist (щоб бек не падав)
-- [ ] бізнес-ролі не мають доступу до public.*
-- [ ] у кожної ролі є доступ до своїх *_api схем (USAGE + SELECT/EXECUTE)
-- [ ] SECURITY DEFINER функції мають search_path і перевірки
-- [ ] RLS/FORCE узгоджені з функціями (немає помилок 42501)
-- [ ] DbService не тече пулами
-- [ ] Redis TTL і logout працюють
+- [x] бізнес-ролі не мають доступу до public.*
+- [x] у кожної ролі є доступ до своїх *_api схем (USAGE + SELECT/EXECUTE)
+- [x] SECURITY DEFINER функції мають search_path і перевірки
+- [x] RLS/FORCE узгоджені з функціями (немає помилок 42501)
+- [ ] DbService не тече пулами (потребує стрес-тесту)
+- [x] Redis TTL і logout працюють

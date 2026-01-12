@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import { transformToCamelCase } from '../../common/utils/transform-to-camel-case';
 import { DbService } from '../../db/db.service';
 import { FinishTripDto } from './dto/finish-trip.dto';
 import { GpsLogDto } from './dto/gps-log.dto';
@@ -54,6 +55,15 @@ type ScheduleRow = {
   workStartTime: string;
   workEndTime: string;
   intervalMin: number;
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
+  validFrom: string | null;
+  validTo: string | null;
 };
 
 type ActiveTripRow = {
@@ -85,18 +95,18 @@ export class CtDriverService {
   async getProfile() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        login as "login",
-        full_name as "fullName",
-        email as "email",
-        phone as "phone",
-        driver_license_number as "driverLicenseNumber",
-        license_categories as "licenseCategories"
+        id,
+        login,
+        full_name,
+        email,
+        phone,
+        driver_license_number,
+        license_categories
       from driver_api.v_profile
       limit 1
     `)) as unknown as { rows: DriverProfileRow[] };
 
-    const driver = result.rows[0];
+    const driver = (transformToCamelCase(result.rows) as DriverProfileRow[])[0];
     if (!driver) {
       throw new NotFoundException('Driver profile not found');
     }
@@ -114,17 +124,17 @@ export class CtDriverService {
 
     const tripsResult = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        starts_at as "startsAt",
-        ends_at as "endsAt",
-        passenger_count as "passengerCount",
-        route_id as "routeId",
-        route_number as "routeNumber",
+        id,
+        starts_at,
+        ends_at,
+        passenger_count,
+        route_id,
+        route_number,
         direction as "routeDirection",
-        transport_type_id as "transportTypeId",
+        transport_type_id,
         transport_type as "transportTypeName",
-        vehicle_id as "vehicleId",
-        fleet_number as "fleetNumber"
+        vehicle_id,
+        fleet_number
       from driver_api.v_my_schedule
       where starts_at >= ${startOfDay} and starts_at < ${endOfDay}
       order by starts_at
@@ -132,48 +142,72 @@ export class CtDriverService {
       rows: (DriverScheduleRow & { passengerCount: number })[];
     };
 
-    const trips = tripsResult.rows;
+    const trips = transformToCamelCase(tripsResult.rows) as Array<
+      DriverScheduleRow & { passengerCount: number }
+    >;
     const routeIds = Array.from(new Set(trips.map((trip) => trip.routeId)));
-    const stopsByRouteId = new Map<number, RouteStopRow[]>();
+    const stopsByRouteId = new Map<number, OrderedRouteStopRow[]>();
+    const pointsByRouteId = new Map<number, RoutePointRow[]>();
 
     for (const routeId of routeIds) {
       const stopsResult = (await this.dbService.db.execute(sql`
         select
-          id as "id",
-          stop_id as "stopId",
-          stop_name as "stopName",
-          lon as "lon",
-          lat as "lat",
-          distance_to_next_km as "distanceToNextKm",
-          prev_route_stop_id as "prevRouteStopId",
-          next_route_stop_id as "nextRouteStopId"
+          id,
+          stop_id,
+          stop_name,
+          lon,
+          lat,
+          distance_to_next_km,
+          prev_route_stop_id,
+          next_route_stop_id
         from guest_api.v_route_stops
         where route_id = ${routeId}
-      `)) as unknown as { rows: (RouteStopRow & { id: number; prevRouteStopId: number | null; nextRouteStopId: number | null })[] };
+      `)) as unknown as {
+        rows: (RouteStopRow & {
+          id: number;
+          prevRouteStopId: number | null;
+          nextRouteStopId: number | null;
+        })[];
+      };
 
-      stopsByRouteId.set(routeId, this.orderRouteStops(stopsResult.rows));
+      const stops = transformToCamelCase(stopsResult.rows) as Array<
+        RouteStopRow & {
+          id: number;
+          prevRouteStopId: number | null;
+          nextRouteStopId: number | null;
+        }
+      >;
+      stopsByRouteId.set(routeId, this.orderRouteStops(stops));
+
+      const pointsResult = (await this.dbService.db.execute(sql`
+        select
+          id,
+          route_id,
+          lon,
+          lat,
+          prev_route_point_id,
+          next_route_point_id
+        from guest_api.v_route_points
+        where route_id = ${routeId}
+      `)) as unknown as { rows: RoutePointRow[] };
+
+      const points = transformToCamelCase(pointsResult.rows) as RoutePointRow[];
+      pointsByRouteId.set(routeId, this.orderRoutePoints(points));
     }
 
     const tripsWithStops = trips.map((trip) => {
       const stops = stopsByRouteId.get(trip.routeId) ?? [];
-      const stopsWithIntervals = stops.map((stop) => {
-        const distanceKm = stop.distanceToNextKm
-          ? Number(stop.distanceToNextKm)
-          : null;
-        const minutesToNextStop =
-          distanceKm !== null
-            ? this.roundTo1((distanceKm / AVERAGE_SPEED_KMH) * 60)
-            : null;
-
-        return {
-          id: stop.stopId,
-          name: stop.stopName,
+      const points = pointsByRouteId.get(trip.routeId) ?? [];
+      const stopsWithIntervals = this.buildStopsWithTiming(stops, points).map(
+        (stop) => ({
+          id: stop.id,
+          name: stop.name,
           lon: stop.lon,
           lat: stop.lat,
-          distanceToNextKm: distanceKm,
-          minutesToNextStop,
-        };
-      });
+          distanceToNextKm: stop.distanceToNextKm,
+          minutesToNextStop: stop.minutesToNextStop,
+        }),
+      );
 
       return {
         id: trip.id,
@@ -206,6 +240,10 @@ export class CtDriverService {
     const scheduleRow = primaryTrip
       ? await this.findScheduleByRouteId(primaryTrip.route.id)
       : null;
+    const plannedDepartures = scheduleRow
+      ? this.buildPlannedDepartures(scheduleRow, targetDate)
+      : [];
+    const plannedTripMap = this.buildTripPlanMap(trips, plannedDepartures);
 
     return {
       driver,
@@ -215,7 +253,11 @@ export class CtDriverService {
       route: primaryTrip?.route,
       transportType: primaryTrip?.transportType,
       schedule: scheduleRow ?? null,
-      trips: tripsWithStops,
+      trips: tripsWithStops.map((trip) => ({
+        ...trip,
+        plannedStartAt: plannedTripMap.get(trip.id)?.plannedStartAt ?? null,
+        startDelayMin: plannedTripMap.get(trip.id)?.startDelayMin ?? null,
+      })),
       stops: primaryTrip?.stops ?? [],
     };
   }
@@ -224,16 +266,16 @@ export class CtDriverService {
     const now = new Date();
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        starts_at as "startsAt",
-        ends_at as "endsAt",
-        route_id as "routeId",
-        route_number as "routeNumber",
+        id,
+        starts_at,
+        ends_at,
+        route_id,
+        route_number,
         direction as "routeDirection",
-        transport_type_id as "transportTypeId",
+        transport_type_id,
         transport_type as "transportTypeName",
-        vehicle_id as "vehicleId",
-        fleet_number as "fleetNumber"
+        vehicle_id,
+        fleet_number
       from driver_api.v_my_schedule
       where starts_at <= ${now}
         and (ends_at is null or ends_at >= ${now})
@@ -241,7 +283,9 @@ export class CtDriverService {
       limit 1
     `)) as unknown as { rows: ActiveTripRow[] };
 
-    const activeTrip = result.rows[0];
+    const activeTrip = (
+      transformToCamelCase(result.rows) as ActiveTripRow[]
+    )[0];
     if (!activeTrip) {
       return null;
     }
@@ -271,37 +315,39 @@ export class CtDriverService {
     const routeId = await this.resolveRouteId(payload);
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        route_id as "routeId",
-        stop_id as "stopId",
-        stop_name as "stopName",
-        lon as "lon",
-        lat as "lat",
-        distance_to_next_km as "distanceToNextKm",
-        prev_route_stop_id as "prevRouteStopId",
-        next_route_stop_id as "nextRouteStopId"
+        id,
+        route_id,
+        stop_id,
+        stop_name,
+        lon,
+        lat,
+        distance_to_next_km,
+        prev_route_stop_id,
+        next_route_stop_id
       from guest_api.v_route_stops
       where route_id = ${routeId}
     `)) as unknown as { rows: OrderedRouteStopRow[] };
 
-    return this.orderRouteStops(result.rows);
+    const stops = transformToCamelCase(result.rows) as OrderedRouteStopRow[];
+    return this.orderRouteStops(stops);
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        route_id as "routeId",
-        lon as "lon",
-        lat as "lat",
-        prev_route_point_id as "prevRoutePointId",
-        next_route_point_id as "nextRoutePointId"
+        id,
+        route_id,
+        lon,
+        lat,
+        prev_route_point_id,
+        next_route_point_id
       from guest_api.v_route_points
       where route_id = ${routeId}
     `)) as unknown as { rows: RoutePointRow[] };
 
-    return this.orderRoutePoints(result.rows);
+    const points = transformToCamelCase(result.rows) as RoutePointRow[];
+    return this.orderRoutePoints(points);
   }
 
   async startTrip(payload: StartTripDto) {
@@ -351,7 +397,13 @@ export class CtDriverService {
     return { ok: true };
   }
 
-  private orderRouteStops<T extends { id: number; prevRouteStopId: number | null; nextRouteStopId: number | null }>(rows: T[]): T[] {
+  private orderRouteStops<
+    T extends {
+      id: number;
+      prevRouteStopId: number | null;
+      nextRouteStopId: number | null;
+    },
+  >(rows: T[]): T[] {
     if (rows.length === 0) {
       return rows;
     }
@@ -414,6 +466,148 @@ export class CtDriverService {
     return ordered;
   }
 
+  private buildStopsWithTiming(
+    stops: OrderedRouteStopRow[],
+    routePoints: RoutePointRow[],
+  ) {
+    const points = routePoints ?? [];
+    const pointDistances =
+      points.length >= 2 ? this.buildPointDistances(points) : null;
+    const stopPointIndexes = pointDistances
+      ? this.mapStopsToPointIndexes(stops, points)
+      : new Map<number, number>();
+    const startIndex =
+      stops.length > 0 ? stopPointIndexes.get(stops[0].id) : undefined;
+    let cumulativeMinutes = 0;
+
+    return stops.map((stop, index) => {
+      const distanceKm = stop.distanceToNextKm
+        ? Number(stop.distanceToNextKm)
+        : null;
+      const currentPointIndex = stopPointIndexes.get(stop.id);
+      const nextStop = stops[index + 1];
+      const nextPointIndex = nextStop
+        ? stopPointIndexes.get(nextStop.id)
+        : undefined;
+
+      let minutesToNextStop: number | null = null;
+      if (
+        pointDistances &&
+        currentPointIndex != null &&
+        nextPointIndex != null
+      ) {
+        const segmentKm = Math.max(
+          0,
+          pointDistances[nextPointIndex] - pointDistances[currentPointIndex],
+        );
+        minutesToNextStop = this.roundTo1((segmentKm / AVERAGE_SPEED_KMH) * 60);
+      } else if (distanceKm !== null) {
+        minutesToNextStop = this.roundTo1(
+          (distanceKm / AVERAGE_SPEED_KMH) * 60,
+        );
+      }
+
+      let minutesFromStart: number | null = null;
+      if (pointDistances && startIndex != null && currentPointIndex != null) {
+        const distanceFromStartKm =
+          pointDistances[currentPointIndex] - pointDistances[startIndex];
+        minutesFromStart = this.roundTo1(
+          (distanceFromStartKm / AVERAGE_SPEED_KMH) * 60,
+        );
+      }
+
+      if (minutesFromStart === null) {
+        minutesFromStart = this.roundTo1(cumulativeMinutes);
+      }
+
+      if (minutesToNextStop !== null) {
+        cumulativeMinutes += minutesToNextStop;
+      }
+
+      return {
+        id: stop.stopId,
+        name: stop.stopName,
+        lon: stop.lon,
+        lat: stop.lat,
+        distanceToNextKm: distanceKm,
+        minutesFromStart,
+        minutesToNextStop,
+      };
+    });
+  }
+
+  private buildPointDistances(points: RoutePointRow[]) {
+    const distances: number[] = [0];
+    for (let i = 1; i < points.length; i += 1) {
+      const prev = points[i - 1];
+      const next = points[i];
+      const segmentKm = this.haversineKm(
+        Number(prev.lon),
+        Number(prev.lat),
+        Number(next.lon),
+        Number(next.lat),
+      );
+      distances.push(distances[i - 1] + segmentKm);
+    }
+    return distances;
+  }
+
+  private mapStopsToPointIndexes(
+    stops: OrderedRouteStopRow[],
+    points: RoutePointRow[],
+  ) {
+    const map = new Map<number, number>();
+    for (const stop of stops) {
+      const idx = this.findNearestPointIndex(stop, points);
+      if (idx != null) {
+        map.set(stop.id, idx);
+      }
+    }
+    return map;
+  }
+
+  private findNearestPointIndex(
+    stop: OrderedRouteStopRow,
+    points: RoutePointRow[],
+  ) {
+    const stopLon = Number(stop.lon);
+    const stopLat = Number(stop.lat);
+    if (!Number.isFinite(stopLon) || !Number.isFinite(stopLat)) {
+      return null;
+    }
+
+    let minDistance = Number.POSITIVE_INFINITY;
+    let minIndex: number | null = null;
+    points.forEach((point, index) => {
+      const distance = this.haversineKm(
+        stopLon,
+        stopLat,
+        Number(point.lon),
+        Number(point.lat),
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        minIndex = index;
+      }
+    });
+
+    return minIndex;
+  }
+
+  private haversineKm(lon1: number, lat1: number, lon2: number, lat2: number) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return 6371 * c;
+  }
+
   private async resolveRouteId(payload: RouteLookupDto) {
     if (payload.routeId) {
       return payload.routeId;
@@ -454,19 +648,113 @@ export class CtDriverService {
   ): Promise<ScheduleRow | null> {
     const result = (await this.dbService.db.execute(sql`
       select
-        work_start_time as "workStartTime",
-        work_end_time as "workEndTime",
-        interval_min as "intervalMin"
+        work_start_time,
+        work_end_time,
+        interval_min,
+        monday,
+        tuesday,
+        wednesday,
+        thursday,
+        friday,
+        saturday,
+        sunday,
+        valid_from,
+        valid_to
       from guest_api.v_schedules
       where route_id = ${routeId}
       limit 1
     `)) as unknown as { rows: ScheduleRow[] };
 
-    return result.rows[0] ?? null;
+    const schedules = transformToCamelCase(result.rows) as ScheduleRow[];
+    return schedules[0] ?? null;
   }
 
   private roundTo1(value: number) {
     return Math.round(value * 10) / 10;
+  }
+
+  private parseTimeToMinutes(time: string) {
+    const parts = time.split(':').map(Number);
+    if (parts.length < 2 || parts.some((value) => Number.isNaN(value))) {
+      return Number.NaN;
+    }
+    const [hours, minutes, seconds = 0] = parts;
+    return hours * 60 + minutes + seconds / 60;
+  }
+
+  private buildDateWithMinutes(base: Date, minutes: number) {
+    const date = new Date(base);
+    date.setHours(0, 0, 0, 0);
+    date.setMinutes(minutes);
+    return date;
+  }
+
+  private buildPlannedDepartures(schedule: ScheduleRow, targetDate: Date) {
+    const startMin = this.parseTimeToMinutes(schedule.workStartTime);
+    const endMin = this.parseTimeToMinutes(schedule.workEndTime);
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) {
+      return [];
+    }
+
+    const plannedStartAt = this.buildDateWithMinutes(targetDate, startMin);
+    let plannedEndAt = this.buildDateWithMinutes(targetDate, endMin);
+    if (endMin < startMin) {
+      plannedEndAt = new Date(plannedEndAt.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    const intervalMin = schedule.intervalMin;
+    if (!intervalMin || intervalMin <= 0) {
+      return [];
+    }
+
+    const planned: Date[] = [];
+    let current = plannedStartAt;
+
+    while (current <= plannedEndAt) {
+      planned.push(current);
+      current = new Date(current.getTime() + intervalMin * 60 * 1000);
+    }
+
+    return planned;
+  }
+
+  private buildTripPlanMap(
+    trips: Array<DriverScheduleRow & { passengerCount: number }>,
+    plannedDepartures: Date[],
+  ) {
+    const map = new Map<
+      number,
+      { plannedStartAt: string | null; startDelayMin: number | null }
+    >();
+    if (!plannedDepartures.length) {
+      return map;
+    }
+
+    for (const trip of trips) {
+      if (!(trip.startsAt instanceof Date)) {
+        map.set(trip.id, { plannedStartAt: null, startDelayMin: null });
+        continue;
+      }
+      let best: Date | null = null;
+      let bestDiff = Number.POSITIVE_INFINITY;
+
+      for (const planned of plannedDepartures) {
+        const diff = Math.abs(trip.startsAt.getTime() - planned.getTime());
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = planned;
+        }
+      }
+
+      map.set(trip.id, {
+        plannedStartAt: best ? best.toISOString() : null,
+        startDelayMin: best
+          ? Math.round((trip.startsAt.getTime() - best.getTime()) / 60000)
+          : null,
+      });
+    }
+
+    return map;
   }
 
   private parseDate(value?: string) {

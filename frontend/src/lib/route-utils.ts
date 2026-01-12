@@ -3,7 +3,7 @@ import { type Route } from '@/lib/guest-api';
 export interface GroupedRoute {
   number: string;
   transportTypeId: number;
-  transportType: string;
+  transportTypeName: string;
   intervalMin?: number | null;
   routes: Route[];
   routeIds: number[];
@@ -19,10 +19,11 @@ export function groupRoutesByNumber(routes: Route[]): GroupedRoute[] {
     const key = `${routeNumber}-${route.transportTypeId}`;
 
     if (!groups.has(key)) {
+      const transportTypeName = route.transportTypeName ?? route.transportType ?? '';
       groups.set(key, {
         number: routeNumber,
         transportTypeId: route.transportTypeId,
-        transportType: route.transportType,
+        transportTypeName,
         intervalMin: route.intervalMin,
         routes: [],
         routeIds: [],

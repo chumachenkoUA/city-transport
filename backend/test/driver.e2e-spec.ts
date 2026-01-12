@@ -71,9 +71,15 @@ describe('CtDriver (e2e)', () => {
       .set(authHeader(token))
       .expect(200);
 
-    if (existing.body?.id && existing.body.endsAt === null) {
-      const startsAt = existing.body.startsAt
-        ? new Date(existing.body.startsAt).getTime()
+    const existingBody = existing.body as {
+      id?: number;
+      endsAt?: string | null;
+      startsAt?: string | null;
+    } | null;
+
+    if (existingBody?.id && existingBody.endsAt === null) {
+      const startsAt = existingBody.startsAt
+        ? new Date(existingBody.startsAt).getTime()
         : Date.now();
       const endedAt = new Date(Math.max(Date.now(), startsAt + 60000));
       await request(app.getHttpServer())

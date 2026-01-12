@@ -16,6 +16,7 @@ export type MunicipalityRoute = {
   id: number
   number: string
   direction: string
+  isActive: boolean
   transportTypeId: number
   transportType: string
 }
@@ -67,7 +68,6 @@ export type PassengerFlowRow = {
   tripDate: string
   routeNumber: string
   transportType: string
-  fleetNumber: string
   passengerCount: number
 }
 
@@ -114,6 +114,12 @@ export function getMunicipalityRoutes() {
   return apiGet<MunicipalityRoute[]>('/municipality/routes')
 }
 
+export function setMunicipalityRouteActive(routeId: number, isActive: boolean) {
+  return apiPatch<{ success: true }>(`/municipality/routes/${routeId}/active`, {
+    isActive,
+  })
+}
+
 export function createMunicipalityRoute(payload: CreateMunicipalityRoutePayload) {
   return apiPost<{
     route: MunicipalityRoute
@@ -147,4 +153,10 @@ export function getComplaints(params: {
   fleetNumber?: string
 }) {
   return apiGet<ComplaintRow[]>('/municipality/complaints', params)
+}
+
+export function updateComplaintStatus(id: number, status: string) {
+  return apiPatch<{ success: true }>(`/municipality/complaints/${id}/status`, {
+    status,
+  })
 }

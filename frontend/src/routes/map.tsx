@@ -9,6 +9,7 @@ import {
   MarkerContent,
   MarkerPopup,
   MapRoute,
+  MapClusterLayer,
   useMap,
 } from '@/components/ui/map';
 import {
@@ -77,6 +78,31 @@ function MapClickHandler({
   return null;
 }
 
+// Helper component to track zoom level changes
+function ZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
+  const { map } = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const handleZoom = () => {
+      onZoomChange(map.getZoom());
+    };
+
+    // Initial zoom
+    onZoomChange(map.getZoom());
+
+    map.on('zoomend', handleZoom);
+    return () => {
+      map.off('zoomend', handleZoom);
+    };
+  }, [map, onZoomChange]);
+
+  return null;
+}
+
+const CLUSTER_ZOOM_THRESHOLD = 13;
+
 function MapPage() {
   const [mode, setMode] = useState<MapMode>('browse');
   const [selectedTransportType, setSelectedTransportType] = useState<number | null>(null);
@@ -99,6 +125,8 @@ function MapPage() {
   const [planPointA, setPlanPointA] = useState<{ lon: number; lat: number } | null>(null);
   const [planPointB, setPlanPointB] = useState<{ lon: number; lat: number } | null>(null);
   const [isSelectingPoint, setIsSelectingPoint] = useState<'A' | 'B' | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lon: number; lat: number } | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(12);
 
   // Fetch data
   const { data: transportTypes } = useQuery({
@@ -152,6 +180,23 @@ function MapPage() {
       return groupKey ? selectedRouteNumbers.has(groupKey) : false;
     });
   }, [routeGeometries, showAllRoutes, selectedRouteNumbers, routeIdToGroupKey]);
+
+  // Convert stops to GeoJSON for clustering
+  const stopsGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, { id: number; name: string }>>(() => {
+    if (!stopGeometries) {
+      return { type: 'FeatureCollection', features: [] };
+    }
+    return {
+      type: 'FeatureCollection',
+      features: stopGeometries.map((stop) => ({
+        type: 'Feature' as const,
+        properties: { id: stop.id, name: stop.name },
+        geometry: stop.geometry,
+      })),
+    };
+  }, [stopGeometries]);
+
+  const showClusters = currentZoom < CLUSTER_ZOOM_THRESHOLD;
 
   const { data: routesAtStop, isLoading: routesAtStopLoading } = useQuery({
     queryKey: ['routes-at-stop', clickedStopId],
@@ -222,6 +267,10 @@ function MapPage() {
       setPlanPointB(coords);
     }
     setIsSelectingPoint(null);
+  }, []);
+
+  const handleLocate = useCallback((coords: { longitude: number; latitude: number }) => {
+    setUserLocation({ lon: coords.longitude, lat: coords.latitude });
   }, []);
 
   const getTransportIcon = (typeId: number) => {
@@ -382,15 +431,15 @@ function MapPage() {
 
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-900 dark:text-white truncate">
-                            {group.transportType}
+                            {group.transportTypeName}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {group.routes.length} напрямки
                           </p>
                         </div>
 
                         {group.intervalMin && (
-                          <span className="text-xs text-gray-500 flex-shrink-0">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                             ~{group.intervalMin} хв
                           </span>
                         )}
@@ -477,7 +526,27 @@ function MapPage() {
       {/* Map */}
       <div className="flex-1 relative">
         <MapContainer center={LVIV_CENTER} zoom={12}>
-          <MapControls showLocate showFullscreen />
+          <MapControls showLocate showFullscreen onLocate={handleLocate} />
+
+          {/* Track zoom level for clustering */}
+          <ZoomTracker onZoomChange={setCurrentZoom} />
+
+          {/* User Location Marker */}
+          {userLocation && (
+            <MapMarker
+              longitude={userLocation.lon}
+              latitude={userLocation.lat}
+            >
+              <MarkerContent>
+                <div className="h-4 w-4 rounded-full bg-blue-500 border-2 border-white shadow-lg animate-pulse" />
+              </MarkerContent>
+              <MarkerPopup>
+                <div className="p-2">
+                  <p className="font-medium text-sm">Ви тут</p>
+                </div>
+              </MarkerPopup>
+            </MapMarker>
+          )}
 
           {/* Map click handler for point selection in plan mode */}
           {mode === 'plan' && (
@@ -487,8 +556,21 @@ function MapPage() {
             />
           )}
 
-          {/* Browse Mode: Show ALL stops as individual markers (NO clustering) */}
-          {mode === 'browse' && stopGeometries && (
+          {/* Browse Mode: Clustered view when zoomed out */}
+          {mode === 'browse' && showClusters && stopsGeoJson.features.length > 0 && (
+            <MapClusterLayer
+              data={stopsGeoJson}
+              clusterMaxZoom={CLUSTER_ZOOM_THRESHOLD - 1}
+              clusterRadius={50}
+              clusterColors={['#3b82f6', '#22c55e', '#f59e0b']}
+              clusterThresholds={[50, 200]}
+              pointColor="#3b82f6"
+              onPointClick={handleStopClick}
+            />
+          )}
+
+          {/* Browse Mode: Individual markers when zoomed in */}
+          {mode === 'browse' && !showClusters && stopGeometries && (
             <>
               {stopGeometries.map((stop) => {
                 const stopRoutesLoading = clickedStopId === stop.id && routesAtStopLoading;
@@ -513,10 +595,10 @@ function MapPage() {
                   >
                     <MarkerContent>
                       <div
-                        className={`h-2 w-2 rounded-full border border-white shadow-sm transition-all cursor-pointer ${
+                        className={`rounded-full border-2 border-white shadow-md transition-all duration-200 cursor-pointer ${
                           selectedStop?.id === stop.id
-                            ? 'bg-green-500 h-3 w-3'
-                            : 'bg-blue-500 hover:h-2.5 hover:w-2.5'
+                            ? 'h-5 w-5 bg-green-500 animate-pulse shadow-lg shadow-green-500/30'
+                            : 'h-4 w-4 bg-blue-500 hover:h-5 hover:w-5 hover:shadow-lg hover:shadow-blue-500/30'
                         }`}
                       />
                     </MarkerContent>
@@ -525,11 +607,11 @@ function MapPage() {
                       <MarkerPopup closeButton>
                         <div className="min-w-[250px] max-w-[300px]">
                           <h3 className="font-medium text-base mb-1">{stop.name}</h3>
-                          <p className="text-xs text-gray-500 mb-3">
-                            ID: {stop.id} • {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
                           </p>
 
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Маршрути через цю зупинку:
                           </h4>
 
@@ -540,7 +622,7 @@ function MapPage() {
                           )}
 
                           {stopRoutes && stopRoutes.length === 0 && (
-                            <p className="text-sm text-gray-500">Маршрути не знайдено</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Маршрути не знайдено</p>
                           )}
 
                           {stopRoutes && stopRoutes.length > 0 && (
@@ -553,19 +635,19 @@ function MapPage() {
                                 return (
                                   <div
                                     key={`${routeId}-${route.direction}`}
-                                    className="flex items-center gap-2 p-1.5 bg-gray-50 rounded border border-gray-200"
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
                                   >
                                     <div
                                       className="h-2 w-2 rounded-full flex-shrink-0"
                                       style={{ backgroundColor: color }}
                                     />
                                     <span className="font-medium text-sm">{routeNumber}</span>
-                                    <span className="text-xs text-gray-500 flex-1 truncate">
-                                      {route.transportType} •{' '}
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-1 truncate">
+                                      {route.transportTypeName ?? route.transportType} •{' '}
                                       {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
                                     </span>
                                     {route.intervalMin && (
-                                      <span className="text-xs text-gray-500 flex-shrink-0">
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                                         ~{route.intervalMin} хв
                                       </span>
                                     )}
@@ -609,10 +691,10 @@ function MapPage() {
                   >
                     <MarkerContent>
                       <div
-                        className={`h-1.5 w-1.5 rounded-full border border-white shadow-sm cursor-pointer ${
+                        className={`rounded-full border border-white shadow-sm transition-all duration-200 cursor-pointer ${
                           selectedStop?.id === stop.id
-                            ? 'bg-blue-500 h-2.5 w-2.5'
-                            : 'bg-gray-400 hover:bg-gray-500'
+                            ? 'h-4 w-4 bg-blue-500 animate-pulse shadow-md shadow-blue-500/30'
+                            : 'h-3 w-3 bg-gray-400 hover:h-4 hover:w-4 hover:bg-gray-500 hover:shadow-md'
                         }`}
                       />
                     </MarkerContent>
@@ -621,11 +703,45 @@ function MapPage() {
                       <MarkerPopup closeButton>
                         <div className="min-w-[250px] max-w-[300px]">
                           <h3 className="font-medium text-base mb-1">{stop.name}</h3>
-                          <p className="text-xs text-gray-500 mb-3">
-                            ID: {stop.id} • {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            {stop.geometry.coordinates[1].toFixed(5)}, {stop.geometry.coordinates[0].toFixed(5)}
                           </p>
 
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">
+                          {/* Кнопки для планування маршруту */}
+                          <div className="flex gap-2 mb-3">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                handlePointSelected('A', {
+                                  lon: stop.geometry.coordinates[0],
+                                  lat: stop.geometry.coordinates[1],
+                                });
+                                setSelectedStop(null);
+                              }}
+                            >
+                              <MapPin className="h-3 w-3 mr-1 text-green-500" />
+                              Звідси
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                handlePointSelected('B', {
+                                  lon: stop.geometry.coordinates[0],
+                                  lat: stop.geometry.coordinates[1],
+                                });
+                                setSelectedStop(null);
+                              }}
+                            >
+                              <Navigation className="h-3 w-3 mr-1 text-red-500" />
+                              Сюди
+                            </Button>
+                          </div>
+
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Маршрути через цю зупинку:
                           </h4>
 
@@ -636,7 +752,7 @@ function MapPage() {
                           )}
 
                           {stopRoutes && stopRoutes.length === 0 && (
-                            <p className="text-sm text-gray-500">Маршрути не знайдено</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Маршрути не знайдено</p>
                           )}
 
                           {stopRoutes && stopRoutes.length > 0 && (
@@ -649,19 +765,19 @@ function MapPage() {
                                 return (
                                   <div
                                     key={`${routeId}-${route.direction}`}
-                                    className="flex items-center gap-2 p-1.5 bg-gray-50 rounded border border-gray-200"
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
                                   >
                                     <div
                                       className="h-2 w-2 rounded-full flex-shrink-0"
                                       style={{ backgroundColor: color }}
                                     />
                                     <span className="font-medium text-sm">{routeNumber}</span>
-                                    <span className="text-xs text-gray-500 flex-1 truncate">
-                                      {route.transportType} •{' '}
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-1 truncate">
+                                      {route.transportTypeName ?? route.transportType} •{' '}
                                       {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
                                     </span>
                                     {route.intervalMin && (
-                                      <span className="text-xs text-gray-500 flex-shrink-0">
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                                         ~{route.intervalMin} хв
                                       </span>
                                     )}
@@ -693,7 +809,7 @@ function MapPage() {
               <MarkerPopup>
                 <div className="p-2">
                   <p className="font-medium text-sm">Точка А (початок)</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {planPointA.lat.toFixed(5)}, {planPointA.lon.toFixed(5)}
                   </p>
                 </div>
@@ -715,7 +831,7 @@ function MapPage() {
               <MarkerPopup>
                 <div className="p-2">
                   <p className="font-medium text-sm">Точка Б (кінець)</p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {planPointB.lat.toFixed(5)}, {planPointB.lon.toFixed(5)}
                   </p>
                 </div>

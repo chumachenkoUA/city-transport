@@ -27,6 +27,11 @@ export class CtManagerController {
     return this.ctManagerService.listTransportTypes();
   }
 
+  @Get('models')
+  listModels() {
+    return this.ctManagerService.listModels();
+  }
+
   @Post('drivers')
   hireDriver(@Body() payload: CreateDriverDto) {
     return this.ctManagerService.hireDriver(payload);

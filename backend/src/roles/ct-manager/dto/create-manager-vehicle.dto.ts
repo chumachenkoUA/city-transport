@@ -9,12 +9,7 @@ export class CreateManagerVehicleDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  transportTypeId!: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  capacity!: number;
+  modelId!: number;
 
   @Type(() => Number)
   @IsInt()

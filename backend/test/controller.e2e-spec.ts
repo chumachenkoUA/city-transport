@@ -28,7 +28,10 @@ describe('CtController (e2e)', () => {
       .set(authHeader(token))
       .expect(200);
 
-    expect(response.body).toHaveProperty('cardNumber', seed.passenger.cardNumber);
+    expect(response.body).toHaveProperty(
+      'cardNumber',
+      seed.passenger.cardNumber,
+    );
   });
 
   it('issues a fine', async () => {

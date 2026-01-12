@@ -28,6 +28,8 @@ export interface DriverTrip {
   startsAt: string;
   endsAt: string | null;
   passengerCount: number;
+  plannedStartAt: string | null;
+  startDelayMin: number | null;
   route: {
     id: number;
     number: string;
@@ -67,6 +69,15 @@ export interface DriverSchedule {
     workStartTime: string;
     workEndTime: string;
     intervalMin: number;
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+    validFrom: string | null;
+    validTo: string | null;
   } | null;
   trips: DriverTrip[];
   stops: DriverTripStop[];
@@ -134,6 +145,12 @@ export type PassengerCountPayload = {
   passengerCount: number;
 }
 
+export type DriverGpsPayload = {
+  lon: number;
+  lat: number;
+  recordedAt?: string;
+}
+
 export function getDriverProfile() {
   return apiGet<DriverProfile>('/driver/me');
 }
@@ -164,4 +181,8 @@ export function finishDriverTrip(payload: FinishTripPayload) {
 
 export function updateTripPassengerCount(payload: PassengerCountPayload) {
   return apiPost<{ ok: true }>('/driver/trips/passengers', payload);
+}
+
+export function logDriverGps(payload: DriverGpsPayload) {
+  return apiPost<{ ok: true }>('/driver/trips/gps', payload);
 }

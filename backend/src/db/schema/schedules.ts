@@ -10,6 +10,7 @@ import {
   time,
 } from 'drizzle-orm/pg-core';
 import { routes } from './routes';
+import { vehicles } from './vehicles';
 
 export const schedules = pgTable(
   'schedules',
@@ -18,6 +19,9 @@ export const schedules = pgTable(
     routeId: bigint('route_id', { mode: 'number' })
       .notNull()
       .references(() => routes.id),
+    vehicleId: bigint('vehicle_id', { mode: 'number' }).references(
+      () => vehicles.id,
+    ),
     workStartTime: time('work_start_time').notNull(),
     workEndTime: time('work_end_time').notNull(),
     intervalMin: integer('interval_min').notNull(),

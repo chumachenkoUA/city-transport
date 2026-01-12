@@ -4,7 +4,6 @@ import {
   foreignKey,
   numeric,
   pgTable,
-  unique,
 } from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 

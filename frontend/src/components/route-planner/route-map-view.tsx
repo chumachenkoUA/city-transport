@@ -9,8 +9,12 @@ interface RouteMapViewProps {
 
 export function RouteMapView({ route }: RouteMapViewProps) {
   // Завантажити геометрії для кожного сегменту
+  const segmentsKey = route.segments
+    .map(s => `${s.routeId}-${s.fromStop.id}-${s.toStop.id}`)
+    .join('_');
+
   const { data: geometries } = useQuery({
-    queryKey: ['route-geometries-segments', route.segments.map(s => s.routeId).join('-')],
+    queryKey: ['route-geometries-segments', segmentsKey],
     queryFn: async () => {
       return Promise.all(
         route.segments.map(seg =>
@@ -79,27 +83,30 @@ export function RouteMapView({ route }: RouteMapViewProps) {
         </MarkerPopup>
       </MapMarker>
 
-      {/* Маркер пересадки (жовтий) - якщо є */}
-      {route.transfer && (
-        <MapMarker
-          longitude={Number(route.transfer.lon)}
-          latitude={Number(route.transfer.lat)}
-        >
-          <MarkerContent>
-            <div className="h-5 w-5 rounded-full bg-yellow-500 border-2 border-white shadow-lg flex items-center justify-center">
-              <ArrowRightLeft className="h-3 w-3 text-white" />
-            </div>
-          </MarkerContent>
-          <MarkerPopup>
-            <div className="p-2">
-              <h4 className="font-medium text-sm">Пересадка</h4>
-              <p className="text-xs text-gray-600">{route.transfer.stopName}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Очікування: {route.transfer.waitTimeMin} хв
-              </p>
-            </div>
-          </MarkerPopup>
-        </MapMarker>
+      {/* Маркери пересадок */}
+      {(route.transfers ?? (route.transfer ? [route.transfer] : [])).map(
+        (transfer, idx) => (
+          <MapMarker
+            key={`${transfer.stopId}-${idx}`}
+            longitude={Number(transfer.lon)}
+            latitude={Number(transfer.lat)}
+          >
+            <MarkerContent>
+              <div className="h-5 w-5 rounded-full bg-yellow-500 border-2 border-white shadow-lg flex items-center justify-center">
+                <ArrowRightLeft className="h-3 w-3 text-white" />
+              </div>
+            </MarkerContent>
+            <MarkerPopup>
+              <div className="p-2">
+                <h4 className="font-medium text-sm">Пересадка {idx + 1}</h4>
+                <p className="text-xs text-gray-600">{transfer.stopName}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Очікування: {transfer.waitTimeMin} хв
+                </p>
+              </div>
+            </MarkerPopup>
+          </MapMarker>
+        ),
       )}
     </>
   );

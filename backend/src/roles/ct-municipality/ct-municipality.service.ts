@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import { transformToCamelCase } from '../../common/utils/transform-to-camel-case';
 import { DbService } from '../../db/db.service';
 import { CreateStopDto } from '../../modules/stops/dto/create-stop.dto';
 import { UpdateStopDto } from '../../modules/stops/dto/update-stop.dto';
@@ -23,6 +24,7 @@ type RouteRow = {
   id: number;
   number: string;
   direction: string;
+  isActive: boolean;
   transportTypeId: number;
   transportType: string;
 };
@@ -52,7 +54,6 @@ type PassengerFlowRow = {
   tripDate: string;
   routeNumber: string;
   transportType: string;
-  fleetNumber: string;
   passengerCount: number;
 };
 
@@ -74,7 +75,7 @@ export class CtMunicipalityService {
 
   async listTransportTypes() {
     const result = (await this.dbService.db.execute(sql`
-      select id as "id", name as "name"
+      select id, name
       from guest_api.v_transport_types
       order by id
     `)) as unknown as { rows: TransportTypeRow[] };
@@ -86,10 +87,10 @@ export class CtMunicipalityService {
     // Using municipality_api view for stops list (created in 0015)
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        name as "name",
-        lon as "lon",
-        lat as "lat"
+        id,
+        name,
+        lon,
+        lat
       from municipality_api.v_stops
       order by id desc
     `)) as unknown as { rows: StopRow[] };
@@ -133,51 +134,54 @@ export class CtMunicipalityService {
   async listRoutes() {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        number as "number",
-        direction as "direction",
-        transport_type_id as "transportTypeId",
-        transport_type_name as "transportType"
-      from guest_api.v_routes
+        id,
+        number,
+        direction,
+        is_active,
+        transport_type_id,
+        transport_type
+      from municipality_api.v_routes
       order by number
     `)) as unknown as { rows: RouteRow[] };
 
-    return result.rows;
+    return transformToCamelCase(result.rows) as RouteRow[];
   }
 
   async listRouteStops(routeId: number) {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        route_id as "routeId",
-        stop_id as "stopId",
-        stop_name as "stopName",
-        lon as "lon",
-        lat as "lat",
-        prev_route_stop_id as "prevRouteStopId",
-        next_route_stop_id as "nextRouteStopId",
-        distance_to_next_km as "distanceToNextKm"
+        id,
+        route_id,
+        stop_id,
+        stop_name,
+        lon,
+        lat,
+        prev_route_stop_id,
+        next_route_stop_id,
+        distance_to_next_km
       from guest_api.v_route_stops
       where route_id = ${routeId}
     `)) as unknown as { rows: RouteStopRow[] };
 
-    return this.orderRouteStops(result.rows);
+    const stops = transformToCamelCase(result.rows) as RouteStopRow[];
+    return this.orderRouteStops(stops);
   }
 
   async listRoutePoints(routeId: number) {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        route_id as "routeId",
-        lon as "lon",
-        lat as "lat",
-        prev_route_point_id as "prevRoutePointId",
-        next_route_point_id as "nextRoutePointId"
+        id,
+        route_id,
+        lon,
+        lat,
+        prev_route_point_id,
+        next_route_point_id
       from guest_api.v_route_points
       where route_id = ${routeId}
     `)) as unknown as { rows: RoutePointRow[] };
 
-    return this.orderRoutePoints(result.rows);
+    const points = transformToCamelCase(result.rows) as RoutePointRow[];
+    return this.orderRoutePoints(points);
   }
 
   async createRoute(payload: CreateMunicipalityRouteDto) {
@@ -221,65 +225,110 @@ export class CtMunicipalityService {
 
   async getPassengerFlow(query: PassengerFlowQueryDto) {
     const { from, to } = this.parsePeriod(query);
+    const transportTypeName = query.transportTypeId
+      ? await this.getTransportTypeName(query.transportTypeId)
+      : null;
+    const routeNumber = query.routeNumber ?? null;
 
     const result = (await this.dbService.db.execute(sql`
-      select
-        trip_date as "tripDate",
-        route_number as "routeNumber",
-        transport_type as "transportType",
-        fleet_number as "fleetNumber",
-        passenger_count as "passengerCount"
-      from municipality_api.get_passenger_flow(
-        ${from}::date,
-        ${to}::date,
-        ${query.routeNumber ?? null},
-        ${query.transportTypeId ? await this.getTransportTypeName(query.transportTypeId) : null}
+      with filters as (
+        select
+          ${routeNumber}::text as route_number,
+          ${transportTypeName}::text as transport_type
       )
+      select
+        v.trip_date,
+        v.route_number,
+        v.transport_type,
+        v.passenger_count
+      from municipality_api.v_passenger_flow_analytics v
+      cross join filters
+      where v.trip_date >= ${from}::date
+        and v.trip_date <= ${to}::date
+        and (filters.route_number is null or v.route_number = filters.route_number)
+        and (filters.transport_type is null or v.transport_type = filters.transport_type)
+      order by v.trip_date desc
     `)) as unknown as { rows: PassengerFlowRow[] };
 
-    return result.rows;
+    return transformToCamelCase(result.rows) as PassengerFlowRow[];
   }
 
   async getComplaints(query: MunicipalityComplaintsQueryDto) {
     const { from, to } = this.parsePeriod(query);
+    const transportTypeName = query.transportTypeId
+      ? await this.getTransportTypeName(query.transportTypeId)
+      : null;
+    const routeNumber = query.routeNumber ?? null;
+    const fleetNumber = query.fleetNumber ?? null;
 
     const result = (await this.dbService.db.execute(sql`
-      select
-        id as "id",
-        type as "type",
-        message as "message",
-        status as "status",
-        created_at as "createdAt",
-        route_number as "routeNumber",
-        transport_type as "transportType",
-        fleet_number as "fleetNumber",
-        contact_info as "contactInfo"
-      from municipality_api.get_complaints(
-        ${from}::date,
-        ${to}::date,
-        ${query.routeNumber ?? null},
-        ${query.transportTypeId ? await this.getTransportTypeName(query.transportTypeId) : null},
-        ${query.fleetNumber ?? null}
+      with filters as (
+        select
+          ${routeNumber}::text as route_number,
+          ${transportTypeName}::text as transport_type,
+          ${fleetNumber}::text as fleet_number
       )
+      select
+        v.id,
+        v.type,
+        v.message,
+        v.status,
+        v.created_at,
+        v.route_number,
+        v.transport_type,
+        v.fleet_number,
+        v.contact_info
+      from municipality_api.v_complaints_dashboard v
+      cross join filters
+      where v.created_at >= ${from}::date
+        and v.created_at < ${to}::date + 1
+        and (filters.route_number is null or v.route_number = filters.route_number)
+        and (filters.transport_type is null or v.transport_type = filters.transport_type)
+        and (filters.fleet_number is null or v.fleet_number = filters.fleet_number)
+      order by v.created_at desc
     `)) as unknown as { rows: ComplaintRow[] };
 
-    return result.rows;
+    return transformToCamelCase(result.rows) as ComplaintRow[];
+  }
+
+  async setRouteActive(routeId: number, isActive: boolean) {
+    await this.dbService.db.execute(sql`
+      select municipality_api.set_route_active(
+        ${routeId}::bigint,
+        ${isActive}
+      )
+    `);
+
+    return { success: true };
+  }
+
+  async updateComplaintStatus(id: number, status: string) {
+    await this.dbService.db.execute(sql`
+      select municipality_api.update_complaint_status(
+        ${id}::bigint,
+        ${status}
+      )
+    `);
+
+    return { success: true };
   }
 
   private async findRouteById(routeId: number) {
     const result = (await this.dbService.db.execute(sql`
       select
-        id as "id",
-        number as "number",
-        direction as "direction",
-        transport_type_id as "transportTypeId",
-        transport_type_name as "transportType"
-      from guest_api.v_routes
+        id,
+        number,
+        direction,
+        is_active,
+        transport_type_id,
+        transport_type
+      from municipality_api.v_routes
       where id = ${routeId}
       limit 1
     `)) as unknown as { rows: RouteRow[] };
 
-    return result.rows[0] ?? null;
+    const routes = transformToCamelCase(result.rows) as RouteRow[];
+    return routes[0] ?? null;
   }
 
   private async getTransportTypeName(id: number) {

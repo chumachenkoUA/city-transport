@@ -49,15 +49,24 @@ export function RouteCard({ route, isSelected, onClick }: RouteCardProps) {
         {route.totalDistanceKm.toFixed(1)} км
       </div>
 
-      {/* Пересадка (якщо є) */}
-      {route.transferCount === 1 && route.transfer && (
+      {/* Пересадки (якщо є) */}
+      {route.transferCount > 0 && (
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
           <span>🔄</span>
           <span>
-            1 пересадка • очікування {route.transfer.waitTimeMin} хв
+            {route.transferCount} пересадки • очікування {formatWait(route)} хв
           </span>
         </div>
       )}
     </button>
   );
+}
+
+function formatWait(route: RouteOption) {
+  const transfers = route.transfers ?? (route.transfer ? [route.transfer] : []);
+  const totalWait = transfers.reduce(
+    (sum, item) => sum + (item.waitTimeMin ?? 0),
+    0,
+  );
+  return totalWait;
 }

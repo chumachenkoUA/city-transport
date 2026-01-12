@@ -1,6 +1,8 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
+import { PostgresExceptionFilter } from '../../src/common/filters/postgres-exception.filter';
+import { TransformInterceptor } from '../../src/common/interceptors/transform.interceptor';
 
 let app: INestApplication | null = null;
 let appPromise: Promise<INestApplication> | null = null;
@@ -20,6 +22,18 @@ export async function getTestApp(): Promise<INestApplication> {
       }).compile();
 
       const instance = moduleFixture.createNestApplication();
+      
+      // Match global config from main.ts
+      instance.useGlobalFilters(new PostgresExceptionFilter());
+      instance.useGlobalInterceptors(new TransformInterceptor());
+      instance.useGlobalPipes(
+        new ValidationPipe({
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          transform: true,
+        }),
+      );
+
       await instance.init();
       return instance;
     })();

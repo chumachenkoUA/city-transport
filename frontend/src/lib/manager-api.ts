@@ -24,12 +24,20 @@ export type ManagerRoute = {
   number: string
   direction: string
   transportTypeId: number
-  transportType: string
+  transportTypeName: string
 }
 
 export type ManagerTransportType = {
   id: number
   name: string
+}
+
+export type ManagerVehicleModel = {
+  id: number
+  name: string
+  capacity: number
+  transportTypeId: number
+  transportType: string
 }
 
 export type HireDriverPayload = {
@@ -48,8 +56,7 @@ export type HireDriverPayload = {
 
 export type CreateVehiclePayload = {
   fleetNumber: string
-  transportTypeId: number
-  capacity: number
+  modelId: number
   routeId?: number
   routeNumber?: string
   direction?: string
@@ -61,6 +68,10 @@ export function getManagerDrivers() {
 
 export function getManagerVehicles() {
   return apiGet<ManagerVehicle[]>('/manager/vehicles')
+}
+
+export function getManagerModels() {
+  return apiGet<ManagerVehicleModel[]>('/manager/models')
 }
 
 export function getManagerRoutes() {

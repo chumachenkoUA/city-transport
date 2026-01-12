@@ -53,8 +53,9 @@ describe('CtPassenger (e2e)', () => {
       id?: number;
       card_number?: string;
     }>;
-    expect(cards.some((item) => item.card_number === seed.passenger.cardNumber))
-      .toBe(true);
+    expect(
+      cards.some((item) => item.card_number === seed.passenger.cardNumber),
+    ).toBe(true);
   });
 
   it('tops up a card', async () => {
@@ -105,7 +106,8 @@ describe('CtPassenger (e2e)', () => {
       .set(authHeader(token))
       .expect(200);
 
-    expect(Number(response.body?.id)).toBe(seed.fineId);
+    const body = response.body as { id?: number | string } | null;
+    expect(Number(body?.id)).toBe(seed.fineId);
   });
 
   it('submits an appeal', async () => {
@@ -129,21 +131,26 @@ describe('CtPassenger (e2e)', () => {
     expect(Array.isArray(response.body)).toBe(true);
   });
 
-  it('finds routes between points', async () => {
+  it('finds routes between points (plan)', async () => {
     const from = seed.stops[0];
     const to = seed.stops[1];
     const response = await request(app.getHttpServer())
-      .get('/passenger/routes/near')
+      .get('/passenger/routes/plan')
       .set(authHeader(token))
       .query({
         lonA: from.lon,
         latA: from.lat,
         lonB: to.lon,
         latB: to.lat,
+        radius: 1000,
       })
       .expect(200);
 
     expect(Array.isArray(response.body)).toBe(true);
+    if (response.body.length > 0) {
+      expect(response.body[0]).toHaveProperty('totalTimeMin');
+      expect(response.body[0]).toHaveProperty('segments');
+    }
   });
 
   it('submits a complaint', async () => {
