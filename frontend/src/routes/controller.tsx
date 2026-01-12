@@ -1,67 +1,107 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useMutation } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { FormSection } from '@/components/domain/forms'
+import { ErrorState } from '@/components/domain/data-display'
+import { Search, CreditCard, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import {
   checkControllerCard,
   issueControllerFine,
-  type ControllerCardDetails,
+  getRoutes,
+  getVehicles,
+  getActiveTrips,
 } from '@/lib/controller-api'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/controller')({
   component: ControllerPage,
 })
 
-type FineFormState = {
-  cardNumber: string
-  fleetNumber: string
-  routeNumber: string
-  checkedAt: string
-  amount: string
-  reason: string
-}
-
 function ControllerPage() {
   const [cardNumber, setCardNumber] = useState('')
-  const [cardDetails, setCardDetails] = useState<ControllerCardDetails | null>(null)
-  const [fineForm, setFineForm] = useState<FineFormState>({
-    cardNumber: '',
-    fleetNumber: '',
-    routeNumber: '',
-    checkedAt: '',
-    amount: '',
-    reason: '',
-  })
-  const [fineResult, setFineResult] = useState<number | null>(null)
+  const [cardDetails, setCardDetails] = useState<any>(null)
+  const [selectedRouteId, setSelectedRouteId] = useState('')
+  const [selectedVehicleId, setSelectedVehicleId] = useState('')
+  const [selectedTripId, setSelectedTripId] = useState('')
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const [checkedAt, setCheckedAt] = useState('')
 
+  // Routes query
+  const { data: routes } = useQuery({
+    queryKey: ['controller-routes'],
+    queryFn: getRoutes,
+  })
+
+  // Vehicles query (filtered by route)
+  const { data: vehicles } = useQuery({
+    queryKey: ['controller-vehicles', selectedRouteId],
+    queryFn: () => getVehicles(selectedRouteId ? Number(selectedRouteId) : undefined),
+    enabled: !!selectedRouteId,
+  })
+
+  // Active trips query
+  const { data: activeTrips } = useQuery({
+    queryKey: ['controller-trips', selectedVehicleId, checkedAt],
+    queryFn: () => {
+      const vehicle = vehicles?.find((v) => v.id === Number(selectedVehicleId))
+      if (!vehicle) return Promise.resolve([])
+      return getActiveTrips(vehicle.fleetNumber, checkedAt ? new Date(checkedAt).toISOString() : undefined)
+    },
+    enabled: !!selectedVehicleId && !!vehicles,
+  })
+
+  // Check card mutation
   const checkMutation = useMutation({
-    mutationFn: (value: string) => checkControllerCard(value),
+    mutationFn: checkControllerCard,
     onSuccess: (data) => {
       setCardDetails(data)
-      setFineForm((prev) =>
-        prev.cardNumber ? prev : { ...prev, cardNumber: data.cardNumber }
-      )
+      toast.success('Картку перевірено', {
+        description: `Пасажир: ${data.firstName} ${data.lastName}`,
+      })
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка перевірки картки', {
+        description: error.message,
+      })
     },
   })
 
+  // Issue fine mutation
   const fineMutation = useMutation({
     mutationFn: issueControllerFine,
     onSuccess: (data) => {
-      setFineResult(data.fineId)
-      setFineForm((prev) => ({
-        ...prev,
-        amount: '',
-        reason: '',
-        fleetNumber: '',
-        routeNumber: '',
-        checkedAt: '',
-      }))
+      toast.success('Штраф виписано успішно!', {
+        description: `ID штрафу: ${data.fineId}`,
+      })
+      // Reset form
+      setAmount('')
+      setReason('')
+      setSelectedRouteId('')
+      setSelectedVehicleId('')
+      setSelectedTripId('')
+      setCheckedAt('')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка виписування штрафу', {
+        description: error.message,
+      })
     },
   })
 
@@ -74,198 +114,269 @@ function ControllerPage() {
 
   const handleCheckCard = () => {
     const trimmed = cardNumber.trim()
-    if (!trimmed) return
-    setFineResult(null)
+    if (!trimmed) {
+      toast.error('Введіть номер картки')
+      return
+    }
     checkMutation.mutate(trimmed)
   }
 
   const handleIssueFine = () => {
-    if (!fineForm.cardNumber || !fineForm.amount || !fineForm.reason) return
-    setFineResult(null)
+    if (!cardDetails?.cardNumber || !amount || !reason) {
+      toast.error('Заповніть всі обов\'язкові поля')
+      return
+    }
+
+    const checkedAtValue = checkedAt ? new Date(checkedAt) : null
+    if (checkedAtValue && checkedAtValue.getTime() > Date.now() + 5 * 60 * 1000) {
+      toast.error('Час перевірки не може бути у майбутньому')
+      return
+    }
+
     fineMutation.mutate({
-      cardNumber: fineForm.cardNumber.trim(),
-      fleetNumber: fineForm.fleetNumber.trim() || undefined,
-      routeNumber: fineForm.routeNumber.trim() || undefined,
-      checkedAt: fineForm.checkedAt ? new Date(fineForm.checkedAt).toISOString() : undefined,
-      amount: Number(fineForm.amount),
-      reason: fineForm.reason.trim(),
-      status: 'Очікує сплати',
+      cardNumber: cardDetails.cardNumber,
+      tripId: selectedTripId ? Number(selectedTripId) : undefined,
+      checkedAt: checkedAtValue?.toISOString() || new Date().toISOString(),
+      amount: Number(amount),
+      reason,
     })
   }
 
+  const isFormValid = cardDetails && amount && reason
+
   return (
     <div className="px-4 py-8 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className="mx-auto max-w-5xl space-y-8">
+        {/* Breadcrumb */}
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Контролер</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">Панель контролера</h1>
-          <p className="text-muted-foreground">
-            Перевірка транспортних карток та реєстрація штрафів.
+          <h1 className="text-display-sm">Кабінет контролера</h1>
+          <p className="text-body-md text-muted-foreground mt-2">
+            Перевірка транспортних карток та виписування штрафів
           </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Перевірка транспортної картки</CardTitle>
-              <CardDescription>Остання поїздка та статус картки</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="card-number">Номер картки</Label>
-                <div className="flex gap-2">
+          {/* Card Check Section */}
+          <FormSection
+            title="Перевірка картки"
+            description="Введіть номер транспортної картки пасажира"
+          >
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Label htmlFor="card-number">Номер картки</Label>
                   <Input
                     id="card-number"
-                    placeholder="CARD-0001"
+                    type="text"
                     value={cardNumber}
-                    onChange={(event) => setCardNumber(event.target.value)}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                    placeholder="Наприклад: CARD-001"
+                    onKeyDown={(e) => e.key === 'Enter' && handleCheckCard()}
                   />
-                  <Button onClick={handleCheckCard} disabled={checkMutation.isPending}>
-                    {checkMutation.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                </div>
+                <div className="self-end">
+                  <Button
+                    onClick={handleCheckCard}
+                    disabled={checkMutation.isPending}
+                  >
+                    {checkMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
                     )}
-                    Перевірити
+                    <span className="ml-2">Перевірити</span>
                   </Button>
                 </div>
               </div>
 
               {checkMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося перевірити картку.</p>
+                <ErrorState
+                  title="Помилка"
+                  message={checkMutation.error.message}
+                  onRetry={handleCheckCard}
+                />
               )}
+            </div>
+          </FormSection>
 
-              {cardDetails && (
-                <div className="space-y-2 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">ID {cardDetails.id}</Badge>
-                    <Badge variant="outline">{cardDetails.cardNumber}</Badge>
+          {/* Card Details Display */}
+          {cardDetails && (
+            <Card className="border-success/30 bg-success/5">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  <CardTitle>Інформація про картку</CardTitle>
+                </div>
+                <CardDescription>Дані перевіреної картки</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Номер:</span>
+                  <Badge variant="outline">{cardDetails.cardNumber}</Badge>
+                </div>
+                <Separator />
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Пасажир:</span>
+                    <span className="font-medium">
+                      {cardDetails.firstName} {cardDetails.lastName}
+                    </span>
                   </div>
-                  <div>
-                    <span className="font-medium">Баланс:</span> {formattedBalance}
-                  </div>
-                  <div>
-                    <span className="font-medium">Остання поїздка:</span>{' '}
-                    {formatDateTime(cardDetails.lastUsageAt)}
-                  </div>
-                  <div>
-                    <span className="font-medium">Маршрут:</span>{' '}
-                    {cardDetails.lastRouteNumber ?? '—'}
-                  </div>
-                  <div>
-                    <span className="font-medium">Тип транспорту:</span>{' '}
-                    {cardDetails.lastTransportType ?? '—'}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Баланс:</span>
+                    <span className={`font-medium ${Number(cardDetails.balance) < 0 ? 'text-destructive' : 'text-success'}`}>
+                      {formattedBalance}
+                    </span>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Реєстрація штрафу</CardTitle>
-              <CardDescription>Створення запису про порушення</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        {/* Fine Issuance Section */}
+        {cardDetails && (
+          <FormSection
+            title="Виписування штрафу"
+            description="Заповніть деталі порушення та виписати штраф"
+          >
+            <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="fine-card">Номер картки</Label>
-                  <Input
-                    id="fine-card"
-                    value={fineForm.cardNumber}
-                    onChange={(event) =>
-                      setFineForm((prev) => ({ ...prev, cardNumber: event.target.value }))
-                    }
-                    placeholder="CARD-0001"
-                  />
+                  <Label htmlFor="route">Маршрут</Label>
+                  <Select
+                    value={selectedRouteId}
+                    onValueChange={(value) => {
+                      setSelectedRouteId(value)
+                      setSelectedVehicleId('')
+                      setSelectedTripId('')
+                    }}
+                  >
+                    <SelectTrigger id="route">
+                      <SelectValue placeholder="Оберіть маршрут" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {routes?.map((route) => (
+                        <SelectItem key={route.id} value={String(route.id)}>
+                          {route.number} • {route.transportTypeName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="fine-amount">Сума штрафу</Label>
+                  <Label htmlFor="vehicle">Транспорт</Label>
+                  <Select
+                    value={selectedVehicleId}
+                    onValueChange={(value) => {
+                      setSelectedVehicleId(value)
+                      setSelectedTripId('')
+                    }}
+                    disabled={!selectedRouteId}
+                  >
+                    <SelectTrigger id="vehicle">
+                      <SelectValue placeholder={selectedRouteId ? "Оберіть транспорт" : "Спочатку оберіть маршрут"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicles?.map((vehicle) => (
+                        <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                          {vehicle.fleetNumber}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {activeTrips && activeTrips.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="trip">Рейс (опціонально)</Label>
+                  <Select value={selectedTripId} onValueChange={setSelectedTripId}>
+                    <SelectTrigger id="trip">
+                      <SelectValue placeholder="Оберіть рейс" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeTrips.map((trip) => (
+                        <SelectItem key={trip.tripId} value={String(trip.tripId)}>
+                          Рейс #{trip.tripId} • {trip.startTime || 'Активний'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Сума штрафу (₴) *</Label>
                   <Input
-                    id="fine-amount"
+                    id="amount"
                     type="number"
                     min="0"
                     step="0.01"
-                    value={fineForm.amount}
-                    onChange={(event) =>
-                      setFineForm((prev) => ({ ...prev, amount: event.target.value }))
-                    }
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="50.00"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="fine-fleet">Номер транспорту</Label>
+                  <Label htmlFor="checked-at">Час перевірки (опціонально)</Label>
                   <Input
-                    id="fine-fleet"
-                    value={fineForm.fleetNumber}
-                    onChange={(event) =>
-                      setFineForm((prev) => ({ ...prev, fleetNumber: event.target.value }))
-                    }
-                    placeholder="1001"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fine-route">Номер маршруту</Label>
-                  <Input
-                    id="fine-route"
-                    value={fineForm.routeNumber}
-                    onChange={(event) =>
-                      setFineForm((prev) => ({ ...prev, routeNumber: event.target.value }))
-                    }
-                    placeholder="12А"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="fine-time">Час перевірки</Label>
-                  <Input
-                    id="fine-time"
+                    id="checked-at"
                     type="datetime-local"
-                    value={fineForm.checkedAt}
-                    onChange={(event) =>
-                      setFineForm((prev) => ({ ...prev, checkedAt: event.target.value }))
-                    }
+                    value={checkedAt}
+                    onChange={(e) => setCheckedAt(e.target.value)}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fine-reason">Причина</Label>
+                <Label htmlFor="reason">Причина штрафу *</Label>
                 <Textarea
-                  id="fine-reason"
-                  value={fineForm.reason}
-                  onChange={(event) =>
-                    setFineForm((prev) => ({ ...prev, reason: event.target.value }))
-                  }
-                  placeholder="Опишіть порушення"
+                  id="reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Опишіть порушення..."
+                  rows={3}
                 />
               </div>
 
-              {fineMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося створити штраф.</p>
-              )}
+              <div className="flex items-center gap-2 p-4 bg-warning/10 border border-warning/30 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-warning" />
+                <p className="text-sm text-muted-foreground">
+                  Переконайтесь, що всі дані введено коректно перед виписуванням штрафу
+                </p>
+              </div>
 
-              {fineResult && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  Штраф створено. ID: {fineResult}
-                </div>
-              )}
-
-              <Button onClick={handleIssueFine} disabled={fineMutation.isPending}>
-                {fineMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Зареєструвати
+              <Button
+                onClick={handleIssueFine}
+                disabled={fineMutation.isPending || !isFormValid}
+                className="w-full"
+                size="lg"
+              >
+                {fineMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Виписати штраф
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </FormSection>
+        )}
       </div>
     </div>
   )
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return new Intl.DateTimeFormat('uk-UA', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
 }

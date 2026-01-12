@@ -1,54 +1,46 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FormSection } from '@/components/domain/forms'
+import { VehicleCard } from '@/components/domain/transport'
+import { EmptyState, TableSkeleton } from '@/components/domain/data-display'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Users, Bus, Loader2, UserPlus } from 'lucide-react'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import {
+  hireDriver,
   addVehicle,
   getManagerDrivers,
+  getManagerVehicles,
   getManagerRoutes,
   getManagerTransportTypes,
-  getManagerVehicles,
-  hireDriver,
+  getManagerModels,
 } from '@/lib/manager-api'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/manager')({
   component: ManagerPage,
 })
 
-type DriverFormState = {
-  login: string
-  password: string
-  email: string
-  phone: string
-  fullName: string
-  driverLicenseNumber: string
-  licenseCategories: string
-  passportSeries: string
-  passportNumber: string
-}
-
-type VehicleFormState = {
-  fleetNumber: string
-  transportTypeId: string
-  capacity: string
-  routeId: string
-}
-
 function ManagerPage() {
   const queryClient = useQueryClient()
-  const [driverForm, setDriverForm] = useState<DriverFormState>({
+  const [activeTab, setActiveTab] = useState('drivers')
+
+  // Driver form state
+  const [driverForm, setDriverForm] = useState({
     login: '',
     password: '',
     email: '',
@@ -59,39 +51,52 @@ function ManagerPage() {
     passportSeries: '',
     passportNumber: '',
   })
-  const [vehicleForm, setVehicleForm] = useState<VehicleFormState>({
+
+  // Vehicle form state
+  const [vehicleForm, setVehicleForm] = useState({
     fleetNumber: '',
     transportTypeId: '',
-    capacity: '',
+    modelId: '',
     routeId: '',
   })
-  const [driverResult, setDriverResult] = useState<number | null>(null)
-  const [vehicleResult, setVehicleResult] = useState<number | null>(null)
 
-  const driversQuery = useQuery({
+  // Queries
+  const { data: drivers, isLoading: driversLoading } = useQuery({
     queryKey: ['manager-drivers'],
     queryFn: getManagerDrivers,
   })
 
-  const vehiclesQuery = useQuery({
+  const { data: vehicles, isLoading: vehiclesLoading } = useQuery({
     queryKey: ['manager-vehicles'],
     queryFn: getManagerVehicles,
   })
 
-  const routesQuery = useQuery({
+  const { data: routes } = useQuery({
     queryKey: ['manager-routes'],
     queryFn: getManagerRoutes,
   })
 
-  const transportTypesQuery = useQuery({
+  const { data: transportTypes } = useQuery({
     queryKey: ['manager-transport-types'],
     queryFn: getManagerTransportTypes,
   })
 
+  const { data: models } = useQuery({
+    queryKey: ['manager-models'],
+    queryFn: getManagerModels,
+  })
+
+  // Filter models by transport type
+  const filteredModels = useMemo(() => {
+    if (!models || !vehicleForm.transportTypeId) return []
+    return models.filter((m) => m.transportTypeId === Number(vehicleForm.transportTypeId))
+  }, [models, vehicleForm.transportTypeId])
+
+  // Hire driver mutation
   const hireDriverMutation = useMutation({
     mutationFn: hireDriver,
     onSuccess: (data) => {
-      setDriverResult(data.id)
+      queryClient.invalidateQueries({ queryKey: ['manager-drivers'] })
       setDriverForm({
         login: '',
         password: '',
@@ -103,57 +108,72 @@ function ManagerPage() {
         passportSeries: '',
         passportNumber: '',
       })
-      queryClient.invalidateQueries({ queryKey: ['manager-drivers'] })
+      toast.success('Водія найнято успішно!', {
+        description: `ID: ${data.id}`,
+      })
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка найму водія', {
+        description: error.message,
+      })
     },
   })
 
+  // Add vehicle mutation
   const addVehicleMutation = useMutation({
     mutationFn: addVehicle,
     onSuccess: (data) => {
-      setVehicleResult(data.id)
+      queryClient.invalidateQueries({ queryKey: ['manager-vehicles'] })
       setVehicleForm({
         fleetNumber: '',
         transportTypeId: '',
-        capacity: '',
+        modelId: '',
         routeId: '',
       })
-      queryClient.invalidateQueries({ queryKey: ['manager-vehicles'] })
+      toast.success('Транспорт додано успішно!', {
+        description: `ID: ${data.id}`,
+      })
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка додавання транспорту', {
+        description: error.message,
+      })
     },
   })
 
-  const routeOptions = useMemo(() => routesQuery.data ?? [], [routesQuery.data])
-
   const handleHireDriver = () => {
-    if (!driverForm.login || !driverForm.email || !driverForm.phone || !driverForm.fullName) return
-    if (!driverForm.driverLicenseNumber || !driverForm.licenseCategories) return
-    if (!driverForm.passportSeries || !driverForm.passportNumber) return
+    if (!driverForm.login || !driverForm.password || !driverForm.fullName) {
+      toast.error('Заповніть обов\'язкові поля')
+      return
+    }
 
-    const categories = driverForm.licenseCategories
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean)
+    const [firstName, ...lastNameParts] = driverForm.fullName.split(' ')
+    const lastName = lastNameParts.join(' ')
 
     hireDriverMutation.mutate({
-      login: driverForm.login.trim(),
-      password: driverForm.password.trim() || undefined,
-      email: driverForm.email.trim(),
-      phone: driverForm.phone.trim(),
-      fullName: driverForm.fullName.trim(),
-      driverLicenseNumber: driverForm.driverLicenseNumber.trim(),
-      licenseCategories: categories,
-      passportData: {
-        series: driverForm.passportSeries.trim(),
-        number: driverForm.passportNumber.trim(),
-      },
+      login: driverForm.login,
+      password: driverForm.password,
+      email: driverForm.email || undefined,
+      phone: driverForm.phone || undefined,
+      firstName,
+      lastName: lastName || firstName,
+      driverLicenseNumber: driverForm.driverLicenseNumber || undefined,
+      licenseCategories: driverForm.licenseCategories || undefined,
+      passportSeries: driverForm.passportSeries || undefined,
+      passportNumber: driverForm.passportNumber || undefined,
     })
   }
 
   const handleAddVehicle = () => {
-    if (!vehicleForm.fleetNumber || !vehicleForm.transportTypeId || !vehicleForm.capacity) return
+    if (!vehicleForm.fleetNumber || !vehicleForm.transportTypeId || !vehicleForm.modelId) {
+      toast.error('Заповніть обов\'язкові поля')
+      return
+    }
+
     addVehicleMutation.mutate({
-      fleetNumber: vehicleForm.fleetNumber.trim(),
+      fleetNumber: vehicleForm.fleetNumber,
       transportTypeId: Number(vehicleForm.transportTypeId),
-      capacity: Number(vehicleForm.capacity),
+      modelId: Number(vehicleForm.modelId),
       routeId: vehicleForm.routeId ? Number(vehicleForm.routeId) : undefined,
     })
   }
@@ -161,328 +181,272 @@ function ManagerPage() {
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
+        {/* Breadcrumb */}
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Менеджер</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">Панель менеджера</h1>
-          <p className="text-muted-foreground">
-            Найм водіїв та додавання транспорту до парку.
+          <h1 className="text-display-sm">Кабінет менеджера</h1>
+          <p className="text-body-md text-muted-foreground mt-2">
+            Найм водіїв та управління транспортним парком
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Прийняття водія</CardTitle>
-              <CardDescription>Додайте нового водія до системи</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="driver-login">Логін</Label>
-                  <Input
-                    id="driver-login"
-                    value={driverForm.login}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, login: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-password">Пароль (опційно)</Label>
-                  <Input
-                    id="driver-password"
-                    type="password"
-                    value={driverForm.password}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, password: event.target.value }))
-                    }
-                    placeholder="driver123"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-email">Email</Label>
-                  <Input
-                    id="driver-email"
-                    type="email"
-                    value={driverForm.email}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-phone">Телефон</Label>
-                  <Input
-                    id="driver-phone"
-                    value={driverForm.phone}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, phone: event.target.value }))
-                    }
-                    placeholder="+380..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-name">ПІБ</Label>
-                  <Input
-                    id="driver-name"
-                    value={driverForm.fullName}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, fullName: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-license">Номер посвідчення</Label>
-                  <Input
-                    id="driver-license"
-                    value={driverForm.driverLicenseNumber}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, driverLicenseNumber: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-categories">Категорії</Label>
-                  <Input
-                    id="driver-categories"
-                    value={driverForm.licenseCategories}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, licenseCategories: event.target.value }))
-                    }
-                    placeholder="B, D"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-passport-series">Серія паспорта</Label>
-                  <Input
-                    id="driver-passport-series"
-                    value={driverForm.passportSeries}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, passportSeries: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="driver-passport-number">Номер паспорта</Label>
-                  <Input
-                    id="driver-passport-number"
-                    value={driverForm.passportNumber}
-                    onChange={(event) =>
-                      setDriverForm((prev) => ({ ...prev, passportNumber: event.target.value }))
-                    }
-                  />
-                </div>
-              </div>
+        {/* Main Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="drivers">Водії</TabsTrigger>
+            <TabsTrigger value="vehicles">Транспорт</TabsTrigger>
+          </TabsList>
 
-              {hireDriverMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося створити водія.</p>
-              )}
-              {driverResult && (
-                <p className="text-sm text-emerald-600">Водія створено. ID: {driverResult}</p>
-              )}
+          {/* Drivers Tab */}
+          <TabsContent value="drivers" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <FormSection
+                title="Найм водія"
+                description="Додайте нового водія до системи"
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="login">Логін *</Label>
+                      <Input
+                        id="login"
+                        value={driverForm.login}
+                        onChange={(e) => setDriverForm({ ...driverForm, login: e.target.value })}
+                        placeholder="driver_ivanov"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Пароль *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={driverForm.password}
+                        onChange={(e) => setDriverForm({ ...driverForm, password: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-              <Button onClick={handleHireDriver} disabled={hireDriverMutation.isPending}>
-                {hireDriverMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Зберегти водія
-              </Button>
-            </CardContent>
-          </Card>
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">ПІБ *</Label>
+                    <Input
+                      id="fullName"
+                      value={driverForm.fullName}
+                      onChange={(e) => setDriverForm({ ...driverForm, fullName: e.target.value })}
+                      placeholder="Іванов Іван Іванович"
+                    />
+                  </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Додавання транспорту</CardTitle>
-              <CardDescription>Новий транспорт у парк</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="vehicle-fleet">Бортовий номер</Label>
-                  <Input
-                    id="vehicle-fleet"
-                    value={vehicleForm.fleetNumber}
-                    onChange={(event) =>
-                      setVehicleForm((prev) => ({ ...prev, fleetNumber: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Тип транспорту</Label>
-                  <Select
-                    value={vehicleForm.transportTypeId}
-                    onValueChange={(value) =>
-                      setVehicleForm((prev) => ({ ...prev, transportTypeId: value }))
-                    }
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={driverForm.email}
+                        onChange={(e) => setDriverForm({ ...driverForm, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Телефон</Label>
+                      <Input
+                        id="phone"
+                        value={driverForm.phone}
+                        onChange={(e) => setDriverForm({ ...driverForm, phone: e.target.value })}
+                        placeholder="+380..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="license">Номер водійського посвідчення</Label>
+                    <Input
+                      id="license"
+                      value={driverForm.driverLicenseNumber}
+                      onChange={(e) => setDriverForm({ ...driverForm, driverLicenseNumber: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="categories">Категорії</Label>
+                    <Input
+                      id="categories"
+                      value={driverForm.licenseCategories}
+                      onChange={(e) => setDriverForm({ ...driverForm, licenseCategories: e.target.value })}
+                      placeholder="D, D1"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleHireDriver}
+                    disabled={hireDriverMutation.isPending}
+                    className="w-full"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Оберіть тип" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {transportTypesQuery.data?.map((type) => (
-                        <SelectItem key={type.id} value={String(type.id)}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {hireDriverMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Найняти водія
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="vehicle-capacity">Місткість</Label>
-                  <Input
-                    id="vehicle-capacity"
-                    type="number"
-                    min="1"
-                    value={vehicleForm.capacity}
-                    onChange={(event) =>
-                      setVehicleForm((prev) => ({ ...prev, capacity: event.target.value }))
-                    }
+              </FormSection>
+
+              <div className="space-y-4">
+                <h3 className="text-heading-md">Список водіїв</h3>
+                {driversLoading ? (
+                  <TableSkeleton rows={5} cols={3} />
+                ) : drivers && drivers.length > 0 ? (
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {drivers.map((driver) => (
+                      <Card key={driver.id}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                              <p className="text-sm text-muted-foreground">{driver.phone || driver.email}</p>
+                            </div>
+                            <Badge variant="outline">{driver.login}</Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={Users}
+                    title="Немає водіїв"
+                    description="Почніть з найму першого водія"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Маршрут</Label>
-                  <Select
-                    value={vehicleForm.routeId}
-                    onValueChange={(value) =>
-                      setVehicleForm((prev) => ({ ...prev, routeId: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Оберіть маршрут" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routeOptions.map((route) => (
-                        <SelectItem key={route.id} value={String(route.id)}>
-                          {route.number} • {route.transportType} • {route.direction}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {addVehicleMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося додати транспорт.</p>
-              )}
-              {vehicleResult && (
-                <p className="text-sm text-emerald-600">Транспорт створено. ID: {vehicleResult}</p>
-              )}
-
-              <Button onClick={handleAddVehicle} disabled={addVehicleMutation.isPending}>
-                {addVehicleMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Додати транспорт
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+              </div>
+            </div>
+          </TabsContent>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Водії</CardTitle>
-              <CardDescription>Останні створені водії</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Логін</TableHead>
-                    <TableHead>ПІБ</TableHead>
-                    <TableHead>Категорії</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {driversQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="h-20 text-center">
-                        <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {driversQuery.error && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-red-500">
-                        Помилка завантаження
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {driversQuery.data?.map((driver) => (
-                    <TableRow key={driver.id}>
-                      <TableCell>{driver.login}</TableCell>
-                      <TableCell>{driver.fullName}</TableCell>
-                      <TableCell>{formatCategories(driver.licenseCategories)}</TableCell>
-                    </TableRow>
-                  ))}
-                  {driversQuery.data && driversQuery.data.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        Даних немає
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          {/* Vehicles Tab */}
+          <TabsContent value="vehicles" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <FormSection
+                title="Додавання транспорту"
+                description="Зареєструйте новий транспортний засіб"
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="fleetNumber">Бортовий номер *</Label>
+                    <Input
+                      id="fleetNumber"
+                      value={vehicleForm.fleetNumber}
+                      onChange={(e) => setVehicleForm({ ...vehicleForm, fleetNumber: e.target.value })}
+                      placeholder="BUS-001"
+                    />
+                  </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Транспорт</CardTitle>
-              <CardDescription>Останні додані одиниці</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Бортовий</TableHead>
-                    <TableHead>Маршрут</TableHead>
-                    <TableHead>Тип</TableHead>
-                    <TableHead>Місткість</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vehiclesQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="h-20 text-center">
-                        <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {vehiclesQuery.error && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-red-500">
-                        Помилка завантаження
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {vehiclesQuery.data?.map((vehicle) => (
-                    <TableRow key={vehicle.id}>
-                      <TableCell>{vehicle.fleetNumber}</TableCell>
-                      <TableCell>{vehicle.routeNumber}</TableCell>
-                      <TableCell>{vehicle.transportType}</TableCell>
-                      <TableCell>{vehicle.capacity}</TableCell>
-                    </TableRow>
-                  ))}
-                  {vehiclesQuery.data && vehiclesQuery.data.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        Даних немає
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="transportType">Тип транспорту *</Label>
+                    <Select
+                      value={vehicleForm.transportTypeId}
+                      onValueChange={(value) => setVehicleForm({ ...vehicleForm, transportTypeId: value, modelId: '' })}
+                    >
+                      <SelectTrigger id="transportType">
+                        <SelectValue placeholder="Оберіть тип" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transportTypes?.map((type) => (
+                          <SelectItem key={type.id} value={String(type.id)}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="model">Модель *</Label>
+                    <Select
+                      value={vehicleForm.modelId}
+                      onValueChange={(value) => setVehicleForm({ ...vehicleForm, modelId: value })}
+                      disabled={!vehicleForm.transportTypeId}
+                    >
+                      <SelectTrigger id="model">
+                        <SelectValue placeholder={vehicleForm.transportTypeId ? "Оберіть модель" : "Спочатку оберіть тип"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredModels?.map((model) => (
+                          <SelectItem key={model.id} value={String(model.id)}>
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="route">Маршрут (опціонально)</Label>
+                    <Select
+                      value={vehicleForm.routeId}
+                      onValueChange={(value) => setVehicleForm({ ...vehicleForm, routeId: value })}
+                    >
+                      <SelectTrigger id="route">
+                        <SelectValue placeholder="Оберіть маршрут" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {routes?.map((route) => (
+                          <SelectItem key={route.id} value={String(route.id)}>
+                            {route.number} • {route.transportTypeName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    onClick={handleAddVehicle}
+                    disabled={addVehicleMutation.isPending}
+                    className="w-full"
+                  >
+                    {addVehicleMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Bus className="mr-2 h-4 w-4" />
+                    Додати транспорт
+                  </Button>
+                </div>
+              </FormSection>
+
+              <div className="space-y-4">
+                <h3 className="text-heading-md">Транспортний парк</h3>
+                {vehiclesLoading ? (
+                  <TableSkeleton rows={5} cols={3} />
+                ) : vehicles && vehicles.length > 0 ? (
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                    {vehicles.map((vehicle) => (
+                      <VehicleCard
+                        key={vehicle.id}
+                        fleetNumber={vehicle.fleetNumber}
+                        model={vehicle.modelName || 'Невідома модель'}
+                        transportType={vehicle.transportTypeName || ''}
+                        routeNumber={vehicle.routeNumber}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={Bus}
+                    title="Немає транспорту"
+                    description="Додайте перший транспортний засіб до парку"
+                  />
+                )}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )
-}
-
-function formatCategories(value: unknown) {
-  if (Array.isArray(value)) return value.join(', ')
-  if (typeof value === 'string') return value
-  return '—'
 }

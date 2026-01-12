@@ -1,12 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
-import type { Map as MapLibreMap } from 'maplibre-gl'
+import type { Map as MapLibreMap, LngLatBounds } from 'maplibre-gl'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -14,7 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Map as MapView,
   MapControls,
@@ -22,6 +38,9 @@ import {
   MarkerContent,
   MapRoute,
 } from '@/components/ui/map'
+import { FormSection } from '@/components/domain/forms'
+import { EmptyState, TableSkeleton } from '@/components/domain/data-display'
+import { ComplaintCard } from '@/components/domain/municipality'
 import {
   createMunicipalityRoute,
   createMunicipalityStop,
@@ -32,11 +51,23 @@ import {
   getMunicipalityStops,
   getMunicipalityTransportTypes,
   getPassengerFlow,
+  setMunicipalityRouteActive,
   updateMunicipalityStop,
-  type MunicipalityRoute,
-  type MunicipalityRoutePoint,
-  type MunicipalityRouteStop,
+  updateComplaintStatus,
 } from '@/lib/municipality-api'
+import { toast } from 'sonner'
+import {
+  MapPin,
+  Bus,
+  TrendingUp,
+  MessageSquare,
+  Plus,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  Loader2,
+  Map as MapIcon,
+} from 'lucide-react'
 
 export const Route = createFileRoute('/municipality')({
   component: MunicipalityPage,
@@ -59,76 +90,94 @@ const LVIV_CENTER: [number, number] = [24.0316, 49.8429]
 
 function MunicipalityPage() {
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState('stops')
+
+  // Stop forms
   const [createStopForm, setCreateStopForm] = useState({ name: '', lon: '', lat: '' })
-  const [updateStopId, setUpdateStopId] = useState<string>('')
+  const [selectedStopId, setSelectedStopId] = useState<number | null>(null)
   const [updateStopForm, setUpdateStopForm] = useState({ name: '', lon: '', lat: '' })
+
+  // Route creation form
   const [routeForm, setRouteForm] = useState({
     number: '',
     transportTypeId: '',
-    direction: 'forward',
+    direction: 'forward' as 'forward' | 'reverse',
   })
-  const [routeStopsDrafts, setRouteStopsDrafts] = useState<StopDraft[]>([emptyStop(), emptyStop()])
-  const [routePointsDrafts, setRoutePointsDrafts] = useState<PointDraft[]>([emptyPoint(), emptyPoint()])
+  const [routeStopsDrafts, setRouteStopsDrafts] = useState<StopDraft[]>([
+    emptyStop(),
+    emptyStop(),
+  ])
+  const [routePointsDrafts, setRoutePointsDrafts] = useState<PointDraft[]>([
+    emptyPoint(),
+    emptyPoint(),
+  ])
   const [routeCreateResult, setRouteCreateResult] = useState<string | null>(null)
+
+  // Route viewing
   const [selectedRouteId, setSelectedRouteId] = useState<string>('')
-  const [flowForm, setFlowForm] = useState(() => ({
+
+  // Analytics filters
+  const [flowForm, setFlowForm] = useState({
     from: getDateDaysAgo(30),
     to: getDateDaysAgo(0),
     routeNumber: '',
     transportTypeId: '',
-  }))
-  const [complaintsForm, setComplaintsForm] = useState(() => ({
+  })
+  const [flowQuery, setFlowQuery] = useState({
+    from: getDateDaysAgo(30),
+    to: getDateDaysAgo(0),
+    routeNumber: '',
+    transportTypeId: '',
+  })
+
+  // Complaints filters
+  const [complaintsForm, setComplaintsForm] = useState({
     from: getDateDaysAgo(30),
     to: getDateDaysAgo(0),
     routeNumber: '',
     transportTypeId: '',
     fleetNumber: '',
-  }))
-  const [flowQuery, setFlowQuery] = useState(() => ({
-    from: getDateDaysAgo(30),
-    to: getDateDaysAgo(0),
-    routeNumber: '',
-    transportTypeId: '',
-  }))
-  const [complaintsQuery, setComplaintsQuery] = useState(() => ({
+  })
+  const [complaintsQuery, setComplaintsQuery] = useState({
     from: getDateDaysAgo(30),
     to: getDateDaysAgo(0),
     routeNumber: '',
     transportTypeId: '',
     fleetNumber: '',
-  }))
+  })
 
   const previewMapRef = useRef<MapLibreMap | null>(null)
   const viewMapRef = useRef<MapLibreMap | null>(null)
 
-  const transportTypesQuery = useQuery({
+  // Queries
+  const { data: transportTypes } = useQuery({
     queryKey: ['municipality-transport-types'],
     queryFn: getMunicipalityTransportTypes,
   })
 
-  const stopsQuery = useQuery({
+  const { data: stops, isLoading: stopsLoading } = useQuery({
     queryKey: ['municipality-stops'],
     queryFn: getMunicipalityStops,
   })
 
-  const routesQuery = useQuery({
+  const { data: routes, isLoading: routesLoading } = useQuery({
     queryKey: ['municipality-routes'],
     queryFn: getMunicipalityRoutes,
   })
 
-  const routeStopsQuery = useQuery({
+  const { data: routeStops } = useQuery({
     queryKey: ['municipality-route-stops', selectedRouteId],
     queryFn: () => getMunicipalityRouteStops(Number(selectedRouteId)),
     enabled: !!selectedRouteId,
   })
 
-  const routePointsQuery = useQuery({
+  const { data: routePoints } = useQuery({
     queryKey: ['municipality-route-points', selectedRouteId],
     queryFn: () => getMunicipalityRoutePoints(Number(selectedRouteId)),
     enabled: !!selectedRouteId,
   })
 
-  const flowQueryResult = useQuery({
+  const { data: passengerFlow, isLoading: flowLoading } = useQuery({
     queryKey: ['municipality-passenger-flow', flowQuery],
     queryFn: () =>
       getPassengerFlow({
@@ -141,7 +190,7 @@ function MunicipalityPage() {
       }),
   })
 
-  const complaintsQueryResult = useQuery({
+  const { data: complaints, isLoading: complaintsLoading } = useQuery({
     queryKey: ['municipality-complaints', complaintsQuery],
     queryFn: () =>
       getComplaints({
@@ -155,19 +204,30 @@ function MunicipalityPage() {
       }),
   })
 
+  // Mutations
   const createStopMutation = useMutation({
     mutationFn: createMunicipalityStop,
     onSuccess: () => {
       setCreateStopForm({ name: '', lon: '', lat: '' })
       queryClient.invalidateQueries({ queryKey: ['municipality-stops'] })
+      toast.success('Зупинку створено успішно!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка створення зупинки', { description: error.message })
     },
   })
 
   const updateStopMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name: string; lon: number; lat: number } }) =>
-      updateMunicipalityStop(id, payload),
+    mutationFn: ({ id, data }: { id: number; data: any }) =>
+      updateMunicipalityStop(id, data),
     onSuccess: () => {
+      setSelectedStopId(null)
+      setUpdateStopForm({ name: '', lon: '', lat: '' })
       queryClient.invalidateQueries({ queryKey: ['municipality-stops'] })
+      toast.success('Зупинку оновлено успішно!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка оновлення зупинки', { description: error.message })
     },
   })
 
@@ -175,10 +235,60 @@ function MunicipalityPage() {
     mutationFn: createMunicipalityRoute,
     onSuccess: (data) => {
       setRouteCreateResult(`Маршрут створено (ID ${data.route.id})`)
+      setRouteForm({ number: '', transportTypeId: '', direction: 'forward' })
+      setRouteStopsDrafts([emptyStop(), emptyStop()])
+      setRoutePointsDrafts([emptyPoint(), emptyPoint()])
       queryClient.invalidateQueries({ queryKey: ['municipality-routes'] })
+      toast.success('Маршрут створено успішно!', {
+        description: `ID: ${data.route.id}`,
+      })
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка створення маршруту', { description: error.message })
     },
   })
 
+  const setRouteActiveMutation = useMutation({
+    mutationFn: ({ routeId, isActive }: { routeId: number; isActive: boolean }) =>
+      setMunicipalityRouteActive(routeId, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['municipality-routes'] })
+      toast.success('Статус маршруту оновлено')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка оновлення статусу', { description: error.message })
+    },
+  })
+
+  const updateComplaintStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      updateComplaintStatus(id, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['municipality-complaints'] })
+      toast.success('Статус скарги оновлено')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка оновлення статусу', { description: error.message })
+    },
+  })
+
+  // Sync update form with selected stop
+  useEffect(() => {
+    if (!selectedStopId || !stops) {
+      setUpdateStopForm({ name: '', lon: '', lat: '' })
+      return
+    }
+    const stop = stops.find((s) => s.id === selectedStopId)
+    if (stop) {
+      setUpdateStopForm({
+        name: stop.name,
+        lon: String(stop.lon),
+        lat: String(stop.lat),
+      })
+    }
+  }, [selectedStopId, stops])
+
+  // Map data for route preview
   const previewCoordinates = useMemo(
     () => toCoordinates(routePointsDrafts),
     [routePointsDrafts]
@@ -204,23 +314,20 @@ function MunicipalityPage() {
     }
   }, [previewBounds])
 
+  // Map data for route viewing
   const viewCoordinates = useMemo(
-    () => toRoutePointCoords(routePointsQuery.data ?? []),
-    [routePointsQuery.data]
+    () => toRoutePointCoords(routePoints ?? []),
+    [routePoints]
   )
 
-  const viewStops = useMemo(
-    () => toRouteStopCoords(routeStopsQuery.data ?? []),
-    [routeStopsQuery.data]
-  )
+  const viewStops = useMemo(() => toRouteStopCoords(routeStops ?? []), [routeStops])
 
   const viewBounds = useMemo(() => getBounds(viewCoordinates), [viewCoordinates])
 
   useEffect(() => {
     if (!viewBounds || !viewMapRef.current) return
     const map = viewMapRef.current
-    const fit = () =>
-      map.fitBounds(viewBounds, { padding: 56, duration: 600, maxZoom: 14 })
+    const fit = () => map.fitBounds(viewBounds, { padding: 56, duration: 600, maxZoom: 14 })
 
     if (map.isStyleLoaded()) {
       fit()
@@ -229,823 +336,902 @@ function MunicipalityPage() {
     }
   }, [viewBounds])
 
-  const selectedRoute = useMemo<MunicipalityRoute | null>(() => {
-    if (!selectedRouteId || !routesQuery.data) return null
-    return routesQuery.data.find((route) => String(route.id) === selectedRouteId) ?? null
-  }, [routesQuery.data, selectedRouteId])
-
+  // Handlers
   const handleCreateStop = () => {
-    if (!createStopForm.name || !createStopForm.lon || !createStopForm.lat) return
-    createStopMutation.mutate({
-      name: createStopForm.name.trim(),
-      lon: Number(createStopForm.lon),
-      lat: Number(createStopForm.lat),
-    })
+    const lon = Number(createStopForm.lon)
+    const lat = Number(createStopForm.lat)
+    if (!createStopForm.name || !Number.isFinite(lon) || !Number.isFinite(lat)) {
+      toast.error('Заповніть всі поля коректно')
+      return
+    }
+    createStopMutation.mutate({ name: createStopForm.name, lon, lat })
   }
 
   const handleUpdateStop = () => {
-    if (!updateStopId || !updateStopForm.name || !updateStopForm.lon || !updateStopForm.lat) return
+    if (!selectedStopId) return
+    const lon = Number(updateStopForm.lon)
+    const lat = Number(updateStopForm.lat)
+    if (!updateStopForm.name || !Number.isFinite(lon) || !Number.isFinite(lat)) {
+      toast.error('Заповніть всі поля коректно')
+      return
+    }
     updateStopMutation.mutate({
-      id: Number(updateStopId),
-      payload: {
-        name: updateStopForm.name.trim(),
-        lon: Number(updateStopForm.lon),
-        lat: Number(updateStopForm.lat),
-      },
+      id: selectedStopId,
+      data: { name: updateStopForm.name, lon, lat },
     })
   }
 
   const handleCreateRoute = () => {
-    if (!routeForm.number || !routeForm.transportTypeId) return
-    setRouteCreateResult(null)
-    const stopsPayload = normalizeStops(routeStopsDrafts)
-    const pointsPayload = normalizePoints(routePointsDrafts)
+    if (!routeForm.number || !routeForm.transportTypeId) {
+      toast.error('Заповніть номер маршруту та тип транспорту')
+      return
+    }
 
-    if (stopsPayload.length < 2 || pointsPayload.length < 2) {
-      setRouteCreateResult('Потрібно щонайменше 2 зупинки та 2 точки маршруту.')
+    const stops = routeStopsDrafts
+      .filter((s) => s.stopId && s.distanceToNextKm)
+      .map((s) => ({
+        stopId: Number(s.stopId),
+        distanceToNextKm: Number(s.distanceToNextKm),
+      }))
+
+    const points = routePointsDrafts
+      .filter((p) => p.lon && p.lat)
+      .map((p) => ({
+        lon: Number(p.lon),
+        lat: Number(p.lat),
+      }))
+
+    if (stops.length < 2) {
+      toast.error('Додайте принаймні 2 зупинки')
+      return
+    }
+
+    if (points.length < 2) {
+      toast.error('Додайте принаймні 2 точки маршруту')
       return
     }
 
     createRouteMutation.mutate({
-      number: routeForm.number.trim(),
+      number: routeForm.number,
       transportTypeId: Number(routeForm.transportTypeId),
-      direction: routeForm.direction === 'reverse' ? 'reverse' : 'forward',
-      stops: stopsPayload,
-      points: pointsPayload,
+      direction: routeForm.direction,
+      stops,
+      points,
     })
   }
 
-  const handleAddStop = () => {
-    setRouteStopsDrafts((prev) => [...prev, emptyStop()])
-  }
-
-  const handleRemoveStop = (index: number) => {
-    setRouteStopsDrafts((prev) => prev.filter((_, idx) => idx !== index))
-  }
-
-  const handleStopChange = (index: number, field: keyof StopDraft, value: string) => {
-    setRouteStopsDrafts((prev) =>
-      prev.map((stop, idx) => (idx === index ? { ...stop, [field]: value } : stop))
-    )
-  }
-
-  const handleAddPoint = () => {
-    setRoutePointsDrafts((prev) => [...prev, emptyPoint()])
-  }
-
-  const handleRemovePoint = (index: number) => {
-    setRoutePointsDrafts((prev) => prev.filter((_, idx) => idx !== index))
-  }
-
-  const handlePointChange = (index: number, field: keyof PointDraft, value: string) => {
-    setRoutePointsDrafts((prev) =>
-      prev.map((point, idx) => (idx === index ? { ...point, [field]: value } : point))
-    )
-  }
-
-  const handlePassengerFlowSearch = () => {
+  const handleApplyFlowFilters = () => {
     setFlowQuery(flowForm)
   }
 
-  const handleComplaintsSearch = () => {
+  const handleApplyComplaintsFilters = () => {
     setComplaintsQuery(complaintsForm)
-  }
-
-  const handleSelectStop = (value: string) => {
-    setUpdateStopId(value)
-    const stop = stopsQuery.data?.find((item) => String(item.id) === value)
-    if (!stop) return
-    setUpdateStopForm({ name: stop.name, lon: String(stop.lon), lat: String(stop.lat) })
   }
 
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
+        {/* Breadcrumb */}
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>Департамент мерії</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">Департамент мерії</h1>
-          <p className="text-muted-foreground">
-            Проектування маршрутів, зупинки та аналітика пасажиропотоку.
+          <h1 className="text-display-sm">Департамент мерії</h1>
+          <p className="text-body-md text-muted-foreground mt-2">
+            Управління міською транспортною інфраструктурою
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Створення зупинки</CardTitle>
-              <CardDescription>Додайте нову зупинку до системи</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="stop-name">Назва</Label>
-                  <Input
-                    id="stop-name"
-                    value={createStopForm.name}
-                    onChange={(event) =>
-                      setCreateStopForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stop-lon">Довгота</Label>
-                  <Input
-                    id="stop-lon"
-                    type="number"
-                    value={createStopForm.lon}
-                    onChange={(event) =>
-                      setCreateStopForm((prev) => ({ ...prev, lon: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stop-lat">Широта</Label>
-                  <Input
-                    id="stop-lat"
-                    type="number"
-                    value={createStopForm.lat}
-                    onChange={(event) =>
-                      setCreateStopForm((prev) => ({ ...prev, lat: event.target.value }))
-                    }
-                  />
-                </div>
-              </div>
+        {/* Main Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="stops">Зупинки</TabsTrigger>
+            <TabsTrigger value="designer">Проектування</TabsTrigger>
+            <TabsTrigger value="routes">Маршрути</TabsTrigger>
+            <TabsTrigger value="analytics">Аналітика</TabsTrigger>
+            <TabsTrigger value="complaints">Скарги</TabsTrigger>
+          </TabsList>
 
-              {createStopMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося створити зупинку.</p>
-              )}
-
-              <Button onClick={handleCreateStop} disabled={createStopMutation.isPending}>
-                {createStopMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Додати
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Оновлення зупинки</CardTitle>
-              <CardDescription>Виправлення даних існуючих зупинок</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Оберіть зупинку</Label>
-                <Select value={updateStopId} onValueChange={handleSelectStop}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Оберіть зупинку" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stopsQuery.data?.map((stop) => (
-                      <SelectItem key={stop.id} value={String(stop.id)}>
-                        {stop.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="update-stop-name">Назва</Label>
-                  <Input
-                    id="update-stop-name"
-                    value={updateStopForm.name}
-                    onChange={(event) =>
-                      setUpdateStopForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="update-stop-lon">Довгота</Label>
-                  <Input
-                    id="update-stop-lon"
-                    type="number"
-                    value={updateStopForm.lon}
-                    onChange={(event) =>
-                      setUpdateStopForm((prev) => ({ ...prev, lon: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="update-stop-lat">Широта</Label>
-                  <Input
-                    id="update-stop-lat"
-                    type="number"
-                    value={updateStopForm.lat}
-                    onChange={(event) =>
-                      setUpdateStopForm((prev) => ({ ...prev, lat: event.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-
-              {updateStopMutation.error && (
-                <p className="text-sm text-red-500">Не вдалося оновити зупинку.</p>
-              )}
-
-              <Button
-                onClick={handleUpdateStop}
-                disabled={updateStopMutation.isPending || !updateStopId}
+          {/* Stops Tab */}
+          <TabsContent value="stops" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Create/Update Stop */}
+              <FormSection
+                title={selectedStopId ? 'Оновлення зупинки' : 'Створення зупинки'}
+                description="Географічна точка зупинки"
               >
-                {updateStopMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Оновити
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Проектування нового маршруту</CardTitle>
-            <CardDescription>Створіть маршрут із зупинками та точками траєкторії</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="route-number">Номер маршруту</Label>
-                <Input
-                  id="route-number"
-                  value={routeForm.number}
-                  onChange={(event) =>
-                    setRouteForm((prev) => ({ ...prev, number: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Тип транспорту</Label>
-                <Select
-                  value={routeForm.transportTypeId}
-                  onValueChange={(value) =>
-                    setRouteForm((prev) => ({ ...prev, transportTypeId: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Оберіть тип" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {transportTypesQuery.data?.map((type) => (
-                      <SelectItem key={type.id} value={String(type.id)}>
-                        {type.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Напрямок</Label>
-                <Select
-                  value={routeForm.direction}
-                  onValueChange={(value) =>
-                    setRouteForm((prev) => ({ ...prev, direction: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Оберіть напрямок" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="forward">Прямий</SelectItem>
-                    <SelectItem value="reverse">Зворотній</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Зупинки</h3>
-                <Button variant="outline" size="sm" onClick={handleAddStop}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Додати
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {routeStopsDrafts.map((stop, index) => (
-                  <div
-                    key={`stop-${index}`}
-                    className="grid gap-2 md:grid-cols-[110px_1fr_1fr_1fr_120px_auto] items-end"
-                  >
-                    <div className="space-y-1">
-                      <Label className="text-xs">ID зупинки</Label>
-                      <Input
-                        value={stop.stopId}
-                        onChange={(event) =>
-                          handleStopChange(index, 'stopId', event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Назва</Label>
-                      <Input
-                        value={stop.name}
-                        onChange={(event) =>
-                          handleStopChange(index, 'name', event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Довгота</Label>
-                      <Input
-                        value={stop.lon}
-                        onChange={(event) =>
-                          handleStopChange(index, 'lon', event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Широта</Label>
-                      <Input
-                        value={stop.lat}
-                        onChange={(event) =>
-                          handleStopChange(index, 'lat', event.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Км до наступної</Label>
-                      <Input
-                        value={stop.distanceToNextKm}
-                        onChange={(event) =>
-                          handleStopChange(index, 'distanceToNextKm', event.target.value)
-                        }
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveStop(index)}
-                      disabled={routeStopsDrafts.length <= 2}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor={selectedStopId ? 'update-name' : 'create-name'}>
+                      Назва *
+                    </Label>
+                    <Input
+                      id={selectedStopId ? 'update-name' : 'create-name'}
+                      value={selectedStopId ? updateStopForm.name : createStopForm.name}
+                      onChange={(e) =>
+                        selectedStopId
+                          ? setUpdateStopForm({ ...updateStopForm, name: e.target.value })
+                          : setCreateStopForm({ ...createStopForm, name: e.target.value })
+                      }
+                      placeholder="Площа Ринок"
+                    />
                   </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Точки маршруту</h3>
-                <Button variant="outline" size="sm" onClick={handleAddPoint}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Додати
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {routePointsDrafts.map((point, index) => (
-                  <div
-                    key={`point-${index}`}
-                    className="grid gap-2 md:grid-cols-[1fr_1fr_auto] items-end"
-                  >
-                    <div className="space-y-1">
-                      <Label className="text-xs">Довгота</Label>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor={selectedStopId ? 'update-lon' : 'create-lon'}>
+                        Довгота *
+                      </Label>
                       <Input
-                        value={point.lon}
-                        onChange={(event) => handlePointChange(index, 'lon', event.target.value)}
+                        id={selectedStopId ? 'update-lon' : 'create-lon'}
+                        type="number"
+                        step="0.000001"
+                        value={selectedStopId ? updateStopForm.lon : createStopForm.lon}
+                        onChange={(e) =>
+                          selectedStopId
+                            ? setUpdateStopForm({ ...updateStopForm, lon: e.target.value })
+                            : setCreateStopForm({ ...createStopForm, lon: e.target.value })
+                        }
+                        placeholder="24.031609"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Широта</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor={selectedStopId ? 'update-lat' : 'create-lat'}>
+                        Широта *
+                      </Label>
                       <Input
-                        value={point.lat}
-                        onChange={(event) => handlePointChange(index, 'lat', event.target.value)}
+                        id={selectedStopId ? 'update-lat' : 'create-lat'}
+                        type="number"
+                        step="0.000001"
+                        value={selectedStopId ? updateStopForm.lat : createStopForm.lat}
+                        onChange={(e) =>
+                          selectedStopId
+                            ? setUpdateStopForm({ ...updateStopForm, lat: e.target.value })
+                            : setCreateStopForm({ ...createStopForm, lat: e.target.value })
+                        }
+                        placeholder="49.842957"
                       />
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemovePoint(index)}
-                      disabled={routePointsDrafts.length <= 2}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Попередній перегляд маршруту</Label>
-              <div className="rounded-md border overflow-hidden">
-                <div className="h-[360px]">
-                  <MapView
-                    ref={previewMapRef}
-                    center={previewCoordinates[0] ?? previewStops[0] ?? LVIV_CENTER}
-                    zoom={12}
-                  >
-                    <MapControls showFullscreen />
-                    {previewCoordinates.length >= 2 && (
-                      <MapRoute coordinates={previewCoordinates} color="#2563EB" width={4} />
+                  <div className="flex gap-2">
+                    {selectedStopId && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedStopId(null)
+                          setUpdateStopForm({ name: '', lon: '', lat: '' })
+                        }}
+                      >
+                        Скасувати
+                      </Button>
                     )}
-                    {previewStops.map((stop, idx) => (
-                      <MapMarker key={`preview-stop-${idx}`} longitude={stop[0]} latitude={stop[1]}>
-                        <MarkerContent>
-                          <div className="h-2.5 w-2.5 rounded-full bg-white border border-blue-600 shadow-sm" />
-                        </MarkerContent>
-                      </MapMarker>
-                    ))}
-                  </MapView>
-                </div>
-              </div>
-              {previewCoordinates.length < 2 && (
-                <p className="text-xs text-muted-foreground">
-                  Введіть щонайменше 2 точки, щоб побачити маршрут.
-                </p>
-              )}
-            </div>
-
-            {createRouteMutation.error && (
-              <p className="text-sm text-red-500">Не вдалося створити маршрут.</p>
-            )}
-            {routeCreateResult && (
-              <p className="text-sm text-emerald-600">{routeCreateResult}</p>
-            )}
-
-            <Button onClick={handleCreateRoute} disabled={createRouteMutation.isPending}>
-              {createRouteMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Зберегти маршрут
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Перегляд маршруту</CardTitle>
-            <CardDescription>Зупинки та траєкторія на мапі</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="max-w-md space-y-2">
-              <Label>Маршрут</Label>
-              <Select value={selectedRouteId} onValueChange={setSelectedRouteId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Оберіть маршрут" />
-                </SelectTrigger>
-                <SelectContent>
-                  {routesQuery.data?.map((route) => (
-                    <SelectItem key={route.id} value={String(route.id)}>
-                      {route.number} • {route.transportType} • {route.direction}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedRoute && (
-              <div className="text-sm text-muted-foreground">
-                Обрано маршрут {selectedRoute.number} ({selectedRoute.transportType}).
-              </div>
-            )}
-
-            <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-              <div className="space-y-4">
-                <div className="rounded-md border overflow-hidden">
-                  <div className="h-[360px]">
-                    <MapView
-                      ref={viewMapRef}
-                      center={viewCoordinates[0] ?? viewStops[0] ?? LVIV_CENTER}
-                      zoom={12}
+                    <Button
+                      onClick={selectedStopId ? handleUpdateStop : handleCreateStop}
+                      disabled={
+                        selectedStopId
+                          ? updateStopMutation.isPending
+                          : createStopMutation.isPending
+                      }
+                      className="flex-1"
                     >
-                      <MapControls showFullscreen />
-                      {viewCoordinates.length >= 2 && (
-                        <MapRoute coordinates={viewCoordinates} color="#16A34A" width={4} />
+                      {(selectedStopId ? updateStopMutation.isPending : createStopMutation.isPending) && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {viewStops.map((stop, idx) => (
-                        <MapMarker key={`view-stop-${idx}`} longitude={stop[0]} latitude={stop[1]}>
-                          <MarkerContent>
-                            <div className="h-2.5 w-2.5 rounded-full bg-white border border-emerald-600 shadow-sm" />
-                          </MarkerContent>
-                        </MapMarker>
-                      ))}
-                    </MapView>
+                      {selectedStopId ? 'Оновити' : 'Створити'}
+                    </Button>
                   </div>
                 </div>
-                {routePointsQuery.isLoading && (
-                  <p className="text-xs text-muted-foreground">Завантаження маршруту...</p>
-                )}
-                {routePointsQuery.error && (
-                  <p className="text-xs text-red-500">Помилка отримання точок.</p>
-                )}
-              </div>
+              </FormSection>
 
+              {/* Stops List */}
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold">Зупинки маршруту</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Назва</TableHead>
-                        <TableHead>Координати</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {routeStopsQuery.isLoading && (
-                        <TableRow>
-                          <TableCell colSpan={3} className="h-20 text-center">
-                            <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {routeStopsQuery.error && (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-red-500">
-                            Помилка завантаження
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {routeStopsQuery.data?.map((stop) => (
-                        <TableRow key={stop.id}>
-                          <TableCell>{stop.stopId}</TableCell>
-                          <TableCell>{stop.stopName}</TableCell>
-                          <TableCell>
-                            {formatCoord(stop.lat)}, {formatCoord(stop.lon)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {routeStopsQuery.data && routeStopsQuery.data.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-muted-foreground">
-                            Немає зупинок
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-semibold">Точки маршруту</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Координати</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {routePointsQuery.isLoading && (
-                        <TableRow>
-                          <TableCell colSpan={2} className="h-20 text-center">
-                            <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {routePointsQuery.error && (
-                        <TableRow>
-                          <TableCell colSpan={2} className="text-center text-red-500">
-                            Помилка завантаження
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {routePointsQuery.data?.map((point) => (
-                        <TableRow key={point.id}>
-                          <TableCell>{point.id}</TableCell>
-                          <TableCell>
-                            {formatCoord(point.lat)}, {formatCoord(point.lon)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {routePointsQuery.data && routePointsQuery.data.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={2} className="text-center text-muted-foreground">
-                            Немає точок
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                <h3 className="text-heading-md">Список зупинок</h3>
+                {stopsLoading ? (
+                  <TableSkeleton rows={5} cols={3} />
+                ) : stops && stops.length > 0 ? (
+                  <div className="rounded-md border">
+                    <div className="max-h-[500px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Назва</TableHead>
+                            <TableHead>Координати</TableHead>
+                            <TableHead className="text-right">Дії</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {stops.map((stop) => (
+                            <TableRow
+                              key={stop.id}
+                              className={selectedStopId === stop.id ? 'bg-muted/50' : ''}
+                            >
+                              <TableCell className="font-medium">{stop.name}</TableCell>
+                              <TableCell className="text-sm font-mono">
+                                {Number(stop.lat).toFixed(5)}, {Number(stop.lon).toFixed(5)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedStopId(stop.id)}
+                                >
+                                  Редагувати
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={MapPin}
+                    title="Немає зупинок"
+                    description="Створіть першу зупинку для міського транспорту"
+                  />
+                )}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </TabsContent>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Аналітика пасажиропотоку</CardTitle>
-              <CardDescription>Статистика за період</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Період від</Label>
-                  <Input
-                    type="date"
-                    value={flowForm.from}
-                    onChange={(event) =>
-                      setFlowForm((prev) => ({ ...prev, from: event.target.value }))
-                    }
-                  />
+          {/* Route Designer Tab */}
+          <TabsContent value="designer" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Проектування нового маршруту</CardTitle>
+                <CardDescription>
+                  Створіть маршрут з зупинками та точками траси
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Route Info */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="route-number">Номер маршруту *</Label>
+                    <Input
+                      id="route-number"
+                      value={routeForm.number}
+                      onChange={(e) => setRouteForm({ ...routeForm, number: e.target.value })}
+                      placeholder="5А"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="route-type">Тип транспорту *</Label>
+                    <Select
+                      value={routeForm.transportTypeId}
+                      onValueChange={(value) =>
+                        setRouteForm({ ...routeForm, transportTypeId: value })
+                      }
+                    >
+                      <SelectTrigger id="route-type">
+                        <SelectValue placeholder="Оберіть тип" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transportTypes?.map((type) => (
+                          <SelectItem key={type.id} value={String(type.id)}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="route-direction">Напрямок *</Label>
+                    <Select
+                      value={routeForm.direction}
+                      onValueChange={(value) =>
+                        setRouteForm({
+                          ...routeForm,
+                          direction: value as 'forward' | 'reverse',
+                        })
+                      }
+                    >
+                      <SelectTrigger id="route-direction">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="forward">Прямий</SelectItem>
+                        <SelectItem value="reverse">Зворотній</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Період до</Label>
-                  <Input
-                    type="date"
-                    value={flowForm.to}
-                    onChange={(event) =>
-                      setFlowForm((prev) => ({ ...prev, to: event.target.value }))
-                    }
-                  />
+
+                {/* Stops */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-heading-sm">Зупинки маршруту</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setRouteStopsDrafts([...routeStopsDrafts, emptyStop()])}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Додати зупинку
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {routeStopsDrafts.map((stop, index) => (
+                      <div key={index} className="flex items-end gap-2">
+                        <div className="flex-1 space-y-2">
+                          <Label htmlFor={`stop-${index}`}>Зупинка</Label>
+                          <Select
+                            value={stop.stopId}
+                            onValueChange={(value) => {
+                              const newStops = [...routeStopsDrafts]
+                              const selectedStop = stops?.find((s) => s.id === Number(value))
+                              newStops[index] = {
+                                ...newStops[index],
+                                stopId: value,
+                                name: selectedStop?.name || '',
+                                lon: selectedStop?.lon ? String(selectedStop.lon) : '',
+                                lat: selectedStop?.lat ? String(selectedStop.lat) : '',
+                              }
+                              setRouteStopsDrafts(newStops)
+                            }}
+                          >
+                            <SelectTrigger id={`stop-${index}`}>
+                              <SelectValue placeholder="Оберіть зупинку" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {stops?.map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32 space-y-2">
+                          <Label htmlFor={`dist-${index}`}>Відстань (км)</Label>
+                          <Input
+                            id={`dist-${index}`}
+                            type="number"
+                            step="0.1"
+                            value={stop.distanceToNextKm}
+                            onChange={(e) => {
+                              const newStops = [...routeStopsDrafts]
+                              newStops[index] = { ...newStops[index], distanceToNextKm: e.target.value }
+                              setRouteStopsDrafts(newStops)
+                            }}
+                            placeholder="0.5"
+                          />
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              if (index === 0) return
+                              const newStops = [...routeStopsDrafts]
+                              ;[newStops[index - 1], newStops[index]] = [
+                                newStops[index],
+                                newStops[index - 1],
+                              ]
+                              setRouteStopsDrafts(newStops)
+                            }}
+                            disabled={index === 0}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              if (index === routeStopsDrafts.length - 1) return
+                              const newStops = [...routeStopsDrafts]
+                              ;[newStops[index], newStops[index + 1]] = [
+                                newStops[index + 1],
+                                newStops[index],
+                              ]
+                              setRouteStopsDrafts(newStops)
+                            }}
+                            disabled={index === routeStopsDrafts.length - 1}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              if (routeStopsDrafts.length <= 2) return
+                              setRouteStopsDrafts(routeStopsDrafts.filter((_, i) => i !== index))
+                            }}
+                            disabled={routeStopsDrafts.length <= 2}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Номер маршруту</Label>
-                  <Input
-                    value={flowForm.routeNumber}
-                    onChange={(event) =>
-                      setFlowForm((prev) => ({ ...prev, routeNumber: event.target.value }))
-                    }
-                  />
+
+                {/* Points */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-heading-sm">Точки траси</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setRoutePointsDrafts([...routePointsDrafts, emptyPoint()])}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Додати точку
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {routePointsDrafts.map((point, index) => (
+                      <div key={index} className="flex items-end gap-2">
+                        <div className="flex-1 grid gap-2 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor={`point-lon-${index}`}>Довгота</Label>
+                            <Input
+                              id={`point-lon-${index}`}
+                              type="number"
+                              step="0.000001"
+                              value={point.lon}
+                              onChange={(e) => {
+                                const newPoints = [...routePointsDrafts]
+                                newPoints[index] = { ...newPoints[index], lon: e.target.value }
+                                setRoutePointsDrafts(newPoints)
+                              }}
+                              placeholder="24.031609"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`point-lat-${index}`}>Широта</Label>
+                            <Input
+                              id={`point-lat-${index}`}
+                              type="number"
+                              step="0.000001"
+                              value={point.lat}
+                              onChange={(e) => {
+                                const newPoints = [...routePointsDrafts]
+                                newPoints[index] = { ...newPoints[index], lat: e.target.value }
+                                setRoutePointsDrafts(newPoints)
+                              }}
+                              placeholder="49.842957"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (routePointsDrafts.length <= 2) return
+                            setRoutePointsDrafts(routePointsDrafts.filter((_, i) => i !== index))
+                          }}
+                          disabled={routePointsDrafts.length <= 2}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Тип транспорту</Label>
-                  <Select
-                    value={flowForm.transportTypeId}
-                    onValueChange={(value) =>
-                      setFlowForm((prev) => ({ ...prev, transportTypeId: value }))
-                    }
+
+                {/* Map Preview */}
+                {previewCoordinates.length >= 2 && (
+                  <div className="space-y-2">
+                    <h4 className="text-heading-sm">Попередній перегляд</h4>
+                    <div className="rounded-md border overflow-hidden">
+                      <div className="h-[400px]">
+                        <MapView ref={previewMapRef} center={LVIV_CENTER} zoom={12}>
+                          <MapControls />
+                          {previewCoordinates.length >= 2 && (
+                            <MapRoute
+                              coordinates={previewCoordinates}
+                              color="#2563EB"
+                              width={4}
+                              opacity={0.85}
+                            />
+                          )}
+                          {previewStops.map((stop, index) => (
+                            <MapMarker key={index} longitude={stop[0]} latitude={stop[1]}>
+                              <MarkerContent>
+                                <div className="h-3 w-3 rounded-full bg-white border-2 border-blue-600 shadow-sm" />
+                              </MarkerContent>
+                            </MapMarker>
+                          ))}
+                        </MapView>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit */}
+                <div className="space-y-4">
+                  {routeCreateResult && (
+                    <div className="p-3 bg-success/10 border border-success/20 rounded-lg text-sm text-success">
+                      {routeCreateResult}
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleCreateRoute}
+                    disabled={createRouteMutation.isPending}
+                    className="w-full"
+                    size="lg"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Усі" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {transportTypesQuery.data?.map((type) => (
-                        <SelectItem key={type.id} value={String(type.id)}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {createRouteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Bus className="mr-2 h-4 w-4" />
+                    Створити маршрут
+                  </Button>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Routes Tab */}
+          <TabsContent value="routes" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Routes List */}
+              <div className="space-y-4">
+                <h3 className="text-heading-md">Маршрути міста</h3>
+                {routesLoading ? (
+                  <TableSkeleton rows={5} cols={4} />
+                ) : routes && routes.length > 0 ? (
+                  <div className="space-y-2">
+                    {routes.map((route) => (
+                      <Card
+                        key={route.id}
+                        className={`cursor-pointer transition-all hover:shadow-md ${
+                          selectedRouteId === String(route.id) ? 'ring-2 ring-primary' : ''
+                        }`}
+                        onClick={() => setSelectedRouteId(String(route.id))}
+                      >
+                        <CardContent className="pt-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Badge>{route.number}</Badge>
+                                <Badge variant="outline">
+                                  {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {route.transportTypeName}
+                                </span>
+                              </div>
+                              <Badge variant={route.isActive ? 'success' : 'default'}>
+                                {route.isActive ? 'Активний' : 'Неактивний'}
+                              </Badge>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={route.isActive ? 'outline' : 'default'}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRouteActiveMutation.mutate({
+                                  routeId: route.id,
+                                  isActive: !route.isActive,
+                                })
+                              }}
+                              className="w-full"
+                            >
+                              {route.isActive ? 'Деактивувати' : 'Активувати'}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={Bus}
+                    title="Немає маршрутів"
+                    description="Створіть маршрути у розділі Проектування"
+                  />
+                )}
               </div>
 
-              <Button variant="outline" onClick={handlePassengerFlowSearch}>
-                Показати
-              </Button>
+              {/* Route Map View */}
+              <div className="space-y-4">
+                <h3 className="text-heading-md">Візуалізація маршруту</h3>
+                {selectedRouteId && viewCoordinates.length >= 2 ? (
+                  <div className="space-y-4">
+                    <div className="rounded-md border overflow-hidden">
+                      <div className="h-[500px]">
+                        <MapView ref={viewMapRef} center={LVIV_CENTER} zoom={12}>
+                          <MapControls />
+                          {viewCoordinates.length >= 2 && (
+                            <MapRoute
+                              coordinates={viewCoordinates}
+                              color="#2563EB"
+                              width={4}
+                              opacity={0.85}
+                            />
+                          )}
+                          {viewStops.map((stop, index) => (
+                            <MapMarker key={index} longitude={stop[0]} latitude={stop[1]}>
+                              <MarkerContent>
+                                <div className="h-3 w-3 rounded-full bg-white border-2 border-blue-600 shadow-sm" />
+                              </MarkerContent>
+                            </MapMarker>
+                          ))}
+                        </MapView>
+                      </div>
+                    </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Маршрут</TableHead>
-                    <TableHead>Транспорт</TableHead>
-                    <TableHead>Пасажири</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {flowQueryResult.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="h-20 text-center">
-                        <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {flowQueryResult.error && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-red-500">
-                        Помилка завантаження
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {flowQueryResult.data?.map((row) => (
-                    <TableRow key={`${row.tripDate}-${row.fleetNumber}`}> 
-                      <TableCell>{formatDate(row.tripDate)}</TableCell>
-                      <TableCell>{row.routeNumber}</TableCell>
-                      <TableCell>{row.transportType}</TableCell>
-                      <TableCell>{row.passengerCount}</TableCell>
-                    </TableRow>
-                  ))}
-                  {flowQueryResult.data && flowQueryResult.data.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        Даних немає
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Скарги та пропозиції</CardTitle>
-              <CardDescription>Перевірка звернень за період</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Період від</Label>
-                  <Input
-                    type="date"
-                    value={complaintsForm.from}
-                    onChange={(event) =>
-                      setComplaintsForm((prev) => ({ ...prev, from: event.target.value }))
-                    }
+                    {routeStops && routeStops.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Зупинки маршруту</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-md border max-h-[200px] overflow-y-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Назва</TableHead>
+                                  <TableHead>Відстань до наступної</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {routeStops.map((stop) => (
+                                  <TableRow key={stop.stopId}>
+                                    <TableCell className="text-sm">{stop.stopName}</TableCell>
+                                    <TableCell className="text-sm">
+                                      {stop.distanceToNextKm != null
+                                        ? `${stop.distanceToNextKm} км`
+                                        : '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={MapIcon}
+                    title="Оберіть маршрут"
+                    description="Виберіть маршрут зі списку для відображення на карті"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Період до</Label>
-                  <Input
-                    type="date"
-                    value={complaintsForm.to}
-                    onChange={(event) =>
-                      setComplaintsForm((prev) => ({ ...prev, to: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Номер маршруту</Label>
-                  <Input
-                    value={complaintsForm.routeNumber}
-                    onChange={(event) =>
-                      setComplaintsForm((prev) => ({ ...prev, routeNumber: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Тип транспорту</Label>
-                  <Select
-                    value={complaintsForm.transportTypeId}
-                    onValueChange={(value) =>
-                      setComplaintsForm((prev) => ({ ...prev, transportTypeId: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Усі" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {transportTypesQuery.data?.map((type) => (
-                        <SelectItem key={type.id} value={String(type.id)}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Бортовий номер</Label>
-                  <Input
-                    value={complaintsForm.fleetNumber}
-                    onChange={(event) =>
-                      setComplaintsForm((prev) => ({ ...prev, fleetNumber: event.target.value }))
-                    }
-                  />
-                </div>
+                )}
               </div>
+            </div>
+          </TabsContent>
 
-              <Button variant="outline" onClick={handleComplaintsSearch}>
-                Показати
-              </Button>
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  <CardTitle>Аналітика пасажиропотоку</CardTitle>
+                </div>
+                <CardDescription>Статистика використання транспорту за період</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="flow-from">Від</Label>
+                    <Input
+                      id="flow-from"
+                      type="date"
+                      value={flowForm.from}
+                      onChange={(e) => setFlowForm({ ...flowForm, from: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="flow-to">До</Label>
+                    <Input
+                      id="flow-to"
+                      type="date"
+                      value={flowForm.to}
+                      onChange={(e) => setFlowForm({ ...flowForm, to: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="flow-route">Маршрут</Label>
+                    <Input
+                      id="flow-route"
+                      value={flowForm.routeNumber}
+                      onChange={(e) => setFlowForm({ ...flowForm, routeNumber: e.target.value })}
+                      placeholder="5А"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="flow-type">Тип транспорту</Label>
+                    <Select
+                      value={flowForm.transportTypeId}
+                      onValueChange={(value) =>
+                        setFlowForm({ ...flowForm, transportTypeId: value })
+                      }
+                    >
+                      <SelectTrigger id="flow-type">
+                        <SelectValue placeholder="Всі" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Всі</SelectItem>
+                        {transportTypes?.map((type) => (
+                          <SelectItem key={type.id} value={String(type.id)}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button onClick={handleApplyFlowFilters} className="w-full">
+                  Застосувати фільтри
+                </Button>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Тип</TableHead>
-                    <TableHead>Повідомлення</TableHead>
-                    <TableHead>Дата</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {complaintsQueryResult.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="h-20 text-center">
-                        <Loader2 className="h-5 w-5 animate-spin inline-block" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {complaintsQueryResult.error && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-red-500">
-                        Помилка завантаження
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {complaintsQueryResult.data?.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.type}</TableCell>
-                      <TableCell>{item.message}</TableCell>
-                      <TableCell>{formatDateTime(item.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                  {complaintsQueryResult.data && complaintsQueryResult.data.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        Даних немає
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
+                {/* Results */}
+                {flowLoading ? (
+                  <TableSkeleton rows={5} cols={3} />
+                ) : passengerFlow && passengerFlow.length > 0 ? (
+                  <div className="space-y-4">
+                    {passengerFlow.map((flow, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium">Маршрут {flow.routeNumber}</p>
+                          <p className="text-sm text-muted-foreground">{flow.transportTypeName}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold">{flow.totalTrips || 0}</p>
+                          <p className="text-sm text-muted-foreground">рейсів</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="Немає даних"
+                    description="Статистика з'явиться після накопичення даних"
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Complaints Tab */}
+          <TabsContent value="complaints" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  <CardTitle>Скарги пасажирів</CardTitle>
+                </div>
+                <CardDescription>Управління скаргами та зверненнями</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="grid gap-4 md:grid-cols-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-from">Від</Label>
+                    <Input
+                      id="comp-from"
+                      type="date"
+                      value={complaintsForm.from}
+                      onChange={(e) => setComplaintsForm({ ...complaintsForm, from: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-to">До</Label>
+                    <Input
+                      id="comp-to"
+                      type="date"
+                      value={complaintsForm.to}
+                      onChange={(e) => setComplaintsForm({ ...complaintsForm, to: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-route">Маршрут</Label>
+                    <Input
+                      id="comp-route"
+                      value={complaintsForm.routeNumber}
+                      onChange={(e) =>
+                        setComplaintsForm({ ...complaintsForm, routeNumber: e.target.value })
+                      }
+                      placeholder="5А"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-type">Тип транспорту</Label>
+                    <Select
+                      value={complaintsForm.transportTypeId}
+                      onValueChange={(value) =>
+                        setComplaintsForm({ ...complaintsForm, transportTypeId: value })
+                      }
+                    >
+                      <SelectTrigger id="comp-type">
+                        <SelectValue placeholder="Всі" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Всі</SelectItem>
+                        {transportTypes?.map((type) => (
+                          <SelectItem key={type.id} value={String(type.id)}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-fleet">Транспорт</Label>
+                    <Input
+                      id="comp-fleet"
+                      value={complaintsForm.fleetNumber}
+                      onChange={(e) =>
+                        setComplaintsForm({ ...complaintsForm, fleetNumber: e.target.value })
+                      }
+                      placeholder="102"
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleApplyComplaintsFilters} className="w-full">
+                  Застосувати фільтри
+                </Button>
+
+                {/* Results */}
+                {complaintsLoading ? (
+                  <TableSkeleton rows={5} cols={4} />
+                ) : complaints && complaints.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {complaints.map((complaint) => (
+                      <ComplaintCard
+                        key={complaint.id}
+                        id={complaint.id}
+                        passengerName={`${complaint.passengerFirstName} ${complaint.passengerLastName}`}
+                        routeNumber={complaint.routeNumber}
+                        fleetNumber={complaint.fleetNumber}
+                        complaintText={complaint.complaintText}
+                        createdAt={complaint.createdAt}
+                        status={complaint.status as any}
+                        onReview={() =>
+                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'reviewed' })
+                        }
+                        onResolve={() =>
+                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'resolved' })
+                        }
+                        onReject={() =>
+                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'rejected' })
+                        }
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={MessageSquare}
+                    title="Немає скарг"
+                    description="Скарги пасажирів з'являться тут"
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )
+}
+
+// Helper functions
+function getDateDaysAgo(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date.toISOString().split('T')[0]
 }
 
 function emptyStop(): StopDraft {
@@ -1056,114 +1242,42 @@ function emptyPoint(): PointDraft {
   return { lon: '', lat: '' }
 }
 
-function normalizeStops(stops: StopDraft[]) {
-  return stops
-    .map((stop) => ({
-      stopId: parseOptionalNumber(stop.stopId),
-      name: stop.name.trim() || undefined,
-      lon: parseOptionalNumber(stop.lon),
-      lat: parseOptionalNumber(stop.lat),
-      distanceToNextKm: parseOptionalNumber(stop.distanceToNextKm),
-    }))
-    .filter((stop) =>
-      Boolean(stop.stopId || (stop.name && stop.lon != null && stop.lat != null))
-    )
-}
-
-function normalizePoints(points: PointDraft[]) {
+function toCoordinates(points: PointDraft[]): [number, number][] {
   return points
-    .map((point) => {
-      const lon = parseOptionalNumber(point.lon)
-      const lat = parseOptionalNumber(point.lat)
-      if (lon == null || lat == null) return null
-      return { lon, lat }
-    })
-    .filter((point): point is { lon: number; lat: number } => point !== null)
-}
-
-function parseOptionalNumber(value: string) {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
-function toCoordinates(points: PointDraft[]) {
-  return points
-    .map((point) => [Number(point.lon), Number(point.lat)] as [number, number])
+    .filter((p) => p.lon && p.lat)
+    .map((p) => [Number(p.lon), Number(p.lat)] as [number, number])
     .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
 }
 
-function toStopCoordinates(stops: StopDraft[]) {
+function toStopCoordinates(stops: StopDraft[]): [number, number][] {
   return stops
-    .map((stop) => [Number(stop.lon), Number(stop.lat)] as [number, number])
+    .filter((s) => s.lon && s.lat)
+    .map((s) => [Number(s.lon), Number(s.lat)] as [number, number])
     .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
 }
 
-function toRoutePointCoords(points: MunicipalityRoutePoint[]) {
+function toRoutePointCoords(points: any[]): [number, number][] {
   return points
-    .map((point) => [Number(point.lon), Number(point.lat)] as [number, number])
+    .map((p) => [Number(p.lon), Number(p.lat)] as [number, number])
     .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
 }
 
-function toRouteStopCoords(stops: MunicipalityRouteStop[]) {
+function toRouteStopCoords(stops: any[]): [number, number][] {
   return stops
-    .map((stop) => [Number(stop.lon), Number(stop.lat)] as [number, number])
+    .map((s) => [Number(s.lon), Number(s.lat)] as [number, number])
     .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
 }
 
-function getBounds(coordinates: [number, number][]) {
-  if (coordinates.length === 0) return null
-  let minLng = coordinates[0][0]
-  let maxLng = coordinates[0][0]
-  let minLat = coordinates[0][1]
-  let maxLat = coordinates[0][1]
-
-  for (const [lng, lat] of coordinates) {
-    minLng = Math.min(minLng, lng)
-    maxLng = Math.max(maxLng, lng)
-    minLat = Math.min(minLat, lat)
-    maxLat = Math.max(maxLat, lat)
-  }
-
+function getBounds(coords: [number, number][]): LngLatBounds | null {
+  if (coords.length === 0) return null
+  const lons = coords.map((c) => c[0])
+  const lats = coords.map((c) => c[1])
+  const minLon = Math.min(...lons)
+  const maxLon = Math.max(...lons)
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
   return [
-    [minLng, minLat],
-    [maxLng, maxLat],
-  ] as [[number, number], [number, number]]
-}
-
-function getDateDaysAgo(days: number) {
-  const date = new Date()
-  date.setDate(date.getDate() - days)
-  return toDateInputValue(date)
-}
-
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatCoord(value?: string | number | null) {
-  if (value == null) return '—'
-  const numeric = Number(value)
-  if (!Number.isFinite(numeric)) return String(value)
-  return numeric.toFixed(5)
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(date)
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('uk-UA', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ] as LngLatBounds
 }
