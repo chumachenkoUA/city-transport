@@ -901,7 +901,7 @@ function MunicipalityPage() {
                                   {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
                                 </Badge>
                                 <span className="text-sm text-muted-foreground">
-                                  {route.transportTypeName}
+                                  {route.transportType}
                                 </span>
                               </div>
                               <Badge variant={route.isActive ? 'success' : 'default'}>
@@ -1085,11 +1085,12 @@ function MunicipalityPage() {
                       >
                         <div>
                           <p className="font-medium">Маршрут {flow.routeNumber}</p>
-                          <p className="text-sm text-muted-foreground">{flow.transportTypeName}</p>
+                          <p className="text-sm text-muted-foreground">{flow.transportType}</p>
+                          <p className="text-xs text-muted-foreground">{flow.tripDate}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold">{flow.totalTrips || 0}</p>
-                          <p className="text-sm text-muted-foreground">рейсів</p>
+                          <p className="text-2xl font-bold">{flow.passengerCount || 0}</p>
+                          <p className="text-sm text-muted-foreground">пасажирів</p>
                         </div>
                       </div>
                     ))}
@@ -1193,10 +1194,10 @@ function MunicipalityPage() {
                       <ComplaintCard
                         key={complaint.id}
                         id={complaint.id}
-                        passengerName={`${complaint.passengerFirstName} ${complaint.passengerLastName}`}
-                        routeNumber={complaint.routeNumber}
-                        fleetNumber={complaint.fleetNumber}
-                        complaintText={complaint.complaintText}
+                        passengerName={complaint.contactInfo || 'Анонім'}
+                        routeNumber={complaint.routeNumber ?? undefined}
+                        fleetNumber={complaint.fleetNumber ?? undefined}
+                        complaintText={complaint.message}
                         createdAt={complaint.createdAt}
                         status={complaint.status as any}
                         onReview={() =>
