@@ -1,0 +1,174 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1768053734659,
+      "tag": "0000_mysterious_hellfire_club",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768053735659,
+      "tag": "0001_api_structure",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1768053736659,
+      "tag": "0002_guest_api_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1768053737659,
+      "tag": "0003_passenger_api_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1768053738659,
+      "tag": "0004_operational_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1768053739659,
+      "tag": "0005_management_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1768053740659,
+      "tag": "0006_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1768053741659,
+      "tag": "0022_passenger_pay_fine",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1768053742659,
+      "tag": "0023_dispatcher_schedule_updates",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1768053743659,
+      "tag": "0024_municipality_route_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1768071837796,
+      "tag": "0010_controller_selection_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1768071838796,
+      "tag": "0025_manager_vehicle_validation",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1768071839796,
+      "tag": "0026_driver_trip_gps_validation",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1768071840796,
+      "tag": "0027_dispatcher_unify_functions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1768071841796,
+      "tag": "0028_dispatcher_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1768071842796,
+      "tag": "0029_controller_fine_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1768071843796,
+      "tag": "0030_guest_coordinate_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1768071844796,
+      "tag": "0031_accountant_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1768071845796,
+      "tag": "0032_municipality_route_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1768071846796,
+      "tag": "0033_passenger_validations",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1768071847796,
+      "tag": "0034_tz_requirements",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1768071848796,
+      "tag": "0035_fix_guest_schedule_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1768071849796,
+      "tag": "0036_controller_trip_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1768071850796,
+      "tag": "0037_municipality_admin_updates",
+      "breakpoints": true
+    }
+  ]
+}

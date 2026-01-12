@@ -1,6 +1,6 @@
 {
-  "id": "b35ef8d8-b229-489d-a435-6adc010945f9",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "401cace9-8d6f-4aa8-bbdd-6710548d0a93",
+  "prevId": "29d2cc05-c49d-41ef-a28e-bbf1c2ebf184",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -47,10 +47,10 @@
       "uniqueConstraints": {
         "budgets_month_unique": {
           "name": "budgets_month_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "month"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -101,15 +101,15 @@
         "card_top_ups_card_id_transport_cards_id_fk": {
           "name": "card_top_ups_card_id_transport_cards_id_fk",
           "tableFrom": "card_top_ups",
-          "tableTo": "transport_cards",
           "columnsFrom": [
             "card_id"
           ],
+          "tableTo": "transport_cards",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -194,54 +194,54 @@
         "complaints_suggestions_user_id_users_id_fk": {
           "name": "complaints_suggestions_user_id_users_id_fk",
           "tableFrom": "complaints_suggestions",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "complaints_suggestions_trip_id_trips_id_fk": {
           "name": "complaints_suggestions_trip_id_trips_id_fk",
           "tableFrom": "complaints_suggestions",
-          "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
           ],
+          "tableTo": "trips",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "complaints_suggestions_route_id_routes_id_fk": {
           "name": "complaints_suggestions_route_id_routes_id_fk",
           "tableFrom": "complaints_suggestions",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "complaints_suggestions_vehicle_id_vehicles_id_fk": {
           "name": "complaints_suggestions_vehicle_id_vehicles_id_fk",
           "tableFrom": "complaints_suggestions",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicle_id"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -290,40 +290,40 @@
         "driver_vehicle_assignments_driver_id_drivers_id_fk": {
           "name": "driver_vehicle_assignments_driver_id_drivers_id_fk",
           "tableFrom": "driver_vehicle_assignments",
-          "tableTo": "drivers",
           "columnsFrom": [
             "driver_id"
           ],
+          "tableTo": "drivers",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "driver_vehicle_assignments_vehicle_id_vehicles_id_fk": {
           "name": "driver_vehicle_assignments_vehicle_id_vehicles_id_fk",
           "tableFrom": "driver_vehicle_assignments",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicle_id"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "driver_vehicle_assignments_unique": {
           "name": "driver_vehicle_assignments_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "driver_id",
             "vehicle_id",
             "assigned_at"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -390,31 +390,31 @@
       "uniqueConstraints": {
         "drivers_login_unique": {
           "name": "drivers_login_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "login"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "drivers_email_unique": {
           "name": "drivers_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "drivers_phone_unique": {
           "name": "drivers_phone_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "phone"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "drivers_driver_license_number_unique": {
           "name": "drivers_driver_license_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "driver_license_number"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -517,25 +517,25 @@
         "fine_appeals_fine_id_fines_id_fk": {
           "name": "fine_appeals_fine_id_fines_id_fk",
           "tableFrom": "fine_appeals",
-          "tableTo": "fines",
           "columnsFrom": [
             "fine_id"
           ],
+          "tableTo": "fines",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "fine_appeals_fine_id_unique": {
           "name": "fine_appeals_fine_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "fine_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -607,28 +607,28 @@
         "fines_user_id_users_id_fk": {
           "name": "fines_user_id_users_id_fk",
           "tableFrom": "fines",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fines_trip_id_trips_id_fk": {
           "name": "fines_trip_id_trips_id_fk",
           "tableFrom": "fines",
-          "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
           ],
+          "tableTo": "trips",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -692,58 +692,58 @@
         "route_points_route_id_routes_id_fk": {
           "name": "route_points_route_id_routes_id_fk",
           "tableFrom": "route_points",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "route_points_prev_route_point_id_route_points_id_fk": {
           "name": "route_points_prev_route_point_id_route_points_id_fk",
           "tableFrom": "route_points",
-          "tableTo": "route_points",
           "columnsFrom": [
             "prev_route_point_id"
           ],
+          "tableTo": "route_points",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "route_points_next_route_point_id_route_points_id_fk": {
           "name": "route_points_next_route_point_id_route_points_id_fk",
           "tableFrom": "route_points",
-          "tableTo": "route_points",
           "columnsFrom": [
             "next_route_point_id"
           ],
+          "tableTo": "route_points",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "route_points_prev_route_point_id_unique": {
           "name": "route_points_prev_route_point_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "prev_route_point_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "route_points_next_route_point_id_unique": {
           "name": "route_points_next_route_point_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "next_route_point_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -796,79 +796,79 @@
         "route_stops_route_id_routes_id_fk": {
           "name": "route_stops_route_id_routes_id_fk",
           "tableFrom": "route_stops",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "route_stops_stop_id_stops_id_fk": {
           "name": "route_stops_stop_id_stops_id_fk",
           "tableFrom": "route_stops",
-          "tableTo": "stops",
           "columnsFrom": [
             "stop_id"
           ],
+          "tableTo": "stops",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "route_stops_prev_route_stop_id_route_stops_id_fk": {
           "name": "route_stops_prev_route_stop_id_route_stops_id_fk",
           "tableFrom": "route_stops",
-          "tableTo": "route_stops",
           "columnsFrom": [
             "prev_route_stop_id"
           ],
+          "tableTo": "route_stops",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         },
         "route_stops_next_route_stop_id_route_stops_id_fk": {
           "name": "route_stops_next_route_stop_id_route_stops_id_fk",
           "tableFrom": "route_stops",
-          "tableTo": "route_stops",
           "columnsFrom": [
             "next_route_stop_id"
           ],
+          "tableTo": "route_stops",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "route_stops_prev_route_stop_id_unique": {
           "name": "route_stops_prev_route_stop_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "prev_route_stop_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "route_stops_next_route_stop_id_unique": {
           "name": "route_stops_next_route_stop_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "next_route_stop_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "route_stops_route_stop_unique": {
           "name": "route_stops_route_stop_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "route_id",
             "stop_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -921,27 +921,27 @@
         "routes_transport_type_id_transport_types_id_fk": {
           "name": "routes_transport_type_id_transport_types_id_fk",
           "tableFrom": "routes",
-          "tableTo": "transport_types",
           "columnsFrom": [
             "transport_type_id"
           ],
+          "tableTo": "transport_types",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "routes_transport_type_number_direction_unique": {
           "name": "routes_transport_type_number_direction_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "transport_type_id",
             "number",
             "direction"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1012,15 +1012,15 @@
         "salary_payments_driver_id_drivers_id_fk": {
           "name": "salary_payments_driver_id_drivers_id_fk",
           "tableFrom": "salary_payments",
-          "tableTo": "drivers",
           "columnsFrom": [
             "driver_id"
           ],
+          "tableTo": "drivers",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1061,12 +1061,6 @@
           "type": "bigint",
           "primaryKey": false,
           "notNull": true
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
         },
         "work_start_time": {
           "name": "work_start_time",
@@ -1153,28 +1147,15 @@
         "schedules_route_id_routes_id_fk": {
           "name": "schedules_route_id_routes_id_fk",
           "tableFrom": "schedules",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "schedules_vehicle_id_vehicles_id_fk": {
-          "name": "schedules_vehicle_id_vehicles_id_fk",
-          "tableFrom": "schedules",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1223,12 +1204,12 @@
       "uniqueConstraints": {
         "stops_name_lon_lat_unique": {
           "name": "stops_name_lon_lat_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "name",
             "lon",
             "lat"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1276,28 +1257,28 @@
         "tickets_trip_id_trips_id_fk": {
           "name": "tickets_trip_id_trips_id_fk",
           "tableFrom": "tickets",
-          "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
           ],
+          "tableTo": "trips",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "tickets_card_id_transport_cards_id_fk": {
           "name": "tickets_card_id_transport_cards_id_fk",
           "tableFrom": "tickets",
-          "tableTo": "transport_cards",
           "columnsFrom": [
             "card_id"
           ],
+          "tableTo": "transport_cards",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1346,32 +1327,32 @@
         "transport_cards_user_id_users_id_fk": {
           "name": "transport_cards_user_id_users_id_fk",
           "tableFrom": "transport_cards",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "transport_cards_user_id_unique": {
           "name": "transport_cards_user_id_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "user_id"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "transport_cards_card_number_unique": {
           "name": "transport_cards_card_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "card_number"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1406,10 +1387,10 @@
       "uniqueConstraints": {
         "transport_types_name_unique": {
           "name": "transport_types_name_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "name"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1469,53 +1450,53 @@
         "trips_route_id_routes_id_fk": {
           "name": "trips_route_id_routes_id_fk",
           "tableFrom": "trips",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "trips_vehicle_id_vehicles_id_fk": {
           "name": "trips_vehicle_id_vehicles_id_fk",
           "tableFrom": "trips",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicle_id"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "trips_driver_id_drivers_id_fk": {
           "name": "trips_driver_id_drivers_id_fk",
           "tableFrom": "trips",
-          "tableTo": "drivers",
           "columnsFrom": [
             "driver_id"
           ],
+          "tableTo": "drivers",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "trips_vehicle_time_unique": {
           "name": "trips_vehicle_time_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "vehicle_id",
             "starts_at",
             "ends_at"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1572,15 +1553,15 @@
         "user_gps_logs_user_id_users_id_fk": {
           "name": "user_gps_logs_user_id_users_id_fk",
           "tableFrom": "user_gps_logs",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1637,24 +1618,24 @@
       "uniqueConstraints": {
         "users_login_unique": {
           "name": "users_login_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "login"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         },
         "users_phone_unique": {
           "name": "users_phone_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "phone"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1702,15 +1683,15 @@
         "vehicle_gps_logs_vehicle_id_vehicles_id_fk": {
           "name": "vehicle_gps_logs_vehicle_id_vehicles_id_fk",
           "tableFrom": "vehicle_gps_logs",
-          "tableTo": "vehicles",
           "columnsFrom": [
             "vehicle_id"
           ],
+          "tableTo": "vehicles",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1753,15 +1734,15 @@
         "vehicle_models_type_id_transport_types_id_fk": {
           "name": "vehicle_models_type_id_transport_types_id_fk",
           "tableFrom": "vehicle_models",
-          "tableTo": "transport_types",
           "columnsFrom": [
             "type_id"
           ],
+          "tableTo": "transport_types",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1804,38 +1785,38 @@
         "vehicles_vehicle_model_id_vehicle_models_id_fk": {
           "name": "vehicles_vehicle_model_id_vehicle_models_id_fk",
           "tableFrom": "vehicles",
-          "tableTo": "vehicle_models",
           "columnsFrom": [
             "vehicle_model_id"
           ],
+          "tableTo": "vehicle_models",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "vehicles_route_id_routes_id_fk": {
           "name": "vehicles_route_id_routes_id_fk",
           "tableFrom": "vehicles",
-          "tableTo": "routes",
           "columnsFrom": [
             "route_id"
           ],
+          "tableTo": "routes",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "vehicles_fleet_number_unique": {
           "name": "vehicles_fleet_number_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "fleet_number"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
       },
       "policies": {},
@@ -1845,10 +1826,10 @@
   },
   "enums": {},
   "schemas": {},
+  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

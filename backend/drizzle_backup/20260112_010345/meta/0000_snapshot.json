@@ -1,5 +1,5 @@
 {
-  "id": "b35ef8d8-b229-489d-a435-6adc010945f9",
+  "id": "29d2cc05-c49d-41ef-a28e-bbf1c2ebf184",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1062,12 +1062,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "work_start_time": {
           "name": "work_start_time",
           "type": "time",
@@ -1156,19 +1150,6 @@
           "tableTo": "routes",
           "columnsFrom": [
             "route_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "schedules_vehicle_id_vehicles_id_fk": {
-          "name": "schedules_vehicle_id_vehicles_id_fk",
-          "tableFrom": "schedules",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
           ],
           "columnsTo": [
             "id"

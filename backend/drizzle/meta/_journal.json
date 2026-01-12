@@ -5,155 +5,71 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1767731672535,
-      "tag": "0000_late_the_santerians",
+      "when": 1768174196959,
+      "tag": "0000_init",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1767731812169,
-      "tag": "0001_setup_roles_and_schemas",
+      "when": 1768174196960,
+      "tag": "0001_api_structure",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1767731946660,
-      "tag": "0002_setup_business_logic",
+      "when": 1768174196961,
+      "tag": "0002_guest_api",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1767732048951,
-      "tag": "0003_setup_api_views",
+      "when": 1768174196962,
+      "tag": "0003_passenger_api",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1767732118853,
-      "tag": "0004_setup_rls_policies",
+      "when": 1768174196963,
+      "tag": "0004_operational_api",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "7",
-      "when": 1767732155404,
-      "tag": "0005_guest_map_views_recursive",
+      "when": 1768174196964,
+      "tag": "0005_dispatcher_api",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1767732201553,
-      "tag": "0006_fix_guest_api_functions",
+      "when": 1768174196965,
+      "tag": "0006_accountant_api",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1767735561737,
-      "tag": "0007_right_doctor_strange",
+      "when": 1768174196966,
+      "tag": "0007_manager_api",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "7",
-      "when": 1767737364988,
-      "tag": "0008_guest_complaints",
+      "when": 1768174196967,
+      "tag": "0008_municipality_api",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "7",
-      "when": 1767791939353,
-      "tag": "0009_passenger_api_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1767793092696,
-      "tag": "0010_driver_api_refinements",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1767793973996,
-      "tag": "0011_dispatcher_api_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1767794216370,
-      "tag": "0012_dispatcher_fix_views",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1767798431733,
-      "tag": "0013_controller_api_update",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1767801573653,
-      "tag": "0014_accountant_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1767801604853,
-      "tag": "0015_municipality_api_full",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1767801807442,
-      "tag": "0016_manager_api",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1767832613483,
-      "tag": "0017_fix_accountant_report",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1767832643260,
-      "tag": "0018_fix_controller_issue_fine",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1736445000000,
-      "tag": "0019_route_planning",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1736534400000,
-      "tag": "0020_fix_route_planning",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1736534500000,
-      "tag": "0021_fix_permissions",
+      "when": 1768174196968,
+      "tag": "0009_controller_api",
       "breakpoints": true
     }
   ]

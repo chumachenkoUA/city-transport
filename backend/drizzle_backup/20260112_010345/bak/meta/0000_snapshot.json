@@ -1,5 +1,5 @@
 {
-  "id": "b35ef8d8-b229-489d-a435-6adc010945f9",
+  "id": "49deca97-680a-425d-afe4-ee26a3f39381",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -137,7 +137,7 @@
           "name": "user_id",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "type": {
           "name": "type",
@@ -154,24 +154,6 @@
         "trip_id": {
           "name": "trip_id",
           "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "route_id": {
-          "name": "route_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_info": {
-          "name": "contact_info",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -210,32 +192,6 @@
           "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "complaints_suggestions_route_id_routes_id_fk": {
-          "name": "complaints_suggestions_route_id_routes_id_fk",
-          "tableFrom": "complaints_suggestions",
-          "tableTo": "routes",
-          "columnsFrom": [
-            "route_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "complaints_suggestions_vehicle_id_vehicles_id_fk": {
-          "name": "complaints_suggestions_vehicle_id_vehicles_id_fk",
-          "tableFrom": "complaints_suggestions",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
           ],
           "columnsTo": [
             "id"
@@ -744,6 +700,15 @@
           "columns": [
             "next_route_point_id"
           ]
+        },
+        "route_points_route_lon_lat_unique": {
+          "name": "route_points_route_lon_lat_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "route_id",
+            "lon",
+            "lat"
+          ]
         }
       },
       "policies": {},
@@ -1062,12 +1027,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "work_start_time": {
           "name": "work_start_time",
           "type": "time",
@@ -1085,67 +1044,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "monday": {
-          "name": "monday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "tuesday": {
-          "name": "tuesday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "wednesday": {
-          "name": "wednesday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "thursday": {
-          "name": "thursday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "friday": {
-          "name": "friday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "saturday": {
-          "name": "saturday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "sunday": {
-          "name": "sunday",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "valid_from": {
-          "name": "valid_from",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "valid_to": {
-          "name": "valid_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -1162,23 +1060,18 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "schedules_vehicle_id_vehicles_id_fk": {
-          "name": "schedules_vehicle_id_vehicles_id_fk",
-          "tableFrom": "schedules",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "schedules_route_id_unique": {
+          "name": "schedules_route_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "route_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "schedules_interval_check": {
