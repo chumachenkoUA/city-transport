@@ -1,4 +1,4 @@
-1#!/usr/bin/env node
+#!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const { Client } = require('pg');
