@@ -36,7 +36,13 @@ export class CtDriverController {
   @Get('active-trip')
   getActiveTrip() {
     this.requireLogin();
-    return this.ctDriverService.getActiveTripByLogin();
+    return this.ctDriverService.getActiveTrip();
+  }
+
+  @Get('scheduled-trips')
+  getScheduledTrips() {
+    this.requireLogin();
+    return this.ctDriverService.getScheduledTrips();
   }
 
   @Get('routes/stops')

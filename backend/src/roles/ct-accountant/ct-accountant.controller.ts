@@ -32,6 +32,11 @@ export class CtAccountantController {
     return this.ctAccountantService.getExpenses(query);
   }
 
+  @Get('drivers')
+  getDrivers() {
+    return this.ctAccountantService.getDrivers();
+  }
+
   @Post('salaries')
   createSalary(@Body() payload: CreateSalaryPaymentDto) {
     return this.ctAccountantService.createSalary(payload);

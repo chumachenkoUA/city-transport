@@ -191,15 +191,17 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT t.starts_at::date, r.number, tt.name, v.fleet_number, t.passenger_count
+    SELECT t.actual_starts_at::date, r.number, tt.name, v.fleet_number, t.passenger_count
     FROM public.trips t
     JOIN public.routes r ON r.id = t.route_id
     JOIN public.transport_types tt ON tt.id = r.transport_type_id
-    JOIN public.vehicles v ON v.id = t.vehicle_id
-    WHERE t.starts_at >= p_start_date AND t.starts_at < p_end_date + 1
+    LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
+    LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+    WHERE t.status = 'completed'
+      AND t.actual_starts_at >= p_start_date AND t.actual_starts_at < p_end_date + 1
       AND (p_route_number IS NULL OR r.number = p_route_number)
       AND (p_transport_type IS NULL OR tt.name = p_transport_type)
-    ORDER BY t.starts_at DESC;
+    ORDER BY t.actual_starts_at DESC;
 END;
 $$;
 
@@ -261,13 +263,14 @@ JOIN public.transport_types tt ON tt.id = r.transport_type_id
 ORDER BY r.number, r.direction;
 
 CREATE OR REPLACE VIEW municipality_api.v_passenger_flow_analytics AS
-SELECT t.starts_at::date AS trip_date, r.number AS route_number,
+SELECT t.actual_starts_at::date AS trip_date, r.number AS route_number,
        tt.name AS transport_type, SUM(t.passenger_count)::integer AS passenger_count
 FROM public.trips t
 JOIN public.routes r ON r.id = t.route_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
-GROUP BY t.starts_at::date, r.number, tt.name
-ORDER BY t.starts_at::date DESC;
+WHERE t.status = 'completed' AND t.actual_starts_at IS NOT NULL
+GROUP BY t.actual_starts_at::date, r.number, tt.name
+ORDER BY t.actual_starts_at::date DESC;
 
 CREATE OR REPLACE VIEW municipality_api.v_complaints_dashboard AS
 SELECT c.id, c.type, c.message, c.status, c.created_at,

@@ -1,22 +1,46 @@
--- 0002_guest_api.sql
--- Guest API: Views and functions for unauthenticated users
+-- ============================================================================
+-- 0002_guest_api.sql - API для неавторизованих користувачів (гостей)
+-- ============================================================================
+-- Цей файл створює публічний API для перегляду маршрутів, зупинок, розкладів.
+-- Доступний: ct_guest_role (анонімні), ct_passenger_role та інші ролі
+--
+-- ФУНКЦІОНАЛЬНІСТЬ:
+-- - Перегляд маршрутів та зупинок
+-- - Пошук зупинок (за назвою, за координатами)
+-- - Побудова маршруту (plan_route, plan_route_pgrouting)
+-- - Подання скарг/пропозицій (анонімно)
+-- ============================================================================
 
--- 1. Trigram index for stop name search
+-- ============================================================================
+-- 1. ІНДЕКС ДЛЯ ПОШУКУ ЗА НАЗВОЮ
+-- ============================================================================
+-- pg_trgm extension дозволяє швидкий нечіткий пошук по тексту
+-- gin_trgm_ops - індекс для операцій LIKE '%...%' та similarity()
+-- Використовується: guest_api.search_stops_by_name()
 CREATE INDEX IF NOT EXISTS idx_stops_name_trgm ON public.stops USING gin (name gin_trgm_ops);
 
--- 2. Basic Views
+-- ============================================================================
+-- 2. БАЗОВІ VIEW - Публічна інформація про транспорт
+-- ============================================================================
+-- Ці VIEW не потребують security_barrier, бо не фільтрують по session_user
+-- Вся інформація публічна для всіх користувачів
+
+-- Типи транспорту: Автобус, Тролейбус, Трамвай
 CREATE OR REPLACE VIEW guest_api.v_transport_types AS
 SELECT id, name FROM public.transport_types;
 
+-- Всі зупинки міста: координати та назви
 CREATE OR REPLACE VIEW guest_api.v_stops AS
 SELECT id, name, lon, lat FROM public.stops;
 
+-- Активні маршрути з типом транспорту
 CREATE OR REPLACE VIEW guest_api.v_routes AS
 SELECT r.id, r.number, r.direction, r.transport_type_id, tt.name AS transport_type_name
 FROM public.routes r
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE r.is_active = true;
 
+-- Зупинки на маршрутах з координатами та відстанями
 CREATE OR REPLACE VIEW guest_api.v_route_stops AS
 SELECT rs.id, rs.route_id, rs.stop_id, s.name AS stop_name, s.lon, s.lat,
        rs.distance_to_next_km, rs.prev_route_stop_id, rs.next_route_stop_id
@@ -32,7 +56,13 @@ SELECT route_id, work_start_time, work_end_time, interval_min,
        valid_from, valid_to, vehicle_id
 FROM public.schedules;
 
--- 3. Route Geometries (Recursive CTE for ordered points)
+-- ============================================================================
+-- 3. ГЕОМЕТРІЇ МАРШРУТІВ - GeoJSON для відображення на карті
+-- ============================================================================
+-- Використовує PostGIS для створення GeoJSON геометрій
+-- Рекурсивний CTE обходить двозв'язний список точок маршруту
+
+-- Лінії маршрутів (LineString) для відображення траєкторії
 CREATE OR REPLACE VIEW guest_api.v_route_geometries AS
 WITH RECURSIVE ordered_points AS (
     SELECT rp.route_id, rp.id, rp.lon::float8 as lon, rp.lat::float8 as lat, 1 AS sort_order
@@ -61,7 +91,14 @@ SELECT s.id, s.name,
        ST_AsGeoJSON(ST_SetSRID(ST_MakePoint(s.lon::float8, s.lat::float8), 4326))::jsonb AS geometry
 FROM public.stops s;
 
--- 4. Search Functions
+-- ============================================================================
+-- 4. ФУНКЦІЇ ПОШУКУ ЗУПИНОК
+-- ============================================================================
+-- SECURITY DEFINER + search_path = public, pg_catalog: захист від schema poisoning
+-- STABLE: функція не змінює дані, результат стабільний в межах транзакції
+
+-- Пошук найближчих зупинок за координатами (радіус в метрах)
+-- Використовує PostGIS ST_DWithin для швидкого пошуку в радіусі
 CREATE OR REPLACE FUNCTION guest_api.find_nearby_stops(
     p_lon numeric,
     p_lat numeric,
@@ -217,7 +254,15 @@ BEGIN
 END;
 $$;
 
--- 6. pgRouting route planning
+-- ============================================================================
+-- 6. ПОБУДОВА МАРШРУТУ з pgRouting
+-- ============================================================================
+-- Використовує алгоритм Дейкстри для пошуку найкоротшого шляху
+-- p_transfer_penalty - штраф за пересадку (в хвилинах)
+-- p_max_paths - максимальна кількість варіантів маршруту
+--
+-- ВАЖЛИВО: Функція перевіряє наявність pgRouting (to_regproc guard)
+-- Якщо pgRouting не встановлено - повертає пустий результат без помилки
 CREATE OR REPLACE FUNCTION guest_api.plan_route_pgrouting(
     p_start_stop_ids bigint[],
     p_end_stop_ids bigint[],
@@ -236,6 +281,17 @@ DECLARE
     v_start_nodes bigint[];
     v_end_nodes bigint[];
 BEGIN
+    -- ============================================================================
+    -- GUARD: Перевірка наявності pgRouting
+    -- ============================================================================
+    -- Перевіряємо чи встановлено extension pgrouting
+    -- Це дозволяє системі працювати БЕЗ pgRouting (graceful degradation)
+    -- Якщо pgrouting не встановлено - функція просто повертає пустий результат
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgrouting') THEN
+        RAISE NOTICE 'pgrouting extension is not installed';
+        RETURN;
+    END IF;
+
     SELECT array_agg(rs.id) INTO v_start_nodes
     FROM public.route_stops rs WHERE rs.stop_id = ANY(p_start_stop_ids);
 
@@ -298,7 +354,12 @@ BEGIN
 END;
 $$;
 
--- 7. Complaints submission
+-- ============================================================================
+-- 7. ПОДАННЯ СКАРГ ТА ПРОПОЗИЦІЙ
+-- ============================================================================
+-- Дозволяє анонімним користувачам (ct_guest_role) подавати скарги
+-- user_id = NULL для анонімних скарг (p_contact_info для зворотного зв'язку)
+-- Опціонально можна вказати маршрут та/або транспортний засіб
 CREATE OR REPLACE FUNCTION guest_api.submit_complaint(
     p_type text,
     p_message text,
@@ -334,7 +395,13 @@ BEGIN
 END;
 $$;
 
--- 8. Grants
+-- ============================================================================
+-- 8. GRANT - Надання прав доступу
+-- ============================================================================
+-- SELECT на VIEW: читання публічної інформації
+-- EXECUTE на функції: виклик функцій пошуку та подання скарг
+--
+-- guest_api доступний майже всім ролям, бо це публічна інформація
 GRANT SELECT ON ALL TABLES IN SCHEMA guest_api TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;
 GRANT SELECT ON guest_api.v_schedules TO ct_driver_role, ct_passenger_role, ct_guest_role;
 GRANT EXECUTE ON FUNCTION guest_api.find_nearby_stops(numeric, numeric, numeric, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;

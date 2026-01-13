@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { CreateDriverDto } from '../../modules/drivers/dto/create-driver.dto';
 import { CtManagerService } from './ct-manager.service';
 import { CreateManagerVehicleDto } from './dto/create-manager-vehicle.dto';
+import { CreateStaffUserDto } from './dto/create-staff-user.dto';
 
 @Controller('manager')
 export class CtManagerController {
@@ -40,5 +41,20 @@ export class CtManagerController {
   @Post('vehicles')
   addVehicle(@Body() payload: CreateManagerVehicleDto) {
     return this.ctManagerService.addVehicle(payload);
+  }
+
+  @Get('staff-roles')
+  listStaffRoles() {
+    return this.ctManagerService.listStaffRoles();
+  }
+
+  @Post('staff')
+  createStaffUser(@Body() payload: CreateStaffUserDto) {
+    return this.ctManagerService.createStaffUser(payload);
+  }
+
+  @Delete('staff/:login')
+  removeStaffUser(@Param('login') login: string) {
+    return this.ctManagerService.removeStaffUser(login);
   }
 }

@@ -151,6 +151,8 @@ export function getComplaints(params: {
   routeNumber?: string
   transportTypeId?: number
   fleetNumber?: string
+  type?: string // 'Скарга' | 'Пропозиція'
+  status?: string // 'Подано' | 'Розглядається' | 'Розглянуто'
 }) {
   return apiGet<ComplaintRow[]>('/municipality/complaints', params)
 }

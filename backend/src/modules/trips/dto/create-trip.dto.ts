@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsInt, IsOptional, Min } from 'class-validator';
+import { IsDate, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateTripDto {
   @Type(() => Number)
@@ -10,20 +10,20 @@ export class CreateTripDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  vehicleId!: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
   driverId!: number;
 
   @Type(() => Date)
   @IsDate()
-  startsAt!: Date;
+  plannedStartsAt!: Date;
 
   @Type(() => Date)
   @IsDate()
-  endsAt!: Date;
+  @IsOptional()
+  plannedEndsAt?: Date;
+
+  @IsString()
+  @IsOptional()
+  status?: string;
 
   @Type(() => Number)
   @IsInt()

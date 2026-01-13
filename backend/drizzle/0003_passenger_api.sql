@@ -1,17 +1,35 @@
--- 0003_passenger_api.sql
--- Passenger API: Views and functions for authenticated passengers
+-- ============================================================================
+-- 0003_passenger_api.sql - API для авторизованих пасажирів
+-- ============================================================================
+-- Цей файл створює API для пасажирів (ct_passenger_role):
+-- - Перегляд своїх карток, квитків, штрафів
+-- - Поповнення картки та покупка квитків
+-- - Подання скарг та апеляцій на штрафи
+-- - Оплата штрафів
+-- - GPS логування (для пошуку найближчих зупинок)
+--
+-- ВАЖЛИВО: Всі VIEW мають security_barrier = true
+-- Це запобігає витоку даних через оптимізацію запитів
+-- ============================================================================
 
--- 1. Views
-CREATE OR REPLACE VIEW passenger_api.v_my_cards AS
+-- ============================================================================
+-- 1. VIEW - Особисті дані пасажира
+-- ============================================================================
+-- security_barrier = true: захист від leaky views
+-- session_user: PostgreSQL login поточного користувача
+
+-- Мої транспортні картки (зазвичай одна)
+CREATE OR REPLACE VIEW passenger_api.v_my_cards WITH (security_barrier = true) AS
 SELECT tc.id, tc.card_number, tc.balance,
        (SELECT MAX(topped_up_at) FROM public.card_top_ups WHERE card_id = tc.id) as last_top_up
 FROM public.transport_cards tc
 JOIN public.users u ON u.id = tc.user_id
 WHERE u.login = session_user;
 
-CREATE OR REPLACE VIEW passenger_api.v_my_trips AS
+CREATE OR REPLACE VIEW passenger_api.v_my_trips WITH (security_barrier = true) AS
 SELECT t.id as ticket_id, t.purchased_at, t.price, r.number AS route_number,
-       tt.name AS transport_type, tr.starts_at
+       tt.name AS transport_type,
+       COALESCE(tr.actual_starts_at, tr.planned_starts_at) AS starts_at
 FROM public.tickets t
 JOIN public.transport_cards tc ON tc.id = t.card_id
 JOIN public.users u ON u.id = tc.user_id
@@ -21,13 +39,13 @@ JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE u.login = session_user
 ORDER BY t.purchased_at DESC;
 
-CREATE OR REPLACE VIEW passenger_api.v_my_fines AS
+CREATE OR REPLACE VIEW passenger_api.v_my_fines WITH (security_barrier = true) AS
 SELECT f.id, f.amount, f.reason, f.status, f.issued_at
 FROM public.fines f
 JOIN public.users u ON u.id = f.user_id
 WHERE u.login = session_user;
 
-CREATE OR REPLACE VIEW passenger_api.v_my_appeals AS
+CREATE OR REPLACE VIEW passenger_api.v_my_appeals WITH (security_barrier = true) AS
 SELECT fa.id, fa.fine_id, fa.message, fa.status, fa.created_at
 FROM public.fine_appeals fa
 JOIN public.fines f ON f.id = fa.fine_id
@@ -83,6 +101,14 @@ END;
 $$;
 
 -- 3. Fine Appeal Function
+-- ============================================================================
+-- submit_fine_appeal - Подання апеляції на штраф
+-- ============================================================================
+-- Перевірки:
+-- 1. Штраф існує і належить поточному користувачу
+-- 2. Статус штрафу дозволяє оскарження ('Очікує сплати')
+-- 3. Апеляція ще не подана (UNIQUE constraint на fine_id)
+-- Після успішного створення апеляції - статус штрафу → 'В процесі'
 CREATE OR REPLACE FUNCTION passenger_api.submit_fine_appeal(p_fine_id bigint, p_message text)
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
@@ -90,17 +116,50 @@ AS $$
 DECLARE
     v_user_id bigint;
     v_fine_user_id bigint;
+    v_fine_status text;
     v_id bigint;
 BEGIN
+    -- Отримати ID поточного користувача
     SELECT id INTO v_user_id FROM public.users WHERE login = session_user;
-    SELECT user_id INTO v_fine_user_id FROM public.fines WHERE id = p_fine_id;
 
-    IF v_fine_user_id IS NULL THEN RAISE EXCEPTION 'Fine not found'; END IF;
-    IF v_fine_user_id != v_user_id THEN RAISE EXCEPTION 'Not your fine'; END IF;
+    -- Отримати дані штрафу
+    SELECT user_id, status INTO v_fine_user_id, v_fine_status
+    FROM public.fines WHERE id = p_fine_id;
 
+    -- Перевірка: штраф існує
+    IF v_fine_user_id IS NULL THEN
+        RAISE EXCEPTION 'Штраф не знайдено';
+    END IF;
+
+    -- Перевірка: це штраф поточного користувача
+    IF v_fine_user_id != v_user_id THEN
+        RAISE EXCEPTION 'Це не ваш штраф';
+    END IF;
+
+    -- Перевірка: статус дозволяє оскарження
+    IF v_fine_status = 'В процесі' THEN
+        RAISE EXCEPTION 'Апеляцію на цей штраф вже подано';
+    END IF;
+    IF v_fine_status = 'Оплачено' THEN
+        RAISE EXCEPTION 'Оплачений штраф не можна оскаржити';
+    END IF;
+    IF v_fine_status = 'Відмінено' THEN
+        RAISE EXCEPTION 'Штраф вже відмінено';
+    END IF;
+
+    -- Перевірка: апеляція ще не існує (додаткова перевірка перед UNIQUE constraint)
+    IF EXISTS (SELECT 1 FROM public.fine_appeals WHERE fine_id = p_fine_id) THEN
+        RAISE EXCEPTION 'Апеляцію на цей штраф вже подано раніше';
+    END IF;
+
+    -- Створити апеляцію
     INSERT INTO public.fine_appeals (fine_id, message, status, created_at)
     VALUES (p_fine_id, p_message, 'Подано', now())
     RETURNING id INTO v_id;
+
+    -- Оновити статус штрафу на 'В процесі'
+    UPDATE public.fines SET status = 'В процесі' WHERE id = p_fine_id;
+
     RETURN v_id;
 END;
 $$;
@@ -108,7 +167,7 @@ $$;
 -- 4. Ticket Purchase
 CREATE OR REPLACE FUNCTION passenger_api.buy_ticket(p_card_id bigint, p_trip_id bigint, p_price numeric)
 RETURNS bigint
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_bal numeric; v_tid bigint; v_uid bigint;
 BEGIN
@@ -127,7 +186,7 @@ $$;
 -- 5. Card Top Up
 CREATE OR REPLACE FUNCTION passenger_api.top_up_card(p_card text, p_amt numeric)
 RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_cid bigint;
 BEGIN
@@ -229,7 +288,46 @@ SELECT u.id, u.login, u.full_name, u.email, u.phone, u.registered_at
 FROM public.users u
 WHERE u.login = session_user;
 
--- 9. Grants
+-- 9. GPS Logging Function for Passengers
+-- Allows passengers to log their location (for trip tracking, nearby stops, etc.)
+CREATE OR REPLACE FUNCTION passenger_api.log_my_gps(p_lon numeric, p_lat numeric, p_recorded_at timestamp DEFAULT now())
+RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+DECLARE
+    v_user_id bigint;
+    v_log_id bigint;
+BEGIN
+    SELECT id INTO v_user_id FROM public.users WHERE login = session_user;
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'User not found';
+    END IF;
+
+    -- Validate coordinates
+    IF p_lon < -180 OR p_lon > 180 THEN
+        RAISE EXCEPTION 'Invalid longitude: must be between -180 and 180';
+    END IF;
+    IF p_lat < -90 OR p_lat > 90 THEN
+        RAISE EXCEPTION 'Invalid latitude: must be between -90 and 90';
+    END IF;
+
+    INSERT INTO public.user_gps_logs (user_id, lon, lat, recorded_at)
+    VALUES (v_user_id, p_lon, p_lat, p_recorded_at)
+    RETURNING id INTO v_log_id;
+
+    RETURN v_log_id;
+END;
+$$;
+
+-- View for passenger's own GPS history
+CREATE OR REPLACE VIEW passenger_api.v_my_gps_history WITH (security_barrier = true) AS
+SELECT ugl.id, ugl.lon, ugl.lat, ugl.recorded_at
+FROM public.user_gps_logs ugl
+JOIN public.users u ON u.id = ugl.user_id
+WHERE u.login = session_user
+ORDER BY ugl.recorded_at DESC;
+
+-- 10. Grants
 GRANT SELECT ON ALL TABLES IN SCHEMA passenger_api TO ct_passenger_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA passenger_api TO ct_passenger_role;
 GRANT EXECUTE ON FUNCTION passenger_api.pay_fine(bigint, bigint) TO ct_passenger_role;

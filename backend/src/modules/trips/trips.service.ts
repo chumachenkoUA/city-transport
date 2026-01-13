@@ -3,9 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, gte, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
-import { routes, transportTypes, trips, vehicles } from '../../db/schema';
+import {
+  driverVehicleAssignments,
+  routes,
+  transportTypes,
+  trips,
+  vehicles,
+} from '../../db/schema';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
 
@@ -30,12 +36,12 @@ export class TripsService {
     return trip;
   }
 
-  async findLatestByDriverAndVehicle(driverId: number, vehicleId: number) {
+  async findLatestByDriver(driverId: number) {
     const [trip] = await this.dbService.db
       .select()
       .from(trips)
-      .where(and(eq(trips.driverId, driverId), eq(trips.vehicleId, vehicleId)))
-      .orderBy(desc(trips.startsAt))
+      .where(eq(trips.driverId, driverId))
+      .orderBy(desc(trips.plannedStartsAt))
       .limit(1);
 
     return trip ?? null;
@@ -50,53 +56,49 @@ export class TripsService {
     return this.dbService.db
       .select({
         id: trips.id,
-        startsAt: trips.startsAt,
-        endsAt: trips.endsAt,
+        plannedStartsAt: trips.plannedStartsAt,
+        plannedEndsAt: trips.plannedEndsAt,
+        actualStartsAt: trips.actualStartsAt,
+        actualEndsAt: trips.actualEndsAt,
+        status: trips.status,
         routeId: routes.id,
         routeNumber: routes.number,
         routeDirection: routes.direction,
         transportTypeId: routes.transportTypeId,
         transportTypeName: transportTypes.name,
-        vehicleId: vehicles.id,
+        vehicleId: driverVehicleAssignments.vehicleId,
         fleetNumber: vehicles.fleetNumber,
       })
       .from(trips)
       .innerJoin(routes, eq(routes.id, trips.routeId))
-      .innerJoin(vehicles, eq(vehicles.id, trips.vehicleId))
+      .leftJoin(
+        driverVehicleAssignments,
+        eq(driverVehicleAssignments.driverId, trips.driverId),
+      )
+      .leftJoin(vehicles, eq(vehicles.id, driverVehicleAssignments.vehicleId))
       .innerJoin(transportTypes, eq(transportTypes.id, routes.transportTypeId))
       .where(
         and(
           eq(trips.driverId, driverId),
-          gte(trips.startsAt, startOfDay),
-          lt(trips.startsAt, endOfDay),
+          gte(trips.plannedStartsAt, startOfDay),
+          lt(trips.plannedStartsAt, endOfDay),
         ),
       )
-      .orderBy(trips.startsAt);
+      .orderBy(trips.plannedStartsAt);
   }
 
-  async findActiveByDriver(driverId: number, at?: Date) {
-    const timestamp = at ?? new Date();
+  async findActiveByDriver(driverId: number) {
     const [trip] = await this.dbService.db
       .select()
       .from(trips)
-      .where(
-        and(
-          eq(trips.driverId, driverId),
-          lte(trips.startsAt, timestamp),
-          or(isNull(trips.endsAt), gte(trips.endsAt, timestamp)),
-        ),
-      )
-      .orderBy(desc(trips.startsAt))
+      .where(and(eq(trips.driverId, driverId), eq(trips.status, 'in_progress')))
+      .orderBy(desc(trips.actualStartsAt))
       .limit(1);
 
     return trip ?? null;
   }
 
-  async findLatestByDriverVehicleOnDate(
-    driverId: number,
-    vehicleId: number,
-    date: string,
-  ) {
+  async findLatestByDriverOnDate(driverId: number, date: string) {
     const startOfDay = new Date(`${date}T00:00:00`);
     const endOfDay = new Date(startOfDay);
     endOfDay.setDate(endOfDay.getDate() + 1);
@@ -107,12 +109,11 @@ export class TripsService {
       .where(
         and(
           eq(trips.driverId, driverId),
-          eq(trips.vehicleId, vehicleId),
-          gte(trips.startsAt, startOfDay),
-          lt(trips.startsAt, endOfDay),
+          gte(trips.plannedStartsAt, startOfDay),
+          lt(trips.plannedStartsAt, endOfDay),
         ),
       )
-      .orderBy(desc(trips.startsAt))
+      .orderBy(desc(trips.plannedStartsAt))
       .limit(1);
 
     return trip ?? null;
@@ -127,23 +128,30 @@ export class TripsService {
     routeNumber?: string;
     checkedAt?: Date;
   }) {
-    const timestamp = checkedAt ?? new Date();
+    void checkedAt; // Not used with status-based model
 
     if (fleetNumber) {
+      // Find vehicle and its assigned driver
       const [vehicle] = await this.dbService.db
-        .select({ id: vehicles.id })
+        .select({
+          id: vehicles.id,
+          driverId: driverVehicleAssignments.driverId,
+        })
         .from(vehicles)
+        .leftJoin(
+          driverVehicleAssignments,
+          eq(driverVehicleAssignments.vehicleId, vehicles.id),
+        )
         .where(eq(vehicles.fleetNumber, fleetNumber))
         .limit(1);
 
-      if (!vehicle) {
+      if (!vehicle || !vehicle.driverId) {
         return null;
       }
 
       const conditions = [
-        eq(trips.vehicleId, vehicle.id),
-        lte(trips.startsAt, timestamp),
-        or(isNull(trips.endsAt), gte(trips.endsAt, timestamp)),
+        eq(trips.driverId, vehicle.driverId),
+        eq(trips.status, 'in_progress'),
       ];
 
       if (routeNumber) {
@@ -154,19 +162,21 @@ export class TripsService {
         .select({
           id: trips.id,
           routeId: trips.routeId,
-          vehicleId: trips.vehicleId,
           driverId: trips.driverId,
-          startsAt: trips.startsAt,
-          endsAt: trips.endsAt,
+          plannedStartsAt: trips.plannedStartsAt,
+          plannedEndsAt: trips.plannedEndsAt,
+          actualStartsAt: trips.actualStartsAt,
+          actualEndsAt: trips.actualEndsAt,
+          status: trips.status,
         })
         .from(trips)
         .innerJoin(routes, eq(routes.id, trips.routeId))
         .where(and(...conditions))
-        .orderBy(desc(trips.startsAt))
+        .orderBy(desc(trips.actualStartsAt))
         .limit(2);
 
       if (activeTrips.length > 1) {
-        throw new ConflictException('Multiple active trips found for vehicle');
+        throw new ConflictException('Multiple active trips found for driver');
       }
 
       return activeTrips[0] ?? null;
@@ -180,22 +190,17 @@ export class TripsService {
       .select({
         id: trips.id,
         routeId: trips.routeId,
-        vehicleId: trips.vehicleId,
         driverId: trips.driverId,
-        startsAt: trips.startsAt,
-        endsAt: trips.endsAt,
+        plannedStartsAt: trips.plannedStartsAt,
+        plannedEndsAt: trips.plannedEndsAt,
+        actualStartsAt: trips.actualStartsAt,
+        actualEndsAt: trips.actualEndsAt,
+        status: trips.status,
       })
       .from(trips)
-      .innerJoin(vehicles, eq(vehicles.id, trips.vehicleId))
       .innerJoin(routes, eq(routes.id, trips.routeId))
-      .where(
-        and(
-          eq(routes.number, routeNumber),
-          lte(trips.startsAt, timestamp),
-          or(isNull(trips.endsAt), gte(trips.endsAt, timestamp)),
-        ),
-      )
-      .orderBy(desc(trips.startsAt))
+      .where(and(eq(routes.number, routeNumber), eq(trips.status, 'in_progress')))
+      .orderBy(desc(trips.actualStartsAt))
       .limit(1);
 
     return trip ?? null;
@@ -207,7 +212,11 @@ export class TripsService {
     routeNumber?: string,
     transportTypeId?: number,
   ) {
-    const conditions = [sql`t.starts_at >= ${from}`, sql`t.starts_at <= ${to}`];
+    const conditions = [
+      sql`t.actual_starts_at >= ${from}`,
+      sql`t.actual_starts_at <= ${to}`,
+      sql`t.status = 'completed'`,
+    ];
 
     if (routeNumber) {
       conditions.push(sql`r.number = ${routeNumber}`);
@@ -220,14 +229,15 @@ export class TripsService {
 
     const result = (await this.dbService.db.execute(sql`
       select
-        date(t.starts_at) as day,
+        date(t.actual_starts_at) as day,
         v.fleet_number as fleet_number,
         r.number as route_number,
         r.transport_type_id as transport_type_id,
         sum(t.passenger_count) as passenger_count
       from trips t
-      inner join vehicles v on v.id = t.vehicle_id
       inner join routes r on r.id = t.route_id
+      left join driver_vehicle_assignments dva on dva.driver_id = t.driver_id
+      left join vehicles v on v.id = dva.vehicle_id
       where ${whereClause}
       group by day, v.fleet_number, r.number, r.transport_type_id
       order by day, v.fleet_number
@@ -249,10 +259,10 @@ export class TripsService {
       .insert(trips)
       .values({
         routeId: payload.routeId,
-        vehicleId: payload.vehicleId,
         driverId: payload.driverId,
-        startsAt: payload.startsAt,
-        endsAt: payload.endsAt,
+        plannedStartsAt: payload.plannedStartsAt,
+        plannedEndsAt: payload.plannedEndsAt,
+        status: payload.status ?? 'scheduled',
         passengerCount: payload.passengerCount ?? 0,
       })
       .returning();
@@ -266,17 +276,23 @@ export class TripsService {
     if (payload.routeId !== undefined) {
       updates.routeId = payload.routeId;
     }
-    if (payload.vehicleId !== undefined) {
-      updates.vehicleId = payload.vehicleId;
-    }
     if (payload.driverId !== undefined) {
       updates.driverId = payload.driverId;
     }
-    if (payload.startsAt !== undefined) {
-      updates.startsAt = payload.startsAt;
+    if (payload.plannedStartsAt !== undefined) {
+      updates.plannedStartsAt = payload.plannedStartsAt;
     }
-    if (payload.endsAt !== undefined) {
-      updates.endsAt = payload.endsAt;
+    if (payload.plannedEndsAt !== undefined) {
+      updates.plannedEndsAt = payload.plannedEndsAt;
+    }
+    if (payload.actualStartsAt !== undefined) {
+      updates.actualStartsAt = payload.actualStartsAt;
+    }
+    if (payload.actualEndsAt !== undefined) {
+      updates.actualEndsAt = payload.actualEndsAt;
+    }
+    if (payload.status !== undefined) {
+      updates.status = payload.status;
     }
     if (payload.passengerCount !== undefined) {
       updates.passengerCount = payload.passengerCount;

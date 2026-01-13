@@ -1,12 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsDate,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-} from 'class-validator';
+import { IsInt, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class UpdateSalaryPaymentDto {
   @Type(() => Number)
@@ -14,14 +7,6 @@ export class UpdateSalaryPaymentDto {
   @Min(1)
   @IsOptional()
   driverId?: number;
-
-  @IsString()
-  @IsOptional()
-  employeeName?: string;
-
-  @IsString()
-  @IsOptional()
-  employeeRole?: string;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -40,9 +25,4 @@ export class UpdateSalaryPaymentDto {
   @Min(0.01)
   @IsOptional()
   total?: number;
-
-  @Type(() => Date)
-  @IsDate()
-  @IsOptional()
-  paidAt?: Date;
 }

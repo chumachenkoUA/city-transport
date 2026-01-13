@@ -30,15 +30,11 @@ export class SalaryPaymentsService {
     return payment;
   }
 
-  async findByPeriod(from: Date, to: Date, role?: string) {
+  async findByPeriod(from: Date, to: Date) {
     const conditions = [
       gte(salaryPayments.paidAt, from),
       lte(salaryPayments.paidAt, to),
     ];
-
-    if (role) {
-      conditions.push(eq(salaryPayments.employeeRole, role));
-    }
 
     return this.dbService.db
       .select()
@@ -60,9 +56,15 @@ export class SalaryPaymentsService {
   }
 
   async create(payload: CreateSalaryPaymentDto) {
-    if (!payload.driverId && !payload.employeeName) {
+    // Calculate total if not provided
+    let finalTotal: number;
+    if (payload.total) {
+      finalTotal = payload.total;
+    } else if (payload.rate && payload.units) {
+      finalTotal = payload.rate * payload.units;
+    } else {
       throw new BadRequestException(
-        'driverId or employeeName is required for salary payment',
+        'Either total or both rate and units must be provided',
       );
     }
 
@@ -70,12 +72,9 @@ export class SalaryPaymentsService {
       .insert(salaryPayments)
       .values({
         driverId: payload.driverId,
-        employeeName: payload.employeeName,
-        employeeRole: payload.employeeRole,
         rate: payload.rate?.toString(),
         units: payload.units,
-        total: payload.total.toString(),
-        paidAt: payload.paidAt,
+        total: finalTotal.toString(),
       })
       .returning();
 
@@ -88,12 +87,6 @@ export class SalaryPaymentsService {
     if (payload.driverId !== undefined) {
       updates.driverId = payload.driverId;
     }
-    if (payload.employeeName !== undefined) {
-      updates.employeeName = payload.employeeName;
-    }
-    if (payload.employeeRole !== undefined) {
-      updates.employeeRole = payload.employeeRole;
-    }
     if (payload.rate !== undefined) {
       updates.rate = payload.rate.toString();
     }
@@ -102,9 +95,6 @@ export class SalaryPaymentsService {
     }
     if (payload.total !== undefined) {
       updates.total = payload.total.toString();
-    }
-    if (payload.paidAt !== undefined) {
-      updates.paidAt = payload.paidAt;
     }
 
     if (Object.keys(updates).length === 0) {

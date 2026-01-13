@@ -46,16 +46,24 @@ export type CreateExpensePayload = {
   occurredAt?: string
 }
 
+export type DriverRow = {
+  id: number
+  fullName: string
+  driverLicenseNumber: string
+}
+
 export type SalaryRow = {
   id: number
   paidAt: string
-  employeeName: string
-  role: string
+  driverId: number
+  driverName: string
+  licenseNumber: string
+  rate: number | string | null
+  units: number | null
   total: number | string
 }
 
 export type SalariesQuery = {
-  employeeName?: string
   from?: string
   to?: string
   limit?: number
@@ -63,13 +71,10 @@ export type SalariesQuery = {
 }
 
 export type CreateSalaryPayload = {
-  driverId?: number
-  employeeName?: string
-  employeeRole?: string
+  driverId: number
   rate?: number
   units?: number
-  total: number
-  paidAt?: string
+  total?: number
 }
 
 export type ReportItem = {
@@ -109,6 +114,10 @@ export function createExpense(payload: CreateExpensePayload) {
 
 export function getExpenses(params?: ExpenseQuery) {
   return apiGet<ExpenseRow[]>('/accountant/expenses', params)
+}
+
+export function getDrivers() {
+  return apiGet<DriverRow[]>('/accountant/drivers')
 }
 
 export function createSalary(payload: CreateSalaryPayload) {

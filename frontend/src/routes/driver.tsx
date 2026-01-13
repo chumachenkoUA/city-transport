@@ -3,14 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useRef, useState } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -48,6 +40,7 @@ import {
   getDriverRoutePoints,
   getDriverRouteStops,
   getDriverSchedule,
+  getDriverScheduledTrips,
   startDriverTrip,
   updateTripPassengerCount,
   type DriverDirection,
@@ -56,7 +49,7 @@ import {
 } from '@/lib/driver-api'
 import { useGpsTracking } from '@/hooks/use-gps-tracking'
 import { toast } from 'sonner'
-import { User, MapPin, Navigation, Calendar, Clock, Users, Loader2 } from 'lucide-react'
+import { User, MapPin, Navigation, Calendar, Clock, Users, Loader2, Play, Square } from 'lucide-react'
 
 export const Route = createFileRoute('/driver')({
   component: DriverPage,
@@ -83,9 +76,6 @@ function DriverPage() {
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null)
   const [passengerTripId, setPassengerTripId] = useState<string | null>(null)
   const [passengerCount, setPassengerCount] = useState('')
-  const [startFleetNumber, setStartFleetNumber] = useState('')
-  const [startDirection, setStartDirection] = useState<DriverDirection>('forward')
-  const [startTime, setStartTime] = useState('')
   const [finishTime, setFinishTime] = useState('')
   const [routeForm, setRouteForm] = useState<RouteFormState>({
     routeId: '',
@@ -110,6 +100,11 @@ function DriverPage() {
   const { data: activeTrip, isLoading: activeTripLoading } = useQuery({
     queryKey: ['driver-active-trip'],
     queryFn: getDriverActiveTrip,
+  })
+
+  const { data: scheduledTrips, isLoading: scheduledTripsLoading } = useQuery({
+    queryKey: ['driver-scheduled-trips'],
+    queryFn: getDriverScheduledTrips,
   })
 
   const { data: transportTypes } = useQuery({
@@ -139,10 +134,9 @@ function DriverPage() {
   const startTripMutation = useMutation({
     mutationFn: startDriverTrip,
     onSuccess: () => {
-      setStartFleetNumber('')
-      setStartTime('')
       queryClient.invalidateQueries({ queryKey: ['driver-schedule'] })
       queryClient.invalidateQueries({ queryKey: ['driver-active-trip'] })
+      queryClient.invalidateQueries({ queryKey: ['driver-scheduled-trips'] })
       toast.success('Рейс розпочато!', {
         description: 'GPS моніторинг активовано',
       })
@@ -160,6 +154,7 @@ function DriverPage() {
       setFinishTime('')
       queryClient.invalidateQueries({ queryKey: ['driver-schedule'] })
       queryClient.invalidateQueries({ queryKey: ['driver-active-trip'] })
+      queryClient.invalidateQueries({ queryKey: ['driver-scheduled-trips'] })
       toast.success('Рейс завершено!', {
         description: 'Дякуємо за роботу',
       })
@@ -230,12 +225,25 @@ function DriverPage() {
     if (activeTrip && !options.some((trip) => trip.id === activeTrip.id)) {
       options.unshift({
         id: activeTrip.id,
-        startsAt: activeTrip.startsAt,
-        endsAt: activeTrip.endsAt,
-        passengerCount: 0,
-        route: activeTrip.route,
-        vehicle: activeTrip.vehicle,
-        transportType: activeTrip.transportType,
+        startsAt: activeTrip.actualStartsAt,
+        endsAt: null,
+        passengerCount: activeTrip.passengerCount,
+        plannedStartAt: activeTrip.plannedStartsAt,
+        startDelayMin: activeTrip.startDelayMin,
+        route: {
+          id: activeTrip.routeId,
+          number: activeTrip.routeNumber,
+          transportTypeId: 0,
+          direction: activeTrip.direction,
+        },
+        vehicle: {
+          id: activeTrip.vehicleId,
+          fleetNumber: activeTrip.fleetNumber,
+        },
+        transportType: {
+          id: 0,
+          name: activeTrip.transportType,
+        },
         stops: [],
       })
     }
@@ -282,16 +290,9 @@ function DriverPage() {
   }, [schedule])
 
   // Handlers
-  const handleStartTrip = () => {
-    const fleetNumber = startFleetNumber.trim()
-    if (!fleetNumber) {
-      toast.error('Введіть бортовий номер')
-      return
-    }
+  const handleStartTrip = (tripId?: number) => {
     startTripMutation.mutate({
-      fleetNumber,
-      direction: startDirection,
-      startedAt: startTime ? new Date(startTime).toISOString() : undefined,
+      tripId,
     })
   }
 
@@ -348,19 +349,6 @@ function DriverPage() {
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Водій</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Кабінет водія</h1>
@@ -469,20 +457,32 @@ function DriverPage() {
                   ) : activeTrip ? (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">Маршрут {activeTrip.route.number}</Badge>
-                        <Badge variant="outline">{directionLabels[activeTrip.route.direction]}</Badge>
+                        <Badge variant="secondary">Маршрут {activeTrip.routeNumber}</Badge>
+                        <Badge variant="outline">{directionLabels[activeTrip.direction]}</Badge>
                         <span className="text-sm text-muted-foreground">
-                          {activeTrip.transportType.name}
+                          {activeTrip.transportType}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Транспорт:</span>
-                        <span className="font-medium">{activeTrip.vehicle.fleetNumber}</span>
+                        <span className="font-medium">{activeTrip.fleetNumber}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Початок:</span>
-                        <span className="font-medium">{formatDateTime(activeTrip.startsAt)}</span>
+                        <span className="text-muted-foreground">Запланований початок:</span>
+                        <span className="font-medium">{formatDateTime(activeTrip.plannedStartsAt)}</span>
                       </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Фактичний початок:</span>
+                        <span className="font-medium">{formatDateTime(activeTrip.actualStartsAt)}</span>
+                      </div>
+                      {activeTrip.startDelayMin != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Затримка:</span>
+                          <Badge variant={activeTrip.startDelayMin > 5 ? 'warning' : 'success'}>
+                            {activeTrip.startDelayMin > 0 ? '+' : ''}{activeTrip.startDelayMin} хв
+                          </Badge>
+                        </div>
+                      )}
                       {currentLocation && (
                         <div className="flex items-center gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
                           <MapPin className="h-4 w-4 text-success" />
@@ -684,80 +684,141 @@ function DriverPage() {
 
           {/* Trip Control Tab */}
           <TabsContent value="control" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Start/Finish Trip */}
-              <Card>
+            {/* Active Trip Card */}
+            {activeTrip && (
+              <Card className="border-success/50 bg-success/5">
                 <CardHeader>
-                  <CardTitle>Керування рейсом</CardTitle>
-                  <CardDescription>Запуск та завершення поїздки</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-success">Активний рейс</CardTitle>
+                      <CardDescription>Рейс в процесі виконання</CardDescription>
+                    </div>
+                    <Badge variant="success">Виконується</Badge>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="fleet-number">Бортовий номер *</Label>
-                      <Input
-                        id="fleet-number"
-                        placeholder="Напр. 102"
-                        value={startFleetNumber}
-                        onChange={(e) => setStartFleetNumber(e.target.value)}
-                      />
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Маршрут</p>
+                      <p className="font-medium">{activeTrip.routeNumber} • {directionLabels[activeTrip.direction]}</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Напрямок *</Label>
-                      <Select
-                        value={startDirection}
-                        onValueChange={(value) => setStartDirection(value as DriverDirection)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Оберіть напрямок" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="forward">Прямий</SelectItem>
-                          <SelectItem value="reverse">Зворотній</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Транспорт</p>
+                      <p className="font-medium">{activeTrip.fleetNumber}</p>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="start-time">Час старту (опційно)</Label>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Початок</p>
+                      <p className="font-medium">{formatDateTime(activeTrip.actualStartsAt)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Затримка</p>
+                      <p className="font-medium">
+                        {activeTrip.startDelayMin != null
+                          ? `${activeTrip.startDelayMin > 0 ? '+' : ''}${activeTrip.startDelayMin} хв`
+                          : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor="finish-time">Час завершення (опційно)</Label>
                       <Input
-                        id="start-time"
+                        id="finish-time"
                         type="datetime-local"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
+                        value={finishTime}
+                        onChange={(e) => setFinishTime(e.target.value)}
                       />
                     </div>
+                    <div className="self-end">
+                      <Button
+                        variant="destructive"
+                        onClick={handleFinishTrip}
+                        disabled={finishTripMutation.isPending}
+                      >
+                        {finishTripMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Square className="mr-2 h-4 w-4" />
+                        Завершити рейс
+                      </Button>
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
+            )}
 
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      onClick={handleStartTrip}
-                      disabled={startTripMutation.isPending || !startFleetNumber.trim() || !!activeTrip}
-                      className="flex-1"
-                    >
-                      {startTripMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Розпочати рейс
-                    </Button>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="finish-time">Час завершення (опційно)</Label>
-                    <Input
-                      id="finish-time"
-                      type="datetime-local"
-                      value={finishTime}
-                      onChange={(e) => setFinishTime(e.target.value)}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Scheduled Trips List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Заплановані рейси</CardTitle>
+                  <CardDescription>Оберіть рейс для запуску</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {scheduledTripsLoading ? (
+                    <TableSkeleton rows={5} cols={5} />
+                  ) : scheduledTrips && scheduledTrips.length > 0 ? (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {scheduledTrips.map((trip) => (
+                        <div
+                          key={trip.id}
+                          className={`flex items-center justify-between p-4 rounded-lg border ${
+                            trip.status === 'scheduled'
+                              ? 'border-border hover:border-primary/50 cursor-pointer'
+                              : trip.status === 'in_progress'
+                              ? 'border-success/50 bg-success/5'
+                              : 'border-muted bg-muted/20'
+                          }`}
+                        >
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center gap-2">
+                              <Badge>{trip.routeNumber}</Badge>
+                              <Badge variant="outline">{directionLabels[trip.direction]}</Badge>
+                              <TripStatusBadge status={trip.status} />
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Транспорт: {trip.fleetNumber} • {trip.transportType}
+                            </div>
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">Плановий час:</span>{' '}
+                              <span className="font-medium">
+                                {new Date(trip.plannedStartsAt).toLocaleTimeString('uk-UA', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                                {trip.plannedEndsAt && (
+                                  <>
+                                    {' - '}
+                                    {new Date(trip.plannedEndsAt).toLocaleTimeString('uk-UA', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          {trip.status === 'scheduled' && !activeTrip && (
+                            <Button
+                              onClick={() => handleStartTrip(trip.id)}
+                              disabled={startTripMutation.isPending}
+                              size="sm"
+                            >
+                              {startTripMutation.isPending && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              <Play className="mr-2 h-4 w-4" />
+                              Почати
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={Calendar}
+                      title="Немає запланованих рейсів"
+                      description="Диспетчер ще не створив рейси для вас"
                     />
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    onClick={handleFinishTrip}
-                    disabled={finishTripMutation.isPending || !activeTrip}
-                    className="w-full"
-                  >
-                    {finishTripMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Завершити рейс
-                  </Button>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1063,4 +1124,26 @@ function toDateInputValue(date: Date) {
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+const tripStatusLabels: Record<string, string> = {
+  scheduled: 'Заплановано',
+  in_progress: 'Виконується',
+  completed: 'Завершено',
+  cancelled: 'Скасовано',
+}
+
+const tripStatusVariants: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'outline'> = {
+  scheduled: 'outline',
+  in_progress: 'default',
+  completed: 'success',
+  cancelled: 'destructive',
+}
+
+function TripStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={tripStatusVariants[status] ?? 'outline'}>
+      {tripStatusLabels[status] ?? status}
+    </Badge>
+  )
 }

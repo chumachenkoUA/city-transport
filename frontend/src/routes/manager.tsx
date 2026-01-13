@@ -2,14 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,7 +11,7 @@ import { VehicleCard } from '@/components/domain/transport'
 import { EmptyState, TableSkeleton } from '@/components/domain/data-display'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Users, Bus, Loader2, UserPlus } from 'lucide-react'
+import { Users, Bus, Loader2, UserPlus, UserCog } from 'lucide-react'
 import {
   hireDriver,
   addVehicle,
@@ -28,6 +20,9 @@ import {
   getManagerRoutes,
   getManagerTransportTypes,
   getManagerModels,
+  getStaffRoles,
+  createStaffUser,
+  type StaffRole,
 } from '@/lib/manager-api'
 import { toast } from 'sonner'
 
@@ -60,6 +55,16 @@ function ManagerPage() {
     routeId: '',
   })
 
+  // Staff form state
+  const [staffForm, setStaffForm] = useState({
+    login: '',
+    password: '',
+    role: '' as StaffRole | '',
+    fullName: '',
+    email: '',
+    phone: '',
+  })
+
   // Queries
   const { data: drivers, isLoading: driversLoading } = useQuery({
     queryKey: ['manager-drivers'],
@@ -84,6 +89,11 @@ function ManagerPage() {
   const { data: models } = useQuery({
     queryKey: ['manager-models'],
     queryFn: getManagerModels,
+  })
+
+  const { data: staffRoles } = useQuery({
+    queryKey: ['manager-staff-roles'],
+    queryFn: getStaffRoles,
   })
 
   // Filter models by transport type
@@ -141,6 +151,27 @@ function ManagerPage() {
     },
   })
 
+  // Create staff user mutation
+  const createStaffMutation = useMutation({
+    mutationFn: createStaffUser,
+    onSuccess: () => {
+      setStaffForm({
+        login: '',
+        password: '',
+        role: '',
+        fullName: '',
+        email: '',
+        phone: '',
+      })
+      toast.success('Системного користувача створено успішно!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка створення користувача', {
+        description: error.message,
+      })
+    },
+  })
+
   const handleHireDriver = () => {
     if (!driverForm.login || !driverForm.password || !driverForm.fullName) {
       toast.error('Заповніть обов\'язкові поля')
@@ -178,22 +209,33 @@ function ManagerPage() {
     })
   }
 
+  const handleCreateStaff = () => {
+    if (!staffForm.login || !staffForm.password || !staffForm.role) {
+      toast.error('Заповніть обов\'язкові поля')
+      return
+    }
+
+    createStaffMutation.mutate({
+      login: staffForm.login,
+      password: staffForm.password,
+      role: staffForm.role as StaffRole,
+      fullName: staffForm.fullName || undefined,
+      email: staffForm.email || undefined,
+      phone: staffForm.phone || undefined,
+    })
+  }
+
+  const staffRoleLabels: Record<StaffRole, string> = {
+    dispatcher: 'Диспетчер',
+    controller: 'Контролер',
+    accountant: 'Бухгалтер',
+    municipality: 'Муніципалітет',
+    manager: 'Менеджер',
+  }
+
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Менеджер</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Кабінет менеджера</h1>
@@ -204,9 +246,10 @@ function ManagerPage() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="drivers">Водії</TabsTrigger>
             <TabsTrigger value="vehicles">Транспорт</TabsTrigger>
+            <TabsTrigger value="staff">Персонал</TabsTrigger>
           </TabsList>
 
           {/* Drivers Tab */}
@@ -311,7 +354,7 @@ function ManagerPage() {
                         <CardContent className="pt-4">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium">{driver.firstName} {driver.lastName}</p>
+                              <p className="font-medium">{driver.fullName}</p>
                               <p className="text-sm text-muted-foreground">{driver.phone || driver.email}</p>
                             </div>
                             <Badge variant="outline">{driver.login}</Badge>
@@ -430,7 +473,7 @@ function ManagerPage() {
                         key={vehicle.id}
                         fleetNumber={vehicle.fleetNumber}
                         model={vehicle.modelName || 'Невідома модель'}
-                        transportType={vehicle.transportTypeName || ''}
+                        transportType={vehicle.transportType || ''}
                         routeNumber={vehicle.routeNumber}
                       />
                     ))}
@@ -440,6 +483,128 @@ function ManagerPage() {
                     icon={Bus}
                     title="Немає транспорту"
                     description="Додайте перший транспортний засіб до парку"
+                  />
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Staff Tab */}
+          <TabsContent value="staff" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <FormSection
+                title="Створення системного користувача"
+                description="Додайте нового співробітника до системи"
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-login">Логін *</Label>
+                      <Input
+                        id="staff-login"
+                        value={staffForm.login}
+                        onChange={(e) => setStaffForm({ ...staffForm, login: e.target.value })}
+                        placeholder="dispatcher1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-password">Пароль *</Label>
+                      <Input
+                        id="staff-password"
+                        type="password"
+                        value={staffForm.password}
+                        onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-role">Роль *</Label>
+                    <Select
+                      value={staffForm.role}
+                      onValueChange={(value) => setStaffForm({ ...staffForm, role: value as StaffRole })}
+                    >
+                      <SelectTrigger id="staff-role">
+                        <SelectValue placeholder="Оберіть роль" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {staffRoles?.map((role) => (
+                          <SelectItem key={role.role_name} value={role.role_name}>
+                            {staffRoleLabels[role.role_name as StaffRole] || role.role_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-fullName">ПІБ (опціонально)</Label>
+                    <Input
+                      id="staff-fullName"
+                      value={staffForm.fullName}
+                      onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })}
+                      placeholder="Іванов Іван Іванович"
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-email">Email</Label>
+                      <Input
+                        id="staff-email"
+                        type="email"
+                        value={staffForm.email}
+                        onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="staff-phone">Телефон</Label>
+                      <Input
+                        id="staff-phone"
+                        value={staffForm.phone}
+                        onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                        placeholder="+380..."
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleCreateStaff}
+                    disabled={createStaffMutation.isPending}
+                    className="w-full"
+                  >
+                    {createStaffMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <UserCog className="mr-2 h-4 w-4" />
+                    Створити користувача
+                  </Button>
+                </div>
+              </FormSection>
+
+              <div className="space-y-4">
+                <h3 className="text-heading-md">Доступні ролі</h3>
+                {staffRoles && staffRoles.length > 0 ? (
+                  <div className="space-y-2">
+                    {staffRoles.map((role) => (
+                      <Card key={role.role_name}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">
+                                {staffRoleLabels[role.role_name as StaffRole] || role.role_name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{role.description}</p>
+                            </div>
+                            <Badge variant="outline">{role.role_name}</Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={UserCog}
+                    title="Немає ролей"
+                    description="Ролі персоналу не знайдено"
                   />
                 )}
               </div>

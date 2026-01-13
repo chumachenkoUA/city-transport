@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 import {
@@ -19,14 +19,18 @@ import {
   getTransportTypes,
   getRoutes,
   getRoutesByStop,
+  getRouteSchedule,
+  getRouteStops,
   type RouteOption,
   type StopGeometry,
+  type Route as GuestRoute,
 } from '@/lib/guest-api';
 import { groupRoutesByNumber } from '@/lib/route-utils';
 import { getRouteColor, getTransportTypeColor } from '@/lib/map-colors';
 import { RouteSearch } from '@/components/route-planner/route-search';
 import { RouteCard } from '@/components/route-planner/route-card';
 import { RouteMapView } from '@/components/route-planner/route-map-view';
+import { ScheduleModal } from '@/components/schedule-modal';
 import {
   Loader2,
   MapPin,
@@ -35,6 +39,8 @@ import {
   Train,
   ChevronDown,
   ChevronUp,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -128,6 +134,26 @@ function MapPage() {
   const [userLocation, setUserLocation] = useState<{ lon: number; lat: number } | null>(null);
   const [currentZoom, setCurrentZoom] = useState(12);
 
+  // Schedule modal state
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleModalRoute, setScheduleModalRoute] = useState<{
+    routeId: number;
+    routeNumber: string;
+    transportTypeName: string;
+    transportTypeId: number;
+    direction?: string;
+    stopId?: number;
+    stopName?: string;
+  } | null>(null);
+
+  // Sidebar selected route for schedule viewing
+  const [sidebarSelectedRoute, setSidebarSelectedRoute] = useState<{
+    routeId: number;
+    routeNumber: string;
+    transportTypeId: number;
+    transportTypeName: string;
+  } | null>(null);
+
   // Fetch data
   const { data: transportTypes } = useQuery({
     queryKey: ['transport-types'],
@@ -181,6 +207,41 @@ function MapPage() {
     });
   }, [routeGeometries, showAllRoutes, selectedRouteNumbers, routeIdToGroupKey]);
 
+  // Calculate selected route IDs for fetching their stops
+  const selectedRouteIds = useMemo(() => {
+    if (showAllRoutes || selectedRouteNumbers.size === 0) return [];
+    const ids: number[] = [];
+    for (const group of groupedRoutes) {
+      const groupKey = `${group.number}-${group.transportTypeId}`;
+      if (selectedRouteNumbers.has(groupKey)) {
+        ids.push(...group.routeIds);
+      }
+    }
+    return ids;
+  }, [groupedRoutes, selectedRouteNumbers, showAllRoutes]);
+
+  // Fetch stops for all selected routes
+  const routeStopsQueries = useQueries({
+    queries: selectedRouteIds.map((routeId) => ({
+      queryKey: ['route-stops', routeId],
+      queryFn: () => getRouteStops({ routeId }),
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    })),
+  });
+
+  // Combine all stops into a Set of IDs
+  const selectedRouteStopIds = useMemo(() => {
+    const stopIds = new Set<number>();
+    for (const query of routeStopsQueries) {
+      if (query.data) {
+        for (const stop of query.data) {
+          stopIds.add(stop.id);
+        }
+      }
+    }
+    return stopIds;
+  }, [routeStopsQueries]);
+
   // Convert stops to GeoJSON for clustering
   const stopsGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, { id: number; name: string }>>(() => {
     if (!stopGeometries) {
@@ -202,6 +263,13 @@ function MapPage() {
     queryKey: ['routes-at-stop', clickedStopId],
     queryFn: () => getRoutesByStop(clickedStopId!),
     enabled: !!clickedStopId,
+  });
+
+  // Schedule for sidebar selected route
+  const { data: sidebarSchedule, isLoading: sidebarScheduleLoading } = useQuery({
+    queryKey: ['sidebar-schedule', sidebarSelectedRoute?.routeId],
+    queryFn: () => getRouteSchedule({ routeId: sidebarSelectedRoute!.routeId }),
+    enabled: !!sidebarSelectedRoute,
   });
 
   const handleStopClick = useCallback(
@@ -272,6 +340,45 @@ function MapPage() {
   const handleLocate = useCallback((coords: { longitude: number; latitude: number }) => {
     setUserLocation({ lon: coords.longitude, lat: coords.latitude });
   }, []);
+
+  const handleOpenScheduleModal = useCallback(
+    (route: GuestRoute, stopId?: number, stopName?: string) => {
+      const routeId = route.routeId ?? route.id;
+      const routeNumber = route.number ?? route.routeNumber ?? '';
+      const transportTypeName = route.transportTypeName ?? route.transportType ?? '';
+      if (!routeId) return;
+
+      setScheduleModalRoute({
+        routeId,
+        routeNumber,
+        transportTypeName,
+        transportTypeId: route.transportTypeId,
+        direction: route.direction,
+        stopId,
+        stopName,
+      });
+      setScheduleModalOpen(true);
+    },
+    []
+  );
+
+  const handleSidebarRouteClick = useCallback(
+    (group: { number: string; transportTypeId: number; transportTypeName: string; routeIds: number[] }) => {
+      // Toggle selection
+      if (sidebarSelectedRoute?.routeNumber === group.number &&
+          sidebarSelectedRoute?.transportTypeId === group.transportTypeId) {
+        setSidebarSelectedRoute(null);
+      } else {
+        setSidebarSelectedRoute({
+          routeId: group.routeIds[0], // Use the first route ID
+          routeNumber: group.number,
+          transportTypeId: group.transportTypeId,
+          transportTypeName: group.transportTypeName,
+        });
+      }
+    },
+    [sidebarSelectedRoute]
+  );
 
   const getTransportIcon = (typeId: number) => {
     switch (typeId) {
@@ -394,54 +501,142 @@ function MapPage() {
                     const isSelected = selectedRouteNumbers.has(groupKey);
                     const isDisabled = showAllRoutes;
                     const color = getTransportTypeColor(group.transportTypeId);
+                    const isScheduleSelected = sidebarSelectedRoute?.routeNumber === group.number &&
+                      sidebarSelectedRoute?.transportTypeId === group.transportTypeId;
 
                     return (
-                      <div
-                        key={groupKey}
-                        className={`px-4 py-3 flex items-center gap-3 transition-colors ${
-                          isSelected && !isDisabled
-                            ? 'bg-blue-50 dark:bg-blue-950'
-                            : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                        } ${isDisabled ? 'opacity-50' : ''}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected || showAllRoutes}
-                          disabled={isDisabled}
-                          onChange={() =>
-                            handleRouteToggle(group.number, group.transportTypeId)
-                          }
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                        />
-
+                      <div key={groupKey}>
                         <div
-                          className="h-3 w-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: color }}
-                        />
-
-                        <span
-                          className="px-2 py-1 text-sm font-medium rounded border flex-shrink-0"
-                          style={{
-                            borderColor: color,
-                            backgroundColor: isSelected ? `${color}20` : 'transparent',
-                          }}
+                          className={`px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer ${
+                            isSelected && !isDisabled
+                              ? 'bg-blue-50 dark:bg-blue-950'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+                          } ${isDisabled ? 'opacity-50' : ''} ${
+                            isScheduleSelected ? 'ring-2 ring-inset ring-blue-400' : ''
+                          }`}
+                          onClick={() => handleSidebarRouteClick(group)}
                         >
-                          {group.number}
-                        </span>
+                          <input
+                            type="checkbox"
+                            checked={isSelected || showAllRoutes}
+                            disabled={isDisabled}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={() =>
+                              handleRouteToggle(group.number, group.transportTypeId)
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                          />
 
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-900 dark:text-white truncate">
-                            {group.transportTypeName}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {group.routes.length} напрямки
-                          </p>
+                          <div
+                            className="h-3 w-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+
+                          <span
+                            className="px-2 py-1 text-sm font-medium rounded border flex-shrink-0"
+                            style={{
+                              borderColor: color,
+                              backgroundColor: isSelected ? `${color}20` : 'transparent',
+                            }}
+                          >
+                            {group.number}
+                          </span>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-900 dark:text-white truncate">
+                              {group.transportTypeName}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {group.routes.length} напрямки
+                            </p>
+                          </div>
+
+                          {group.intervalMin && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                              ~{group.intervalMin} хв
+                            </span>
+                          )}
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSidebarRouteClick(group);
+                            }}
+                            className={`p-1.5 rounded transition-colors ${
+                              isScheduleSelected
+                                ? 'bg-blue-100 dark:bg-blue-900/50'
+                                : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                            }`}
+                            title="Розклад"
+                          >
+                            <Clock className={`h-4 w-4 ${isScheduleSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                          </button>
                         </div>
 
-                        {group.intervalMin && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                            ~{group.intervalMin} хв
-                          </span>
+                        {/* Schedule panel for selected route */}
+                        {isScheduleSelected && (
+                          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-b border-gray-200 dark:border-gray-700">
+                            {sidebarScheduleLoading && (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                                <span className="ml-2 text-sm text-gray-500">Завантаження...</span>
+                              </div>
+                            )}
+
+                            {!sidebarScheduleLoading && !sidebarSchedule && (
+                              <div className="text-center py-4 text-sm text-gray-500">
+                                <Calendar className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                Розклад не знайдено
+                              </div>
+                            )}
+
+                            {!sidebarScheduleLoading && sidebarSchedule && (
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  <Clock className="h-4 w-4" />
+                                  Розклад руху
+                                </div>
+
+                                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-green-600 font-medium">
+                                        {sidebarSchedule.schedule.workStartTime?.slice(0, 5) || '--:--'}
+                                      </span>
+                                      <span className="text-gray-400">—</span>
+                                      <span className="text-red-600 font-medium">
+                                        {sidebarSchedule.schedule.workEndTime?.slice(0, 5) || '--:--'}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">
+                                      ~{sidebarSchedule.schedule.intervalMin} хв
+                                    </span>
+                                  </div>
+
+                                  {/* Show first few departures */}
+                                  {sidebarSchedule.departures?.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                      <div className="text-xs text-gray-500 mb-1">Відправлення:</div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {sidebarSchedule.departures.slice(0, 8).map((time, idx) => (
+                                          <span key={idx} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">
+                                            {time}
+                                          </span>
+                                        ))}
+                                        {sidebarSchedule.departures.length > 8 && (
+                                          <span className="text-xs text-gray-400">+{sidebarSchedule.departures.length - 8}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    {sidebarSchedule.route.direction === 'forward' ? 'Прямий напрямок' : 'Зворотній напрямок'}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
@@ -576,6 +771,11 @@ function MapPage() {
                 const stopRoutesLoading = clickedStopId === stop.id && routesAtStopLoading;
                 const stopRoutes = clickedStopId === stop.id ? routesAtStop : null;
 
+                // Determine if this stop should be grayed out
+                const hasSelectedRoutes = selectedRouteNumbers.size > 0 && !showAllRoutes;
+                const isOnSelectedRoute = selectedRouteStopIds.has(stop.id);
+                const isGrayed = hasSelectedRoutes && !isOnSelectedRoute;
+
                 return (
                   <MapMarker
                     key={stop.id}
@@ -598,7 +798,9 @@ function MapPage() {
                         className={`rounded-full border-2 border-white shadow-md transition-all duration-200 cursor-pointer ${
                           selectedStop?.id === stop.id
                             ? 'h-5 w-5 bg-green-500 animate-pulse shadow-lg shadow-green-500/30'
-                            : 'h-4 w-4 bg-blue-500 hover:h-5 hover:w-5 hover:shadow-lg hover:shadow-blue-500/30'
+                            : isGrayed
+                              ? 'h-3 w-3 bg-gray-400 opacity-50 hover:opacity-70'
+                              : 'h-4 w-4 bg-blue-500 hover:h-5 hover:w-5 hover:shadow-lg hover:shadow-blue-500/30'
                         }`}
                       />
                     </MarkerContent>
@@ -635,7 +837,7 @@ function MapPage() {
                                 return (
                                   <div
                                     key={`${routeId}-${route.direction}`}
-                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                   >
                                     <div
                                       className="h-2 w-2 rounded-full flex-shrink-0"
@@ -646,11 +848,25 @@ function MapPage() {
                                       {route.transportTypeName ?? route.transportType} •{' '}
                                       {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
                                     </span>
-                                    {route.intervalMin && (
+                                    {route.nextArrivalMin != null && route.nextArrivalMin >= 0 ? (
+                                      <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded font-medium flex-shrink-0">
+                                        {route.nextArrivalMin} хв
+                                      </span>
+                                    ) : route.intervalMin ? (
                                       <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                                         ~{route.intervalMin} хв
                                       </span>
-                                    )}
+                                    ) : null}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenScheduleModal(route, stop.id, stop.name);
+                                      }}
+                                      className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                      title="Розклад"
+                                    >
+                                      <Clock className="h-3.5 w-3.5 text-blue-500" />
+                                    </button>
                                   </div>
                                 );
                               })}
@@ -765,7 +981,7 @@ function MapPage() {
                                 return (
                                   <div
                                     key={`${routeId}-${route.direction}`}
-                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+                                    className="flex items-center gap-2 p-1.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                   >
                                     <div
                                       className="h-2 w-2 rounded-full flex-shrink-0"
@@ -776,11 +992,25 @@ function MapPage() {
                                       {route.transportTypeName ?? route.transportType} •{' '}
                                       {route.direction === 'forward' ? 'Прямий' : 'Зворотній'}
                                     </span>
-                                    {route.intervalMin && (
+                                    {route.nextArrivalMin != null && route.nextArrivalMin >= 0 ? (
+                                      <span className="text-xs px-1.5 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded font-medium flex-shrink-0">
+                                        {route.nextArrivalMin} хв
+                                      </span>
+                                    ) : route.intervalMin ? (
                                       <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                                         ~{route.intervalMin} хв
                                       </span>
-                                    )}
+                                    ) : null}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenScheduleModal(route, stop.id, stop.name);
+                                      }}
+                                      className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                      title="Розклад"
+                                    >
+                                      <Clock className="h-3.5 w-3.5 text-blue-500" />
+                                    </button>
                                   </div>
                                 );
                               })}
@@ -846,7 +1076,7 @@ function MapPage() {
                 <MapRoute
                   key={`${geom.routeId}-${geom.direction || 'unknown'}`}
                   coordinates={geom.geometry.coordinates as [number, number][]}
-                  color={getRouteColor(geom.transportTypeId, geom.direction)}
+                  color={getRouteColor(geom.transportTypeId ?? 1, geom.direction)}
                   width={4}
                   opacity={0.7}
                 />
@@ -890,6 +1120,21 @@ function MapPage() {
           </div>
         )}
       </div>
+
+      {/* Schedule Modal */}
+      {scheduleModalRoute && (
+        <ScheduleModal
+          open={scheduleModalOpen}
+          onOpenChange={setScheduleModalOpen}
+          routeId={scheduleModalRoute.routeId}
+          routeNumber={scheduleModalRoute.routeNumber}
+          transportTypeName={scheduleModalRoute.transportTypeName}
+          transportTypeId={scheduleModalRoute.transportTypeId}
+          direction={scheduleModalRoute.direction}
+          stopId={scheduleModalRoute.stopId}
+          stopName={scheduleModalRoute.stopName}
+        />
+      )}
     </div>
   );
 }

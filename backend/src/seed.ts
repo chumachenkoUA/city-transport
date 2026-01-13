@@ -189,52 +189,6 @@ export async function seedDatabase() {
     const shapesData = await readCsv(path.join(staticDir, 'shapes.txt'));
     const tripsData = await readCsv(path.join(staticDir, 'trips.txt'));
     const stopTimesData = await readCsv(path.join(staticDir, 'stop_times.txt'));
-    const calendarData = await readCsv(path.join(staticDir, 'calendar.txt'));
-
-    // C. Parse calendar.txt
-    console.log('📅 Parsing calendar.txt...');
-    const calendarMap = new Map<
-      string,
-      {
-        days: {
-          monday: boolean;
-          tuesday: boolean;
-          wednesday: boolean;
-          thursday: boolean;
-          friday: boolean;
-          saturday: boolean;
-          sunday: boolean;
-        };
-        activeDays: number;
-        validFrom: string | null;
-        validTo: string | null;
-      }
-    >();
-
-    if (calendarData.length > 0) {
-      for (const cal of calendarData) {
-        const days = {
-          monday: cal.monday === '1',
-          tuesday: cal.tuesday === '1',
-          wednesday: cal.wednesday === '1',
-          thursday: cal.thursday === '1',
-          friday: cal.friday === '1',
-          saturday: cal.saturday === '1',
-          sunday: cal.sunday === '1',
-        };
-        const activeDays = Object.values(days).filter(Boolean).length;
-        calendarMap.set(cal.service_id, {
-          days,
-          activeDays,
-          validFrom: formatDate(cal.start_date),
-          validTo: formatDate(cal.end_date),
-        });
-      }
-    } else {
-      console.warn(
-        '⚠️ calendar.txt empty or missing. Schedule days will be empty.',
-      );
-    }
 
     // D. Seed Transport Types
     console.log('🚌 Seeding Transport Types...');
@@ -394,40 +348,11 @@ export async function seedDatabase() {
 
         let selectedServiceId = '';
         let bestCount = -1;
-        let bestHasCalendar = false;
-        let bestActiveDays = -1;
-        let bestNonEmpty = false;
 
         for (const [serviceId, count] of serviceCounts.entries()) {
-          const calendarInfo = calendarMap.get(serviceId);
-          const hasCalendar = Boolean(calendarInfo);
-          const activeDays = calendarInfo?.activeDays ?? -1;
-          const nonEmpty = serviceId !== '';
-
-          let isBetter = false;
-          if (count > bestCount) {
-            isBetter = true;
-          } else if (count === bestCount) {
-            if (hasCalendar && !bestHasCalendar) {
-              isBetter = true;
-            } else if (hasCalendar === bestHasCalendar) {
-              if (nonEmpty && !bestNonEmpty) {
-                isBetter = true;
-              } else if (
-                nonEmpty === bestNonEmpty &&
-                activeDays > bestActiveDays
-              ) {
-                isBetter = true;
-              }
-            }
-          }
-
-          if (isBetter) {
+          if (count > bestCount || (count === bestCount && serviceId !== '')) {
             selectedServiceId = serviceId;
             bestCount = count;
-            bestHasCalendar = hasCalendar;
-            bestActiveDays = activeDays;
-            bestNonEmpty = nonEmpty;
           }
         }
 
@@ -590,24 +515,21 @@ export async function seedDatabase() {
           }
           if (interval <= 0) interval = 15;
 
-          const calendarInfo = selectedServiceId
-            ? calendarMap.get(selectedServiceId)
-            : undefined;
-
+          // Default all days to true (routes operate daily)
           await db.insert(schema.schedules).values({
             routeId: routeDb.id,
             workStartTime: minToTime(minStart),
             workEndTime: minToTime(maxEnd),
             intervalMin: interval,
-            monday: calendarInfo?.days.monday ?? false,
-            tuesday: calendarInfo?.days.tuesday ?? false,
-            wednesday: calendarInfo?.days.wednesday ?? false,
-            thursday: calendarInfo?.days.thursday ?? false,
-            friday: calendarInfo?.days.friday ?? false,
-            saturday: calendarInfo?.days.saturday ?? false,
-            sunday: calendarInfo?.days.sunday ?? false,
-            validFrom: calendarInfo?.validFrom ?? null,
-            validTo: calendarInfo?.validTo ?? null,
+            monday: true,
+            tuesday: true,
+            wednesday: true,
+            thursday: true,
+            friday: true,
+            saturday: true,
+            sunday: true,
+            validFrom: null,
+            validTo: null,
           });
         } else {
           await db.insert(schema.schedules).values({
@@ -615,6 +537,13 @@ export async function seedDatabase() {
             workStartTime: '06:00:00',
             workEndTime: '23:00:00',
             intervalMin: 15,
+            monday: true,
+            tuesday: true,
+            wednesday: true,
+            thursday: true,
+            friday: true,
+            saturday: true,
+            sunday: true,
           });
         }
       }
@@ -1001,15 +930,14 @@ export async function seedDatabase() {
           const startHours = [6, 7, 9, 11, 13, 15, 17, 19, 21];
           const tripsToInsert: Array<typeof schema.trips.$inferInsert> = [];
           const tripTimes: Array<{
-            startsAt: Date;
-            endsAt: Date;
+            plannedStartsAt: Date;
+            actualStartsAt: Date;
+            actualEndsAt: Date;
             durationMin: number;
           }> = [];
 
           for (let i = 0; i < historyTripCount; i++) {
             const route = historyRoutes[i % historyRoutes.length];
-            const vehicleId = vehicleByRouteId.get(route.id);
-            if (!vehicleId) continue;
 
             const tripDate = new Date(baseDate);
             tripDate.setDate(baseDate.getDate() + i * 2);
@@ -1018,21 +946,33 @@ export async function seedDatabase() {
             tripDate.setHours(startHour, startMinute, 0, 0);
 
             const durationMinutes = 18 + (i % 5) * 7;
-            const endsAt = new Date(
+            // Add small random delay for actual start (-5 to +15 minutes)
+            const delayMinutes = randomInt(-5, 15);
+            const plannedStartsAt = new Date(tripDate);
+            const plannedEndsAt = new Date(
               tripDate.getTime() + durationMinutes * 60 * 1000,
+            );
+            const actualStartsAt = new Date(
+              tripDate.getTime() + delayMinutes * 60 * 1000,
+            );
+            const actualEndsAt = new Date(
+              actualStartsAt.getTime() + durationMinutes * 60 * 1000,
             );
 
             tripsToInsert.push({
               routeId: route.id,
-              vehicleId,
               driverId: driver.id,
-              startsAt: new Date(tripDate),
-              endsAt,
+              plannedStartsAt,
+              plannedEndsAt,
+              actualStartsAt,
+              actualEndsAt,
+              status: 'completed',
               passengerCount: 5 + (i % 12),
             });
             tripTimes.push({
-              startsAt: new Date(tripDate),
-              endsAt,
+              plannedStartsAt,
+              actualStartsAt,
+              actualEndsAt,
               durationMin: durationMinutes,
             });
           }
@@ -1055,7 +995,7 @@ export async function seedDatabase() {
                 Math.max(3, Math.floor(meta.durationMin / 3)),
               );
               const purchasedAt = new Date(
-                meta.startsAt.getTime() + purchaseOffsetMin * 60 * 1000,
+                meta.actualStartsAt.getTime() + purchaseOffsetMin * 60 * 1000,
               );
 
               ticketsToInsert.push({
@@ -1097,7 +1037,7 @@ export async function seedDatabase() {
               if (!trip || !meta) return;
 
               const issuedAt = new Date(
-                meta.startsAt.getTime() +
+                meta.actualStartsAt.getTime() +
                   Math.floor(meta.durationMin / 2) * 60 * 1000,
               );
 
@@ -1136,16 +1076,25 @@ export async function seedDatabase() {
         const vehicle = routeVehicles[i % routeVehicles.length];
         const driverEntry = drivers[i % drivers.length];
         const daysBack = randomInt(1, 30);
-        const startDate = daysAgo(daysBack);
-        startDate.setHours(randomInt(6, 22), randomInt(0, 50), 0, 0);
+        const plannedStartsAt = daysAgo(daysBack);
+        plannedStartsAt.setHours(randomInt(6, 22), randomInt(0, 50), 0, 0);
         const durationMinutes = randomInt(20, 60);
+        const plannedEndsAt = addMinutes(plannedStartsAt, durationMinutes);
+
+        // Add realistic delay for actual times (-5 to +15 minutes)
+        const delayMinutes = randomInt(-5, 15);
+        const actualStartsAt = addMinutes(plannedStartsAt, delayMinutes);
+        const actualDuration = durationMinutes + randomInt(-5, 10);
+        const actualEndsAt = addMinutes(actualStartsAt, actualDuration);
 
         tripInserts.push({
           routeId: route.id,
-          vehicleId: vehicle.id,
           driverId: driverEntry.id,
-          startsAt: startDate,
-          endsAt: addMinutes(startDate, durationMinutes),
+          plannedStartsAt,
+          plannedEndsAt,
+          actualStartsAt,
+          actualEndsAt,
+          status: 'completed',
           passengerCount: randomInt(10, 80),
         });
       }
@@ -1158,51 +1107,109 @@ export async function seedDatabase() {
         historicalTrips.push(...inserted);
       }
 
-      const activeTripsCount = Math.min(5, vehicles.length);
+      // Create 3 active trips with UNIQUE driver_id (partial unique index)
+      // Vehicle is determined by driver_vehicle_assignments
+      const activeTripsCount = Math.min(3, drivers.length);
+      const usedDriverIds = new Set<number>();
+
       for (let i = 0; i < activeTripsCount; i++) {
         const route = someRoutes[i % someRoutes.length];
-        const routeVehicles = vehiclesByRoute.get(route.id);
-        if (!routeVehicles || routeVehicles.length === 0) {
-          continue;
-        }
-        const vehicle = routeVehicles[i % routeVehicles.length];
-        const driverEntry = drivers[i % drivers.length];
-        const startsAt =
-          i === 0 ? addMinutes(new Date(), -20) : addMinutes(new Date(), -2);
+
+        // Find a driver not already in use for active trips
+        const driverEntry = drivers.find((d) => !usedDriverIds.has(d.id));
+        if (!driverEntry) continue;
+
+        usedDriverIds.add(driverEntry.id);
+
+        // Trip planned 30-40 minutes ago, started with 5-10 min delay
+        const minutesAgo = 30 + i * 10; // 30, 40, 50 minutes ago
+        const plannedStartsAt = addMinutes(new Date(), -minutesAgo);
+        const plannedEndsAt = addMinutes(plannedStartsAt, 45); // 45 min planned duration
+        const delayMinutes = randomInt(3, 10);
+        const actualStartsAt = addMinutes(plannedStartsAt, delayMinutes);
 
         const [activeTrip] = await db
           .insert(schema.trips)
           .values({
             routeId: route.id,
-            vehicleId: vehicle.id,
             driverId: driverEntry.id,
-            startsAt,
-            passengerCount: randomInt(5, 20),
+            plannedStartsAt,
+            plannedEndsAt,
+            actualStartsAt,
+            actualEndsAt: null, // Not finished yet
+            status: 'in_progress',
+            passengerCount: randomInt(5, 30),
           })
           .returning();
 
+        // Get vehicle from driver's assignment for GPS logs
         if (activeTrip) {
-          const firstStopResult = (await db.execute(sql`
-            SELECT s.lon, s.lat
-            FROM ${sql.raw('route_stops')} rs
-            JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
-            WHERE rs.route_id = ${route.id}
-              AND rs.prev_route_stop_id IS NULL
-            LIMIT 1
-          `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
-          const firstStop = firstStopResult.rows[0];
+          const assignmentResult = (await db.execute(sql`
+            SELECT vehicle_id FROM driver_vehicle_assignments
+            WHERE driver_id = ${driverEntry.id} LIMIT 1
+          `)) as unknown as { rows: Array<{ vehicle_id: number }> };
+          const vehicleId = assignmentResult.rows[0]?.vehicle_id;
 
-          if (firstStop?.lon && firstStop?.lat) {
-            for (let j = 0; j < 4; j++) {
-              await db.insert(schema.vehicleGpsLogs).values({
-                vehicleId: vehicle.id,
-                lon: firstStop.lon,
-                lat: firstStop.lat,
-                recordedAt: addMinutes(new Date(), -j * 3),
-              });
+          if (vehicleId) {
+            const firstStopResult = (await db.execute(sql`
+              SELECT s.lon, s.lat
+              FROM ${sql.raw('route_stops')} rs
+              JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
+              WHERE rs.route_id = ${route.id}
+                AND rs.prev_route_stop_id IS NULL
+              LIMIT 1
+            `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
+            const firstStop = firstStopResult.rows[0];
+
+            if (firstStop?.lon && firstStop?.lat) {
+              for (let j = 0; j < 4; j++) {
+                await db.insert(schema.vehicleGpsLogs).values({
+                  vehicleId,
+                  lon: firstStop.lon,
+                  lat: firstStop.lat,
+                  recordedAt: addMinutes(new Date(), -j * 3),
+                });
+              }
             }
           }
         }
+      }
+
+      // Create scheduled trips for today and tomorrow
+      console.log('📅 Seeding scheduled trips...');
+      const now = new Date();
+      const todayBase = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const scheduledTrips: Array<typeof schema.trips.$inferInsert> = [];
+
+      // Create ~20 scheduled trips for today (future hours) and tomorrow
+      for (let i = 0; i < 20; i++) {
+        const route = someRoutes[i % someRoutes.length];
+        const driverEntry = drivers[i % drivers.length];
+
+        // First 10 trips - today (afternoon/evening hours), next 10 - tomorrow
+        const dayOffset = i < 10 ? 0 : 1;
+        const baseHour = i < 10 ? 14 + (i % 8) : 6 + (i % 12); // Today: 14-21, Tomorrow: 6-17
+        const tripDate = new Date(todayBase);
+        tripDate.setDate(tripDate.getDate() + dayOffset);
+        tripDate.setHours(baseHour, (i * 17) % 60, 0, 0);
+
+        const plannedStartsAt = tripDate;
+        const plannedEndsAt = addMinutes(plannedStartsAt, randomInt(30, 50));
+
+        scheduledTrips.push({
+          routeId: route.id,
+          driverId: driverEntry.id,
+          plannedStartsAt,
+          plannedEndsAt,
+          actualStartsAt: null, // Not started yet
+          actualEndsAt: null,
+          status: 'scheduled',
+          passengerCount: 0,
+        });
+      }
+
+      if (scheduledTrips.length > 0) {
+        await db.insert(schema.trips).values(scheduledTrips);
       }
     }
 
@@ -1234,7 +1241,6 @@ export async function seedDatabase() {
       const units = randomInt(120, 180);
       salaryPayments.push({
         driverId: driverEntry.id,
-        employeeRole: 'Водій',
         rate: rate.toFixed(2),
         units,
         total: (rate * units).toFixed(2),
@@ -1250,12 +1256,13 @@ export async function seedDatabase() {
       await db.insert(schema.salaryPayments).values(salaryPayments);
     }
 
+    // Get completed trips for ticket generation
     const ticketTrips = historicalTrips.length
       ? historicalTrips
       : await db
           .select()
           .from(schema.trips)
-          .where(sql`${schema.trips.endsAt} is not null`);
+          .where(eq(schema.trips.status, 'completed'));
     const ticketCards = cards.length
       ? cards
       : await db.select().from(schema.transportCards);
@@ -1265,8 +1272,13 @@ export async function seedDatabase() {
       for (let i = 0; i < 300; i++) {
         const trip = randomChoice(ticketTrips);
         const card = randomChoice(ticketCards);
-        const start = new Date(trip.startsAt);
-        const end = trip.endsAt ? new Date(trip.endsAt) : addMinutes(start, 30);
+        // Use actualStartsAt/actualEndsAt for completed trips
+        const start = trip.actualStartsAt
+          ? new Date(trip.actualStartsAt)
+          : new Date(trip.plannedStartsAt);
+        const end = trip.actualEndsAt
+          ? new Date(trip.actualEndsAt)
+          : addMinutes(start, 30);
         const maxMinutes = Math.max(
           3,
           Math.round((end.getTime() - start.getTime()) / 60000) - 2,
@@ -1300,13 +1312,16 @@ export async function seedDatabase() {
       for (let i = 0; i < fineCount; i++) {
         const trip = randomChoice(ticketTrips);
         const user = randomChoice(passengers);
+        const tripStart = trip.actualStartsAt
+          ? new Date(trip.actualStartsAt)
+          : new Date(trip.plannedStartsAt);
         finesToInsert.push({
           userId: user.id,
           tripId: trip.id,
           status: fineStatuses[i % fineStatuses.length],
           amount: randomChoice(['60.00', '80.00', '50.00']),
           reason: fineReasons[i % fineReasons.length],
-          issuedAt: addMinutes(new Date(trip.startsAt), randomInt(5, 20)),
+          issuedAt: addMinutes(tripStart, randomInt(5, 20)),
         });
       }
 

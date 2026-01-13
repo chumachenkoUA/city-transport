@@ -3,14 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -39,11 +31,12 @@ import {
   MapRoute,
 } from '@/components/ui/map'
 import { StatCard, StatCardSkeleton } from '@/components/domain/stats'
-import { EmptyState, TableSkeleton, ErrorState } from '@/components/domain/data-display'
+import { EmptyState, TableSkeleton } from '@/components/domain/data-display'
 import { FormSection } from '@/components/domain/forms'
 import {
   assignDispatcherDriver,
   createDispatcherSchedule,
+  deleteDispatcherSchedule,
   detectDispatcherDeviation,
   getDispatcherSchedule,
   getDispatcherVehicleMonitoring,
@@ -56,8 +49,12 @@ import {
   listDispatcherVehicles,
   updateDispatcherSchedule,
   getDispatcherDashboard,
+  listDispatcherTrips,
+  createDispatcherTrip,
+  generateDispatcherDailyTrips,
+  cancelDispatcherTrip,
+  deleteDispatcherTrip,
   type DispatcherDirection,
-  type DispatcherRoute,
 } from '@/lib/dispatcher-api'
 import { toast } from 'sonner'
 import {
@@ -70,6 +67,11 @@ import {
   Loader2,
   Eye,
   Edit2,
+  Trash2,
+  Route as RouteIcon,
+  Plus,
+  Clock,
+  XCircle,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/dispatcher')({
@@ -113,6 +115,23 @@ function DispatcherPage() {
   const [deviationFleetNumber, setDeviationFleetNumber] = useState('')
   const [deviationTime, setDeviationTime] = useState('')
 
+  // Trips form
+  const [tripRouteId, setTripRouteId] = useState('')
+  const [tripVehicleId, setTripVehicleId] = useState('')
+  const [tripDriverId, setTripDriverId] = useState('')
+  const [tripPlannedStart, setTripPlannedStart] = useState('')
+  const [tripPlannedEnd, setTripPlannedEnd] = useState('')
+  const [tripStatusFilter, setTripStatusFilter] = useState<string>('all')
+
+  // Generate trips form
+  const [genRouteId, setGenRouteId] = useState('')
+  const [genVehicleId, setGenVehicleId] = useState('')
+  const [genDriverId, setGenDriverId] = useState('')
+  const [genDate, setGenDate] = useState('')
+  const [genStartTime, setGenStartTime] = useState('')
+  const [genEndTime, setGenEndTime] = useState('')
+  const [genInterval, setGenInterval] = useState('')
+
   // Queries
   const { data: dashboard, isLoading: dashboardLoading } = useQuery({
     queryKey: ['dispatcher-dashboard'],
@@ -152,6 +171,11 @@ function DispatcherPage() {
   const { data: deviations } = useQuery({
     queryKey: ['dispatcher-deviations'],
     queryFn: listDispatcherDeviations,
+  })
+
+  const { data: trips, isLoading: tripsLoading } = useQuery({
+    queryKey: ['dispatcher-trips', tripStatusFilter],
+    queryFn: () => listDispatcherTrips(tripStatusFilter === 'all' ? undefined : tripStatusFilter),
   })
 
   const resolvedScheduleId = useMemo(() => {
@@ -203,6 +227,16 @@ function DispatcherPage() {
     if (!vehicles || !updateRouteId) return vehicles
     return vehicles.filter((v) => v.routeId === Number(updateRouteId))
   }, [vehicles, updateRouteId])
+
+  const tripVehicles = useMemo(() => {
+    if (!vehicles || !tripRouteId) return vehicles
+    return vehicles.filter((v) => v.routeId === Number(tripRouteId))
+  }, [vehicles, tripRouteId])
+
+  const genVehicles = useMemo(() => {
+    if (!vehicles || !genRouteId) return vehicles
+    return vehicles.filter((v) => v.routeId === Number(genRouteId))
+  }, [vehicles, genRouteId])
 
   const selectedAssignmentVehicle = useMemo(() => {
     if (!vehicles?.length || !selectedVehicleId) return null
@@ -310,6 +344,79 @@ function DispatcherPage() {
     },
   })
 
+  const deleteScheduleMutation = useMutation({
+    mutationFn: (id: number) => deleteDispatcherSchedule(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-schedules'] })
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
+      setSelectedScheduleId(null)
+      toast.success('Розклад видалено успішно!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка видалення розкладу', { description: error.message })
+    },
+  })
+
+  const createTripMutation = useMutation({
+    mutationFn: createDispatcherTrip,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
+      setTripRouteId('')
+      setTripVehicleId('')
+      setTripDriverId('')
+      setTripPlannedStart('')
+      setTripPlannedEnd('')
+      toast.success('Рейс створено успішно!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка створення рейсу', { description: error.message })
+    },
+  })
+
+  const generateTripsMutation = useMutation({
+    mutationFn: generateDispatcherDailyTrips,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
+      setGenRouteId('')
+      setGenVehicleId('')
+      setGenDriverId('')
+      setGenDate('')
+      setGenStartTime('')
+      setGenEndTime('')
+      setGenInterval('')
+      toast.success(`Створено ${data.count} рейсів!`)
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка генерації рейсів', { description: error.message })
+    },
+  })
+
+  const cancelTripMutation = useMutation({
+    mutationFn: cancelDispatcherTrip,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
+      toast.success('Рейс скасовано!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка скасування рейсу', { description: error.message })
+    },
+  })
+
+  const deleteTripMutation = useMutation({
+    mutationFn: deleteDispatcherTrip,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
+      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
+      toast.success('Рейс видалено!')
+    },
+    onError: (error: Error) => {
+      toast.error('Помилка видалення рейсу', { description: error.message })
+    },
+  })
+
   // Handlers
   const handleCreateSchedule = () => {
     if (!createRouteId || !createVehicleId || !createStartTime || !createEndTime || !createInterval) {
@@ -368,6 +475,36 @@ function DispatcherPage() {
     })
   }
 
+  const handleCreateTrip = () => {
+    if (!tripRouteId || !tripVehicleId || !tripDriverId || !tripPlannedStart) {
+      toast.error('Заповніть всі обов\'язкові поля')
+      return
+    }
+    createTripMutation.mutate({
+      routeId: Number(tripRouteId),
+      vehicleId: Number(tripVehicleId),
+      driverId: Number(tripDriverId),
+      plannedStartsAt: new Date(tripPlannedStart).toISOString(),
+      plannedEndsAt: tripPlannedEnd ? new Date(tripPlannedEnd).toISOString() : undefined,
+    })
+  }
+
+  const handleGenerateTrips = () => {
+    if (!genRouteId || !genVehicleId || !genDriverId || !genDate || !genStartTime || !genEndTime || !genInterval) {
+      toast.error('Заповніть всі обов\'язкові поля')
+      return
+    }
+    generateTripsMutation.mutate({
+      routeId: Number(genRouteId),
+      vehicleId: Number(genVehicleId),
+      driverId: Number(genDriverId),
+      date: genDate,
+      startTime: genStartTime,
+      endTime: genEndTime,
+      intervalMin: Number(genInterval),
+    })
+  }
+
   // Dashboard stats
   const dashboardStats = useMemo(() => {
     if (!dashboard) return []
@@ -407,19 +544,6 @@ function DispatcherPage() {
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Диспетчер</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Кабінет диспетчера</h1>
@@ -445,8 +569,9 @@ function DispatcherPage() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard">Огляд</TabsTrigger>
+            <TabsTrigger value="trips">Рейси</TabsTrigger>
             <TabsTrigger value="schedules">Розклади</TabsTrigger>
             <TabsTrigger value="assignments">Призначення</TabsTrigger>
             <TabsTrigger value="monitoring">Моніторинг</TabsTrigger>
@@ -527,6 +652,374 @@ function DispatcherPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Trips Tab */}
+          <TabsContent value="trips" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Create Single Trip */}
+              <FormSection
+                title="Створення рейсу"
+                description="Запланований рейс для водія"
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="trip-route">Маршрут *</Label>
+                    <Select value={tripRouteId} onValueChange={setTripRouteId}>
+                      <SelectTrigger id="trip-route">
+                        <SelectValue placeholder="Оберіть маршрут" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {routes?.map((route) => (
+                          <SelectItem key={route.id} value={String(route.id)}>
+                            {route.number} • {directionLabels[route.direction]} •{' '}
+                            {route.transportTypeName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="trip-vehicle">Транспорт *</Label>
+                    <Select
+                      value={tripVehicleId}
+                      onValueChange={setTripVehicleId}
+                      disabled={!tripRouteId}
+                    >
+                      <SelectTrigger id="trip-vehicle">
+                        <SelectValue
+                          placeholder={tripRouteId ? 'Оберіть транспорт' : 'Спочатку оберіть маршрут'}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tripVehicles?.map((vehicle) => (
+                          <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                            {vehicle.fleetNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="trip-driver">Водій *</Label>
+                    <Select value={tripDriverId} onValueChange={setTripDriverId}>
+                      <SelectTrigger id="trip-driver">
+                        <SelectValue placeholder="Оберіть водія" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {drivers?.map((driver) => (
+                          <SelectItem key={driver.id} value={String(driver.id)}>
+                            {driver.fullName} • {driver.login}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="trip-start">Плановий початок *</Label>
+                      <Input
+                        id="trip-start"
+                        type="datetime-local"
+                        value={tripPlannedStart}
+                        onChange={(e) => setTripPlannedStart(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="trip-end">Плановий кінець</Label>
+                      <Input
+                        id="trip-end"
+                        type="datetime-local"
+                        value={tripPlannedEnd}
+                        onChange={(e) => setTripPlannedEnd(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleCreateTrip}
+                    disabled={createTripMutation.isPending}
+                    className="w-full"
+                  >
+                    {createTripMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Plus className="mr-2 h-4 w-4" />
+                    Створити рейс
+                  </Button>
+                </div>
+              </FormSection>
+
+              {/* Generate Daily Trips */}
+              <FormSection
+                title="Генерація рейсів"
+                description="Створити всі рейси на день за інтервалом"
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-route">Маршрут *</Label>
+                    <Select value={genRouteId} onValueChange={setGenRouteId}>
+                      <SelectTrigger id="gen-route">
+                        <SelectValue placeholder="Оберіть маршрут" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {routes?.map((route) => (
+                          <SelectItem key={route.id} value={String(route.id)}>
+                            {route.number} • {directionLabels[route.direction]} •{' '}
+                            {route.transportTypeName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-vehicle">Транспорт *</Label>
+                    <Select
+                      value={genVehicleId}
+                      onValueChange={setGenVehicleId}
+                      disabled={!genRouteId}
+                    >
+                      <SelectTrigger id="gen-vehicle">
+                        <SelectValue
+                          placeholder={genRouteId ? 'Оберіть транспорт' : 'Спочатку оберіть маршрут'}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {genVehicles?.map((vehicle) => (
+                          <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                            {vehicle.fleetNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-driver">Водій *</Label>
+                    <Select value={genDriverId} onValueChange={setGenDriverId}>
+                      <SelectTrigger id="gen-driver">
+                        <SelectValue placeholder="Оберіть водія" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {drivers?.map((driver) => (
+                          <SelectItem key={driver.id} value={String(driver.id)}>
+                            {driver.fullName} • {driver.login}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-date">Дата *</Label>
+                    <Input
+                      id="gen-date"
+                      type="date"
+                      value={genDate}
+                      onChange={(e) => setGenDate(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="gen-start">Початок роботи *</Label>
+                      <Input
+                        id="gen-start"
+                        type="time"
+                        value={genStartTime}
+                        onChange={(e) => setGenStartTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gen-end">Кінець роботи *</Label>
+                      <Input
+                        id="gen-end"
+                        type="time"
+                        value={genEndTime}
+                        onChange={(e) => setGenEndTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="gen-interval">Інтервал (хв) *</Label>
+                    <Input
+                      id="gen-interval"
+                      type="number"
+                      min="1"
+                      value={genInterval}
+                      onChange={(e) => setGenInterval(e.target.value)}
+                      placeholder="15"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleGenerateTrips}
+                    disabled={generateTripsMutation.isPending}
+                    className="w-full"
+                  >
+                    {generateTripsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Clock className="mr-2 h-4 w-4" />
+                    Згенерувати рейси
+                  </Button>
+                </div>
+              </FormSection>
+            </div>
+
+            {/* Trips List */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Список рейсів</CardTitle>
+                    <CardDescription>Заплановані та виконані рейси</CardDescription>
+                  </div>
+                  <Select value={tripStatusFilter} onValueChange={setTripStatusFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Фільтр статусу" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Всі</SelectItem>
+                      <SelectItem value="scheduled">Заплановані</SelectItem>
+                      <SelectItem value="in_progress">Виконуються</SelectItem>
+                      <SelectItem value="completed">Завершені</SelectItem>
+                      <SelectItem value="cancelled">Скасовані</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {tripsLoading ? (
+                  <TableSkeleton rows={5} cols={8} />
+                ) : trips && trips.length > 0 ? (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Маршрут</TableHead>
+                          <TableHead>Транспорт</TableHead>
+                          <TableHead>Водій</TableHead>
+                          <TableHead>Плановий час</TableHead>
+                          <TableHead>Фактичний час</TableHead>
+                          <TableHead>Статус</TableHead>
+                          <TableHead>Затримка</TableHead>
+                          <TableHead className="text-right">Дії</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {trips.map((trip) => (
+                          <TableRow key={trip.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Badge>{trip.routeNumber}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {directionLabels[trip.direction]}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{trip.fleetNumber}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">{trip.driverName}</TableCell>
+                            <TableCell className="text-sm">
+                              <div>
+                                {new Date(trip.plannedStartsAt).toLocaleString('uk-UA', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </div>
+                              {trip.plannedEndsAt && (
+                                <div className="text-xs text-muted-foreground">
+                                  до {new Date(trip.plannedEndsAt).toLocaleTimeString('uk-UA', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {trip.actualStartsAt ? (
+                                <div>
+                                  {new Date(trip.actualStartsAt).toLocaleTimeString('uk-UA', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                  {trip.actualEndsAt && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {' - '}
+                                      {new Date(trip.actualEndsAt).toLocaleTimeString('uk-UA', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <TripStatusBadge status={trip.status} />
+                            </TableCell>
+                            <TableCell>
+                              {trip.startDelayMin != null ? (
+                                <Badge variant={trip.startDelayMin > 5 ? 'warning' : 'default'}>
+                                  {trip.startDelayMin > 0 ? '+' : ''}{trip.startDelayMin} хв
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                {trip.status === 'scheduled' && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        if (confirm('Скасувати цей рейс?')) {
+                                          cancelTripMutation.mutate(trip.id)
+                                        }
+                                      }}
+                                      disabled={cancelTripMutation.isPending}
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        if (confirm('Видалити цей рейс?')) {
+                                          deleteTripMutation.mutate(trip.id)
+                                        }
+                                      }}
+                                      disabled={deleteTripMutation.isPending}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={RouteIcon}
+                    title="Немає рейсів"
+                    description="Створіть перший рейс або згенеруйте рейси на день"
+                  />
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Schedules Tab */}
@@ -670,6 +1163,18 @@ function DispatcherPage() {
                                   onClick={() => setSelectedScheduleId(String(schedule.id))}
                                 >
                                   <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm('Ви впевнені, що хочете видалити цей розклад?')) {
+                                      deleteScheduleMutation.mutate(schedule.id)
+                                    }
+                                  }}
+                                  disabled={deleteScheduleMutation.isPending}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1189,4 +1694,26 @@ function DispatcherPage() {
 function toTimeInputValue(timeStr: string): string {
   if (!timeStr) return ''
   return timeStr.length >= 5 ? timeStr.slice(0, 5) : timeStr
+}
+
+const tripStatusLabels: Record<string, string> = {
+  scheduled: 'Заплановано',
+  in_progress: 'Виконується',
+  completed: 'Завершено',
+  cancelled: 'Скасовано',
+}
+
+const tripStatusVariants: Record<string, 'default' | 'success' | 'warning' | 'destructive' | 'outline'> = {
+  scheduled: 'outline',
+  in_progress: 'default',
+  completed: 'success',
+  cancelled: 'destructive',
+}
+
+function TripStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={tripStatusVariants[status] ?? 'outline'}>
+      {tripStatusLabels[status] ?? status}
+    </Badge>
+  )
 }

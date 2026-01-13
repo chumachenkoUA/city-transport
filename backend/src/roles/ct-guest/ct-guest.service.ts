@@ -215,7 +215,7 @@ export class CtGuestService {
 
           // Find position of this stop in the route
           const stopIndex = orderedStops.findIndex(
-            (stop) => stop.stopId === stopId,
+            (stop) => Number(stop.stopId) === Number(stopId),
           );
 
           if (stopIndex !== -1) {
@@ -772,7 +772,7 @@ export class CtGuestService {
         await this.findRouteStops(routeId),
       );
       const index = orderedStops.findIndex(
-        (stop) => stop.stopId === payload.stopId,
+        (stop) => Number(stop.stopId) === Number(payload.stopId),
       );
       if (index === -1) {
         throw new NotFoundException(

@@ -1,15 +1,18 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CtDispatcherService } from './ct-dispatcher.service';
 import { AssignDriverDto } from './dto/assign-driver.dto';
 import { CreateDispatcherScheduleDto } from './dto/create-schedule.dto';
+import { CreateTripDto, GenerateDailyTripsDto } from './dto/create-trip.dto';
 import { DetectDeviationDto } from './dto/deviation.dto';
 import { UpdateDispatcherScheduleDto } from './dto/update-schedule.dto';
 
@@ -96,5 +99,44 @@ export class CtDispatcherController {
     @Body() payload: DetectDeviationDto,
   ) {
     return this.ctDispatcherService.detectDeviation(fleetNumber, payload);
+  }
+
+  @Delete('schedules/:id')
+  deleteSchedule(@Param('id', ParseIntPipe) id: number) {
+    return this.ctDispatcherService.deleteSchedule(id);
+  }
+
+  // ===== TRIPS (NEW) =====
+
+  @Get('trips')
+  listTrips(@Query('status') status?: string) {
+    return this.ctDispatcherService.listTrips(status);
+  }
+
+  @Post('trips')
+  createTrip(@Body() payload: CreateTripDto) {
+    return this.ctDispatcherService.createTrip({
+      routeId: payload.routeId,
+      driverId: payload.driverId,
+      plannedStartsAt: new Date(payload.plannedStartsAt),
+      plannedEndsAt: payload.plannedEndsAt
+        ? new Date(payload.plannedEndsAt)
+        : undefined,
+    });
+  }
+
+  @Post('trips/generate')
+  generateDailyTrips(@Body() payload: GenerateDailyTripsDto) {
+    return this.ctDispatcherService.generateDailyTrips(payload);
+  }
+
+  @Delete('trips/:id')
+  deleteTrip(@Param('id', ParseIntPipe) id: number) {
+    return this.ctDispatcherService.deleteTrip(id);
+  }
+
+  @Patch('trips/:id/cancel')
+  cancelTrip(@Param('id', ParseIntPipe) id: number) {
+    return this.ctDispatcherService.cancelTrip(id);
   }
 }

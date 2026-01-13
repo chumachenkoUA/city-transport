@@ -1,5 +1,102 @@
 -- 0007_manager_api.sql
--- Manager API: Driver and vehicle management
+-- Manager API: Driver and vehicle management, staff account creation
+
+-- =============================================================================
+-- STAFF ACCOUNT CREATION
+-- =============================================================================
+-- This function allows managers to create system accounts for non-passenger roles.
+-- For the "thick database" architecture, staff accounts (dispatcher, controller,
+-- accountant, municipality, manager) need to be created somehow after admin removal.
+--
+-- Design decisions:
+-- 1. Manager has authority to create staff accounts (logical business hierarchy)
+-- 2. Whitelist of allowed roles prevents privilege escalation
+-- 3. Each role gets appropriate DB role grants automatically
+-- 4. For coursework: initial staff accounts can also be created in bootstrap/seed
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION manager_api.create_staff_user(
+    p_login text,
+    p_password text,
+    p_role text,
+    p_full_name text DEFAULT NULL,
+    p_email text DEFAULT NULL,
+    p_phone text DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+DECLARE
+    v_allowed_roles text[] := ARRAY['dispatcher', 'controller', 'accountant', 'municipality', 'manager'];
+    v_pg_role text;
+BEGIN
+    -- Validate role is in whitelist
+    IF p_role NOT IN (SELECT unnest(v_allowed_roles)) THEN
+        RAISE EXCEPTION 'Invalid role: %. Allowed roles: %', p_role, array_to_string(v_allowed_roles, ', ');
+    END IF;
+
+    -- Map role to PostgreSQL role name
+    v_pg_role := 'ct_' || p_role || '_role';
+
+    -- Check if login already exists
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = p_login) THEN
+        RAISE EXCEPTION 'Login % already exists', p_login;
+    END IF;
+
+    -- Create the PostgreSQL role with login privileges
+    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', p_login, p_password);
+
+    -- Grant the appropriate business role
+    EXECUTE format('GRANT %I TO %I', v_pg_role, p_login);
+
+    -- Note: Staff users don't need entries in users/drivers tables
+    -- They authenticate directly via their PostgreSQL role
+    -- Their login is used as session_user in API functions
+
+    RAISE NOTICE 'Created staff user % with role %', p_login, v_pg_role;
+EXCEPTION
+    WHEN others THEN
+        -- Cleanup if something fails
+        EXECUTE format('DROP ROLE IF EXISTS %I', p_login);
+        RAISE;
+END;
+$$;
+
+-- Function to remove staff user (for completeness)
+CREATE OR REPLACE FUNCTION manager_api.remove_staff_user(p_login text)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+BEGIN
+    -- Prevent removing certain critical accounts
+    IF p_login IN ('ct_migrator', 'postgres') THEN
+        RAISE EXCEPTION 'Cannot remove system account: %', p_login;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = p_login) THEN
+        RAISE EXCEPTION 'User % not found', p_login;
+    END IF;
+
+    EXECUTE format('DROP ROLE IF EXISTS %I', p_login);
+
+    RAISE NOTICE 'Removed staff user %', p_login;
+END;
+$$;
+
+-- View of staff roles for reference
+CREATE OR REPLACE VIEW manager_api.v_staff_roles AS
+SELECT unnest(ARRAY['dispatcher', 'controller', 'accountant', 'municipality', 'manager']) AS role_name,
+       unnest(ARRAY[
+           'Manages schedules and driver assignments',
+           'Issues fines and validates tickets',
+           'Manages finances, expenses, and salaries',
+           'Manages routes, stops, and analyzes data',
+           'Manages drivers, vehicles, and staff accounts'
+       ]) AS description;
+
+-- =============================================================================
+-- DRIVER MANAGEMENT
+-- =============================================================================
 
 -- 1. Hire Driver Function
 CREATE OR REPLACE FUNCTION manager_api.hire_driver(
@@ -132,4 +229,8 @@ JOIN public.transport_types tt ON tt.id = vm.type_id;
 GRANT SELECT ON ALL TABLES IN SCHEMA manager_api TO ct_manager_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA manager_api TO ct_manager_role;
 GRANT SELECT ON manager_api.v_vehicle_models TO ct_manager_role;
+GRANT SELECT ON manager_api.v_staff_roles TO ct_manager_role;
 GRANT EXECUTE ON FUNCTION manager_api.add_vehicle_v2(text, bigint, bigint, text) TO ct_manager_role;
+-- Staff account management
+GRANT EXECUTE ON FUNCTION manager_api.create_staff_user(text, text, text, text, text, text) TO ct_manager_role;
+GRANT EXECUTE ON FUNCTION manager_api.remove_staff_user(text) TO ct_manager_role;

@@ -4,6 +4,7 @@ export type ControllerCardDetails = {
   id: number
   cardNumber: string
   balance: string
+  userFullName: string
   lastUsageAt: string | null
   lastRouteNumber: string | null
   lastTransportType: string | null

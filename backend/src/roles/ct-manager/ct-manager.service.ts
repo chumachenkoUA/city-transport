@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateDriverDto } from '../../modules/drivers/dto/create-driver.dto';
 import { CreateManagerVehicleDto } from './dto/create-manager-vehicle.dto';
+import { CreateStaffUserDto } from './dto/create-staff-user.dto';
 
 type ManagerDriverRow = {
   id: number;
@@ -136,5 +137,35 @@ export class CtManagerService {
     `)) as unknown as { rows: Array<{ id: number }> };
 
     return { id: result.rows[0]?.id };
+  }
+
+  async createStaffUser(payload: CreateStaffUserDto) {
+    await this.dbService.db.execute(sql`
+      SELECT manager_api.create_staff_user(
+        ${payload.login},
+        ${payload.password},
+        ${payload.role},
+        ${payload.fullName ?? null},
+        ${payload.email ?? null},
+        ${payload.phone ?? null}
+      )
+    `);
+    return { ok: true };
+  }
+
+  async removeStaffUser(login: string) {
+    await this.dbService.db.execute(sql`
+      SELECT manager_api.remove_staff_user(${login})
+    `);
+    return { ok: true };
+  }
+
+  async listStaffRoles() {
+    const result = (await this.dbService.db.execute(sql`
+      SELECT role_name, description
+      FROM manager_api.v_staff_roles
+    `)) as unknown as { rows: Array<{ role_name: string; description: string }> };
+
+    return result.rows;
   }
 }

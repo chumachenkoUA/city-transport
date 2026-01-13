@@ -112,6 +112,53 @@ export function getRouteGeometryBetweenStops(params: {
   return apiGet<GeoJSON.LineString>('/guest/routes/geometry-between', params);
 }
 
+export interface RouteSchedule {
+  scheduleId: number;
+  routeId: number;
+  routeNumber: string;
+  transportType: string;
+  transportTypeId: number;
+  direction: string;
+  workStartTime: string;
+  workEndTime: string;
+  intervalMin: number;
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
+  validFrom: string | null;
+  validTo: string | null;
+  stopId?: number;
+  stopName?: string;
+  stopLon?: number;
+  stopLat?: number;
+}
+
+export interface DetailedRouteSchedule {
+  route: {
+    id: string | number;
+    number: string;
+    transportTypeId: string | number;
+    transportTypeName: string;
+    direction: string;
+  };
+  stop: {
+    id: number;
+    name: string;
+    offsetMin: number | null;
+  } | null;
+  schedule: {
+    workStartTime: string;
+    workEndTime: string;
+    intervalMin: number;
+  };
+  departures: string[];
+  arrivals: string[];
+}
+
 export function getRouteSchedule(params: {
   routeId?: number;
   routeNumber?: string;
@@ -119,7 +166,7 @@ export function getRouteSchedule(params: {
   direction?: string;
   stopId?: number;
 }) {
-  return apiGet('/guest/routes/schedule', params);
+  return apiGet<DetailedRouteSchedule>('/guest/routes/schedule', params);
 }
 
 // ================================================

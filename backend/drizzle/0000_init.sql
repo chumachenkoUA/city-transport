@@ -1,3 +1,19 @@
+-- ============================================================================
+-- 0000_init.sql - Базова структура бази даних City Transport
+-- ============================================================================
+-- Цей файл створює всі основні таблиці системи міського транспорту.
+-- Drizzle ORM генерує цей файл автоматично на основі схеми в /src/db/schema/
+--
+-- ВАЖЛИВО: Всі бізнес-ролі НЕ мають прямого доступу до цих таблиць!
+-- Доступ здійснюється тільки через VIEW та SECURITY DEFINER функції.
+-- ============================================================================
+
+-- ============================================================================
+-- ФІНАНСОВІ ТАБЛИЦІ
+-- ============================================================================
+
+-- Бюджети: місячні записи доходів/витрат для бухгалтера
+-- Використовується: ct_accountant_role через accountant_api
 CREATE TABLE "budgets" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"month" date NOT NULL,
@@ -9,6 +25,10 @@ CREATE TABLE "budgets" (
 	CONSTRAINT "budgets_expenses_check" CHECK ("expenses" >= 0)
 );
 --> statement-breakpoint
+
+-- Поповнення транспортних карток: історія всіх транзакцій поповнення
+-- Використовується: ct_passenger_role для перегляду своїх поповнень
+-- RLS: пасажир бачить тільки свої поповнення
 CREATE TABLE "card_top_ups" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"card_id" bigint NOT NULL,
@@ -17,6 +37,15 @@ CREATE TABLE "card_top_ups" (
 	CONSTRAINT "card_top_ups_amount_check" CHECK ("amount" > 0)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ЗВОРОТНІЙ ЗВ'ЯЗОК
+-- ============================================================================
+
+-- Скарги та пропозиції: зворотній зв'язок від пасажирів та анонімних користувачів
+-- Використовується: ct_guest_role (анонімні), ct_passenger_role (авторизовані)
+-- Обробляється: ct_municipality_role
+-- RLS: пасажир бачить тільки свої, муніципалітет бачить усі
 CREATE TABLE "complaints_suggestions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint,
@@ -31,6 +60,14 @@ CREATE TABLE "complaints_suggestions" (
 	CONSTRAINT "complaints_suggestions_status_check" CHECK ("status" in ('Подано', 'Розглядається', 'Розглянуто'))
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- КАДРОВІ ТАБЛИЦІ
+-- ============================================================================
+
+-- Призначення водіїв на транспорт: історія всіх призначень
+-- Створюється: ct_dispatcher_role через dispatcher_api.assign_driver_v2()
+-- Використовується для відстеження, хто на якому транспорті працює
 CREATE TABLE "driver_vehicle_assignments" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"driver_id" bigint NOT NULL,
@@ -39,6 +76,11 @@ CREATE TABLE "driver_vehicle_assignments" (
 	CONSTRAINT "driver_vehicle_assignments_unique" UNIQUE("driver_id","vehicle_id","assigned_at")
 );
 --> statement-breakpoint
+
+-- Водії: персональні дані та ліцензії водіїв
+-- Створюється: ct_manager_role через manager_api.hire_driver()
+-- Має окремий PostgreSQL login для автентифікації (thick database)
+-- ВАЖЛИВО: login поле = ім'я PostgreSQL ролі водія
 CREATE TABLE "drivers" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"login" text NOT NULL,
@@ -54,6 +96,14 @@ CREATE TABLE "drivers" (
 	CONSTRAINT "drivers_driver_license_number_unique" UNIQUE("driver_license_number")
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ФІНАНСОВІ ОПЕРАЦІЇ
+-- ============================================================================
+
+-- Витрати: облік всіх витрат компанії
+-- Створюється: ct_accountant_role через accountant_api.record_expense()
+-- Категорії: паливо, ремонт, зарплата, тощо
 CREATE TABLE "expenses" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"category" text NOT NULL,
@@ -64,6 +114,14 @@ CREATE TABLE "expenses" (
 	CONSTRAINT "expenses_amount_check" CHECK ("amount" > 0)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- СИСТЕМА ШТРАФІВ
+-- ============================================================================
+
+-- Апеляції на штрафи: оскарження штрафів пасажирами
+-- Створюється: ct_passenger_role через passenger_api.submit_fine_appeal()
+-- Один штраф = одна апеляція (UNIQUE fine_id)
 CREATE TABLE "fine_appeals" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"fine_id" bigint NOT NULL,
@@ -74,6 +132,12 @@ CREATE TABLE "fine_appeals" (
 	CONSTRAINT "fine_appeals_status_check" CHECK ("status" in ('Подано', 'Перевіряється', 'Відхилено', 'Прийнято'))
 );
 --> statement-breakpoint
+
+-- Штрафи: штрафи виписані контролерами
+-- Створюється: ct_controller_role через controller_api.issue_fine()
+-- ВАЖЛИВО: issued_by = session_user (контролер, що виписав штраф)
+-- ВАЖЛИВО: trip_id обов'язковий (штраф не може бути без активного рейсу)
+-- RLS: пасажир бачить тільки свої штрафи
 CREATE TABLE "fines" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
@@ -87,6 +151,15 @@ CREATE TABLE "fines" (
 	CONSTRAINT "fines_status_check" CHECK ("status" in ('Очікує сплати', 'В процесі', 'Оплачено', 'Відмінено', 'Прострочено'))
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- МАРШРУТНА МЕРЕЖА
+-- ============================================================================
+
+-- Точки маршруту: GPS координати для відображення геометрії маршруту на карті
+-- Створюється: ct_municipality_role через municipality_api
+-- Двозв'язний список (prev_route_point_id, next_route_point_id) для порядку точок
+-- CHECK constraints: координати в межах [-180,180] для lon, [-90,90] для lat
 CREATE TABLE "route_points" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"route_id" bigint NOT NULL,
@@ -95,9 +168,16 @@ CREATE TABLE "route_points" (
 	"prev_route_point_id" bigint,
 	"next_route_point_id" bigint,
 	CONSTRAINT "route_points_prev_route_point_id_unique" UNIQUE("prev_route_point_id"),
-	CONSTRAINT "route_points_next_route_point_id_unique" UNIQUE("next_route_point_id")
+	CONSTRAINT "route_points_next_route_point_id_unique" UNIQUE("next_route_point_id"),
+	CONSTRAINT "route_points_lon_check" CHECK ("lon" >= -180 AND "lon" <= 180),
+	CONSTRAINT "route_points_lat_check" CHECK ("lat" >= -90 AND "lat" <= 90)
 );
 --> statement-breakpoint
+
+-- Зупинки на маршруті: зв'язок маршрут-зупинка з порядком
+-- Двозв'язний список для порядку зупинок на маршруті
+-- distance_to_next_km - відстань до наступної зупинки (для розрахунку часу)
+-- Використовується guest_api.plan_route() для побудови маршрутів
 CREATE TABLE "route_stops" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"route_id" bigint NOT NULL,
@@ -111,6 +191,11 @@ CREATE TABLE "route_stops" (
 	CONSTRAINT "route_stops_distance_check" CHECK ("distance_to_next_km" >= 0)
 );
 --> statement-breakpoint
+
+-- Маршрути: основна таблиця маршрутів міського транспорту
+-- Створюється: ct_municipality_role через municipality_api.create_route()
+-- direction: 'forward' (прямий) або 'reverse' (зворотній)
+-- UNIQUE(transport_type_id, number, direction) - один номер маршруту може мати 2 напрямки
 CREATE TABLE "routes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"transport_type_id" bigint NOT NULL,
@@ -121,21 +206,33 @@ CREATE TABLE "routes" (
 	CONSTRAINT "routes_direction_check" CHECK ("direction" in ('forward', 'reverse'))
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ЗАРПЛАТА ТА РОЗКЛАД
+-- ============================================================================
+
+-- Виплати зарплати: облік виплат водіям та персоналу
+-- Створюється: ct_accountant_role через accountant_api.record_salary_payment()
+-- Може бути прив'язана до водія (driver_id) або до іменованого працівника (employee_name)
 CREATE TABLE "salary_payments" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"driver_id" bigint,
-	"employee_name" text,
-	"employee_role" text,
+	"driver_id" bigint NOT NULL REFERENCES "drivers"("id"),
 	"rate" numeric(12, 2),
 	"units" integer,
 	"total" numeric(12, 2) NOT NULL,
 	"paid_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "salary_payments_total_check" CHECK ("total" > 0),
 	CONSTRAINT "salary_payments_rate_check" CHECK ("rate" is null or "rate" > 0),
-	CONSTRAINT "salary_payments_units_check" CHECK ("units" is null or "units" > 0),
-	CONSTRAINT "salary_payments_employee_check" CHECK ("driver_id" is not null or "employee_name" is not null)
+	CONSTRAINT "salary_payments_units_check" CHECK ("units" is null or "units" > 0)
 );
 --> statement-breakpoint
+
+-- Розклади: робочі години та інтервали руху на маршрутах
+-- Створюється: ct_dispatcher_role через dispatcher_api.create_schedule()
+-- work_start_time/work_end_time - час роботи маршруту
+-- interval_min - інтервал між рейсами в хвилинах
+-- Дні тижня (monday-sunday) - чи працює маршрут в цей день
+-- valid_from/valid_to - період дії розкладу (опціонально)
 CREATE TABLE "schedules" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"route_id" bigint NOT NULL,
@@ -155,14 +252,30 @@ CREATE TABLE "schedules" (
 	CONSTRAINT "schedules_interval_check" CHECK ("interval_min" > 0)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ЗУПИНКИ ТА КВИТКИ
+-- ============================================================================
+
+-- Зупинки: всі зупинки міського транспорту
+-- Створюється: ct_municipality_role
+-- CHECK constraints: координати в межах [-180,180] для lon, [-90,90] для lat
+-- Індекс gin_trgm_ops для пошуку по назві (guest_api.search_stops_by_name)
 CREATE TABLE "stops" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"lon" numeric(10, 7) NOT NULL,
 	"lat" numeric(10, 7) NOT NULL,
-	CONSTRAINT "stops_name_lon_lat_unique" UNIQUE("name","lon","lat")
+	CONSTRAINT "stops_name_lon_lat_unique" UNIQUE("name","lon","lat"),
+	CONSTRAINT "stops_lon_check" CHECK ("lon" >= -180 AND "lon" <= 180),
+	CONSTRAINT "stops_lat_check" CHECK ("lat" >= -90 AND "lat" <= 90)
 );
 --> statement-breakpoint
+
+-- Квитки: історія покупок квитків пасажирами
+-- Створюється: ct_passenger_role через passenger_api.buy_ticket()
+-- Прив'язується до рейсу (trip_id) та картки (card_id)
+-- RLS: пасажир бачить тільки свої квитки
 CREATE TABLE "tickets" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"trip_id" bigint NOT NULL,
@@ -172,6 +285,12 @@ CREATE TABLE "tickets" (
 	CONSTRAINT "tickets_price_check" CHECK ("price" >= 0)
 );
 --> statement-breakpoint
+
+-- Транспортні картки: картки для оплати проїзду
+-- Одна картка на одного користувача (UNIQUE user_id)
+-- balance - поточний баланс картки
+-- card_number - унікальний номер картки (для контролерів)
+-- RLS: пасажир бачить тільки свою картку
 CREATE TABLE "transport_cards" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
@@ -182,33 +301,106 @@ CREATE TABLE "transport_cards" (
 	CONSTRAINT "transport_cards_balance_check" CHECK ("balance" >= 0)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ДОВІДНИКИ
+-- ============================================================================
+
+-- Типи транспорту: Автобус, Тролейбус, Трамвай, тощо
+-- Довідникова таблиця, заповнюється при ініціалізації
 CREATE TABLE "transport_types" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	CONSTRAINT "transport_types_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- РЕЙСИ (TRIPS)
+-- ============================================================================
+
+-- Рейси: кожен запис = один рейс транспорту по маршруту
+-- Створюється: ct_dispatcher_role через dispatcher_api.create_trip() з плановими часами
+-- Виконується: ct_driver_role через driver_api.start_trip() / finish_trip()
+--
+-- НОВИЙ ПІДХІД (Варіант 2):
+-- - planned_starts_at / planned_ends_at - план від диспетчера
+-- - actual_starts_at / actual_ends_at - факт від водія
+-- - status - статус рейсу: scheduled → in_progress → completed / cancelled
+--
+-- RLS: водій бачить свої рейси, диспетчер бачить усі
+-- vehicle_id отримується через driver_vehicle_assignments (жорстка прив'язка)
 CREATE TABLE "trips" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"route_id" bigint NOT NULL,
-	"vehicle_id" bigint NOT NULL,
 	"driver_id" bigint NOT NULL,
-	"starts_at" timestamp NOT NULL,
-	"ends_at" timestamp,
+
+	-- Планові часи (диспетчер створює)
+	"planned_starts_at" timestamp NOT NULL,
+	"planned_ends_at" timestamp,
+
+	-- Фактичні часи (водій заповнює)
+	"actual_starts_at" timestamp,
+	"actual_ends_at" timestamp,
+
+	-- Статус рейсу
+	"status" text DEFAULT 'scheduled' NOT NULL,
+
 	"passenger_count" integer DEFAULT 0 NOT NULL,
-	CONSTRAINT "trips_vehicle_time_unique" UNIQUE("vehicle_id","starts_at","ends_at"),
-	CONSTRAINT "trips_ends_after_starts_check" CHECK ("ends_at" is null or "ends_at" > "starts_at"),
+
+	CONSTRAINT "trips_status_check" CHECK ("status" in ('scheduled', 'in_progress', 'completed', 'cancelled')),
+	CONSTRAINT "trips_actual_ends_after_starts_check" CHECK ("actual_ends_at" is null or "actual_starts_at" is null or "actual_ends_at" > "actual_starts_at"),
 	CONSTRAINT "trips_passenger_count_check" CHECK ("passenger_count" >= 0)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- PARTIAL UNIQUE INDEX для trips
+-- ============================================================================
+-- ЧОМУ ЦЕ ВАЖЛИВО:
+-- Один водій не може вести два рейси одночасно
+-- vehicle_id більше не в trips - він отримується через driver_vehicle_assignments
+-- Тому якщо водій унікальний, то і транспорт автоматично унікальний
+--
+-- WHERE status = 'in_progress' - фільтр тільки для активних рейсів
+-- Це дозволяє мати багато завершених/запланованих рейсів з одним driver_id,
+-- але тільки один активний рейс на водія
+--
+-- Альтернатива CHECK constraint - неможлива, бо перевірка міжрядкова
+-- Альтернатива тригер - повільніше та менш надійно
+
+CREATE UNIQUE INDEX IF NOT EXISTS trips_active_driver_unique
+  ON trips (driver_id) WHERE status = 'in_progress';
+--> statement-breakpoint
+
+-- ============================================================================
+-- GPS ЛОГИ
+-- ============================================================================
+
+-- GPS логи користувачів (пасажирів): для відстеження місцезнаходження
+-- Створюється: ct_passenger_role через passenger_api.log_my_gps()
+-- Використовується для пошуку найближчих зупинок та аналітики
+-- RLS: пасажир може INSERT/SELECT тільки свої логи
+-- CHECK constraints: координати в межах [-180,180] для lon, [-90,90] для lat
 CREATE TABLE "user_gps_logs" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
 	"lon" numeric(10, 7) NOT NULL,
 	"lat" numeric(10, 7) NOT NULL,
-	"recorded_at" timestamp DEFAULT now() NOT NULL
+	"recorded_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "user_gps_logs_lon_check" CHECK ("lon" >= -180 AND "lon" <= 180),
+	CONSTRAINT "user_gps_logs_lat_check" CHECK ("lat" >= -90 AND "lat" <= 90)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- КОРИСТУВАЧІ (ПАСАЖИРИ)
+-- ============================================================================
+
+-- Користувачі (пасажири): зареєстровані пасажири системи
+-- Створюється: auth.register_passenger() через ct_guest_role
+-- ВАЖЛИВО: login = ім'я PostgreSQL ролі користувача (thick database)
+-- При реєстрації створюється PostgreSQL роль з GRANT ct_passenger_role
 CREATE TABLE "users" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"login" text NOT NULL,
@@ -221,14 +413,29 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_phone_unique" UNIQUE("phone")
 );
 --> statement-breakpoint
+
+-- GPS логи транспорту: відстеження місцезнаходження транспорту в реальному часі
+-- Створюється: ct_driver_role через driver_api.log_vehicle_gps()
+-- Автоматично оновлює last_lon/last_lat/last_recorded_at в vehicles (через тригер)
+-- Використовується диспетчером для моніторингу та виявлення відхилень
 CREATE TABLE "vehicle_gps_logs" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"vehicle_id" bigint NOT NULL,
 	"lon" numeric(10, 7) NOT NULL,
 	"lat" numeric(10, 7) NOT NULL,
-	"recorded_at" timestamp DEFAULT now() NOT NULL
+	"recorded_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "vehicle_gps_logs_lon_check" CHECK ("lon" >= -180 AND "lon" <= 180),
+	CONSTRAINT "vehicle_gps_logs_lat_check" CHECK ("lat" >= -90 AND "lat" <= 90)
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ТРАНСПОРТНИЙ ПАРК
+-- ============================================================================
+
+-- Моделі транспорту: довідник моделей (ЛАЗ, Богдан, Електрон, тощо)
+-- capacity - місткість транспорту (кількість пасажирів)
+-- type_id - зв'язок з типом транспорту (автобус/тролейбус/трамвай)
 CREATE TABLE "vehicle_models" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
@@ -236,6 +443,12 @@ CREATE TABLE "vehicle_models" (
 	"capacity" integer NOT NULL
 );
 --> statement-breakpoint
+
+-- Транспортні засоби: весь транспорт компанії
+-- Створюється: ct_manager_role через manager_api.add_vehicle()
+-- fleet_number - унікальний бортовий номер (використовується контролерами)
+-- route_id - призначений маршрут
+-- vehicle_model_id - модель транспорту
 CREATE TABLE "vehicles" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"fleet_number" text NOT NULL,
@@ -244,6 +457,15 @@ CREATE TABLE "vehicles" (
 	CONSTRAINT "vehicles_fleet_number_unique" UNIQUE("fleet_number")
 );
 --> statement-breakpoint
+
+-- ============================================================================
+-- ЗОВНІШНІ КЛЮЧІ (FOREIGN KEYS)
+-- ============================================================================
+-- Забезпечують цілісність даних між таблицями
+-- ON DELETE cascade - при видаленні батьківського запису видаляються дочірні
+-- ON DELETE no action - забороняє видалення якщо є зв'язані записи
+-- ON DELETE set null - при видаленні батьківського запису встановлює NULL
+
 ALTER TABLE "card_top_ups" ADD CONSTRAINT "card_top_ups_card_id_transport_cards_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "complaints_suggestions" ADD CONSTRAINT "complaints_suggestions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "complaints_suggestions" ADD CONSTRAINT "complaints_suggestions_trip_id_trips_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -269,7 +491,6 @@ ALTER TABLE "tickets" ADD CONSTRAINT "tickets_trip_id_trips_id_fk" FOREIGN KEY (
 ALTER TABLE "tickets" ADD CONSTRAINT "tickets_card_id_transport_cards_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "transport_cards" ADD CONSTRAINT "transport_cards_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trips" ADD CONSTRAINT "trips_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trips" ADD CONSTRAINT "trips_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trips" ADD CONSTRAINT "trips_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_gps_logs" ADD CONSTRAINT "user_gps_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicle_gps_logs" ADD CONSTRAINT "vehicle_gps_logs_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

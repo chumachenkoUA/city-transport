@@ -13,19 +13,10 @@ export class StartTripDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  vehicleId?: number;
-
-  @IsString()
-  @IsOptional()
-  fleetNumber?: string;
+  tripId?: number;
 
   @Type(() => Date)
   @IsDate()
   @IsOptional()
   startedAt?: Date;
-
-  @IsString()
-  @IsOptional()
-  @IsIn(['forward', 'reverse'])
-  direction?: string;
 }

@@ -85,22 +85,29 @@ export interface DriverSchedule {
 
 export interface DriverActiveTrip {
   id: number;
-  startsAt: string;
-  endsAt: string | null;
-  route: {
-    id: number;
-    number: string;
-    transportTypeId: number;
-    direction: DriverDirection;
-  };
-  vehicle: {
-    id: number;
-    fleetNumber: string;
-  };
-  transportType: {
-    id: number;
-    name: string;
-  };
+  routeId: number;
+  routeNumber: string;
+  direction: DriverDirection;
+  transportType: string;
+  vehicleId: number;
+  fleetNumber: string;
+  plannedStartsAt: string;
+  actualStartsAt: string;
+  passengerCount: number;
+  startDelayMin: number | null;
+}
+
+export interface DriverScheduledTrip {
+  id: number;
+  routeId: number;
+  routeNumber: string;
+  direction: DriverDirection;
+  transportType: string;
+  vehicleId: number;
+  fleetNumber: string;
+  plannedStartsAt: string;
+  plannedEndsAt: string | null;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 }
 
 export interface DriverRouteStop {
@@ -131,9 +138,8 @@ export type RouteLookupParams = {
 }
 
 export type StartTripPayload = {
-  fleetNumber: string;
+  tripId?: number;
   startedAt?: string;
-  direction?: DriverDirection;
 }
 
 export type FinishTripPayload = {
@@ -161,6 +167,10 @@ export function getDriverSchedule(date?: string) {
 
 export function getDriverActiveTrip() {
   return apiGet<DriverActiveTrip | null>('/driver/active-trip');
+}
+
+export function getDriverScheduledTrips() {
+  return apiGet<DriverScheduledTrip[]>('/driver/scheduled-trips');
 }
 
 export function getDriverRouteStops(params: RouteLookupParams) {

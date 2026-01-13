@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { desc, eq, sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import {
+  driverVehicleAssignments,
   routes,
   tickets,
   transportCards,
@@ -44,13 +45,17 @@ export class TicketsService {
         routeNumber: routes.number,
         transportType: transportTypes.name,
         fleetNumber: vehicles.fleetNumber,
-        vehicleId: trips.vehicleId,
+        vehicleId: driverVehicleAssignments.vehicleId,
         driverId: trips.driverId,
       })
       .from(tickets)
       .innerJoin(transportCards, eq(transportCards.id, tickets.cardId))
       .innerJoin(trips, eq(trips.id, tickets.tripId))
-      .innerJoin(vehicles, eq(vehicles.id, trips.vehicleId))
+      .leftJoin(
+        driverVehicleAssignments,
+        eq(driverVehicleAssignments.driverId, trips.driverId),
+      )
+      .leftJoin(vehicles, eq(vehicles.id, driverVehicleAssignments.vehicleId))
       .innerJoin(routes, eq(routes.id, trips.routeId))
       .innerJoin(transportTypes, eq(transportTypes.id, routes.transportTypeId))
       .where(eq(tickets.cardId, cardId))
@@ -67,8 +72,10 @@ export class TicketsService {
         purchasedAt: tickets.purchasedAt,
         price: tickets.price,
         tripId: trips.id,
-        startsAt: trips.startsAt,
-        endsAt: trips.endsAt,
+        plannedStartsAt: trips.plannedStartsAt,
+        actualStartsAt: trips.actualStartsAt,
+        actualEndsAt: trips.actualEndsAt,
+        status: trips.status,
         routeId: routes.id,
         routeNumber: routes.number,
         transportType: transportTypes.name,

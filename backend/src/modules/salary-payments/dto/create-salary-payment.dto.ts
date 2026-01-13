@@ -1,31 +1,11 @@
 import { Type } from 'class-transformer';
-import {
-  IsDate,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
-import { SalaryTotalMatches } from '../../../common/validators';
+import { IsInt, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class CreateSalaryPaymentDto {
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @IsOptional()
-  driverId?: number;
-
-  @IsString()
-  @IsOptional()
-  @MaxLength(255)
-  employeeName?: string;
-
-  @IsString()
-  @IsOptional()
-  @MaxLength(100)
-  employeeRole?: string;
+  @Min(1, { message: 'Driver ID must be a positive integer' })
+  driverId!: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -42,13 +22,6 @@ export class CreateSalaryPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'Total must be greater than 0' })
-  @SalaryTotalMatches({
-    message: 'Total must equal rate * units when both are provided',
-  })
-  total!: number;
-
-  @Type(() => Date)
-  @IsDate()
   @IsOptional()
-  paidAt?: Date;
+  total?: number;
 }

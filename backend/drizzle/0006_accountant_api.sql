@@ -44,27 +44,36 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION accountant_api.pay_salary(
-    p_driver_id bigint DEFAULT NULL,
-    p_employee_name text DEFAULT NULL,
-    p_role text DEFAULT 'Інше',
-    p_rate numeric DEFAULT 0,
-    p_units integer DEFAULT 0,
-    p_total numeric DEFAULT 0
+    p_driver_id bigint,
+    p_rate numeric DEFAULT NULL,
+    p_units integer DEFAULT NULL,
+    p_total numeric DEFAULT NULL
 )
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
-DECLARE v_id bigint; v_final_total numeric;
+DECLARE
+    v_id bigint;
+    v_final_total numeric;
+    v_driver_exists boolean;
 BEGIN
-    IF p_total = 0 AND p_rate > 0 AND p_units > 0 THEN
+    -- Перевірка існування водія
+    SELECT EXISTS(SELECT 1 FROM public.drivers WHERE id = p_driver_id) INTO v_driver_exists;
+    IF NOT v_driver_exists THEN
+        RAISE EXCEPTION 'Водія з ID % не знайдено', p_driver_id;
+    END IF;
+
+    -- Розрахунок суми
+    IF p_total IS NOT NULL AND p_total > 0 THEN
+        v_final_total := p_total;
+    ELSIF p_rate IS NOT NULL AND p_rate > 0 AND p_units IS NOT NULL AND p_units > 0 THEN
         v_final_total := p_rate * p_units;
     ELSE
-        v_final_total := p_total;
+        RAISE EXCEPTION 'Вкажіть або total, або rate та units для розрахунку зарплати';
     END IF;
-    IF v_final_total <= 0 THEN RAISE EXCEPTION 'Salary total must be positive'; END IF;
 
-    INSERT INTO public.salary_payments (driver_id, employee_name, employee_role, rate, units, total, paid_at)
-    VALUES (p_driver_id, p_employee_name, p_role, p_rate, p_units, v_final_total, now())
+    INSERT INTO public.salary_payments (driver_id, rate, units, total, paid_at)
+    VALUES (p_driver_id, p_rate, p_units, v_final_total, now())
     RETURNING id INTO v_id;
     RETURN v_id;
 END;
@@ -107,12 +116,13 @@ BEGIN
         RAISE EXCEPTION 'Rate not found for driver %', p_driver_id;
     END IF;
 
-    SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (t.ends_at - t.starts_at)) / 3600.0), 0)
+    -- Рахуємо години за completed рейсами
+    SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (t.actual_ends_at - t.actual_starts_at)) / 3600.0), 0)
     INTO v_hours FROM public.trips t
     WHERE t.driver_id = p_driver_id
-      AND t.starts_at >= date_trunc('month', p_month)
-      AND t.starts_at < (date_trunc('month', p_month) + interval '1 month')
-      AND t.ends_at IS NOT NULL;
+      AND t.status = 'completed'
+      AND t.actual_starts_at >= date_trunc('month', p_month)
+      AND t.actual_starts_at < (date_trunc('month', p_month) + interval '1 month');
 
     RETURN round(v_hours * v_rate, 2);
 END;
@@ -128,11 +138,14 @@ SELECT * FROM public.expenses ORDER BY occurred_at DESC;
 
 CREATE OR REPLACE VIEW accountant_api.v_salary_history AS
 SELECT sp.id, sp.paid_at,
-       COALESCE(d.full_name, sp.employee_name) as employee_name,
-       COALESCE(sp.employee_role, 'Водій') as role,
+       sp.driver_id,
+       d.full_name as driver_name,
+       d.driver_license_number as license_number,
+       sp.rate,
+       sp.units,
        sp.total
 FROM public.salary_payments sp
-LEFT JOIN public.drivers d ON d.id = sp.driver_id
+JOIN public.drivers d ON d.id = sp.driver_id
 ORDER BY sp.paid_at DESC;
 
 CREATE OR REPLACE VIEW accountant_api.v_drivers_list AS

@@ -9,13 +9,13 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return Object.getPrototypeOf(value) === Object.prototype;
 };
 
-export const transformToCamelCase = (data: unknown): unknown => {
+export function transformToCamelCase<T>(data: T): T {
   if (data === null || data === undefined) {
     return data;
   }
 
   if (Array.isArray(data)) {
-    return data.map((item) => transformToCamelCase(item));
+    return data.map((item) => transformToCamelCase(item)) as T;
   }
 
   if (data instanceof Date) {
@@ -27,8 +27,8 @@ export const transformToCamelCase = (data: unknown): unknown => {
     for (const [key, value] of Object.entries(data)) {
       newObj[toCamelKey(key)] = transformToCamelCase(value);
     }
-    return newObj;
+    return newObj as T;
   }
 
   return data;
-};
+}

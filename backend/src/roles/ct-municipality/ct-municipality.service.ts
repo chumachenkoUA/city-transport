@@ -260,13 +260,17 @@ export class CtMunicipalityService {
       : null;
     const routeNumber = query.routeNumber ?? null;
     const fleetNumber = query.fleetNumber ?? null;
+    const type = query.type ?? null;
+    const status = query.status ?? null;
 
     const result = (await this.dbService.db.execute(sql`
       with filters as (
         select
           ${routeNumber}::text as route_number,
           ${transportTypeName}::text as transport_type,
-          ${fleetNumber}::text as fleet_number
+          ${fleetNumber}::text as fleet_number,
+          ${type}::text as type_filter,
+          ${status}::text as status_filter
       )
       select
         v.id,
@@ -285,6 +289,8 @@ export class CtMunicipalityService {
         and (filters.route_number is null or v.route_number = filters.route_number)
         and (filters.transport_type is null or v.transport_type = filters.transport_type)
         and (filters.fleet_number is null or v.fleet_number = filters.fleet_number)
+        and (filters.type_filter is null or v.type = filters.type_filter)
+        and (filters.status_filter is null or v.status = filters.status_filter)
       order by v.created_at desc
     `)) as unknown as { rows: ComplaintRow[] };
 
@@ -333,7 +339,7 @@ export class CtMunicipalityService {
 
   private async getTransportTypeName(id: number) {
     const result = (await this.dbService.db.execute(
-      sql`select name from public.transport_types where id = ${id}`,
+      sql`select name from guest_api.v_transport_types where id = ${id}`,
     )) as unknown as { rows: { name: string }[] };
     return result.rows[0]?.name;
   }

@@ -1,6 +1,6 @@
 // API functions for dispatcher endpoints
 
-import { apiGet, apiPatch, apiPost } from './api';
+import { apiDelete, apiGet, apiPatch, apiPost } from './api';
 
 export type DispatcherDirection = 'forward' | 'reverse';
 
@@ -87,6 +87,44 @@ export interface DispatcherActiveTrip {
   fleetNumber: string;
   driverName: string;
   startsAt: string;
+}
+
+export interface DispatcherTrip {
+  id: number;
+  routeId: number;
+  routeNumber: string;
+  direction: DispatcherDirection;
+  transportType: string;
+  vehicleId: number;
+  fleetNumber: string;
+  driverId: number;
+  driverName: string;
+  plannedStartsAt: string;
+  plannedEndsAt: string | null;
+  actualStartsAt: string | null;
+  actualEndsAt: string | null;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  passengerCount: number;
+  startDelayMin: number | null;
+}
+
+export interface CreateTripPayload {
+  routeId: number;
+  vehicleId: number;
+  driverId: number;
+  plannedStartsAt: string;
+  plannedEndsAt?: string;
+}
+
+export interface GenerateDailyTripsPayload {
+  routeId: number;
+  vehicleId: number;
+  driverId: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+  intervalMin: number;
+  tripDurationMin?: number;
 }
 
 export interface DispatcherDashboard {
@@ -241,4 +279,29 @@ export function detectDispatcherDeviation(
 
 export function getDispatcherRoutePoints(routeId: number) {
   return apiGet<DispatcherRoutePoint[]>(`/dispatcher/routes/${routeId}/points`);
+}
+
+export function deleteDispatcherSchedule(id: number) {
+  return apiDelete<{ ok: true }>(`/dispatcher/schedules/${id}`);
+}
+
+// Trips
+export function listDispatcherTrips(status?: string) {
+  return apiGet<DispatcherTrip[]>('/dispatcher/trips', status ? { status } : undefined);
+}
+
+export function createDispatcherTrip(payload: CreateTripPayload) {
+  return apiPost<{ id: number }>('/dispatcher/trips', payload);
+}
+
+export function generateDispatcherDailyTrips(payload: GenerateDailyTripsPayload) {
+  return apiPost<{ count: number }>('/dispatcher/trips/generate', payload);
+}
+
+export function cancelDispatcherTrip(id: number) {
+  return apiPatch<{ ok: true }>(`/dispatcher/trips/${id}/cancel`, {});
+}
+
+export function deleteDispatcherTrip(id: number) {
+  return apiDelete<{ ok: true }>(`/dispatcher/trips/${id}`);
 }

@@ -20,7 +20,7 @@ interface ScheduleCardProps {
 }
 
 export function ScheduleCard({
-  id,
+  id: _id,
   routeNumber,
   routeDirection,
   vehicleFleetNumber,

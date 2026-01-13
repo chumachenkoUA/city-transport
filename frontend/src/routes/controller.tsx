@@ -1,14 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { FormSection } from '@/components/domain/forms'
 import { ErrorState } from '@/components/domain/data-display'
-import { Search, CreditCard, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Search, CreditCard, AlertTriangle, CheckCircle2, Loader2, Clock, Bus, MapPin } from 'lucide-react'
 import {
   checkControllerCard,
   issueControllerFine,
@@ -37,7 +29,7 @@ function ControllerPage() {
   const [cardNumber, setCardNumber] = useState('')
   const [cardDetails, setCardDetails] = useState<any>(null)
   const [selectedRouteId, setSelectedRouteId] = useState('')
-  const [selectedVehicleId, setSelectedVehicleId] = useState('')
+  const [selectedFleetNumber, setSelectedFleetNumber] = useState('')
   const [selectedTripId, setSelectedTripId] = useState('')
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
@@ -58,13 +50,12 @@ function ControllerPage() {
 
   // Active trips query
   const { data: activeTrips } = useQuery({
-    queryKey: ['controller-trips', selectedVehicleId, checkedAt],
+    queryKey: ['controller-trips', selectedFleetNumber, checkedAt],
     queryFn: () => {
-      const vehicle = vehicles?.find((v) => v.id === Number(selectedVehicleId))
-      if (!vehicle) return Promise.resolve([])
-      return getActiveTrips(vehicle.fleetNumber, checkedAt ? new Date(checkedAt).toISOString() : undefined)
+      if (!selectedFleetNumber) return Promise.resolve([])
+      return getActiveTrips(selectedFleetNumber, checkedAt ? new Date(checkedAt).toISOString() : undefined)
     },
-    enabled: !!selectedVehicleId && !!vehicles,
+    enabled: !!selectedFleetNumber,
   })
 
   // Check card mutation
@@ -73,7 +64,7 @@ function ControllerPage() {
     onSuccess: (data) => {
       setCardDetails(data)
       toast.success('Картку перевірено', {
-        description: `Пасажир: ${data.firstName} ${data.lastName}`,
+        description: `Пасажир: ${data.userFullName}`,
       })
     },
     onError: (error: Error) => {
@@ -94,7 +85,7 @@ function ControllerPage() {
       setAmount('')
       setReason('')
       setSelectedRouteId('')
-      setSelectedVehicleId('')
+      setSelectedFleetNumber('')
       setSelectedTripId('')
       setCheckedAt('')
     },
@@ -127,6 +118,12 @@ function ControllerPage() {
       return
     }
 
+    // Need either tripId or fleetNumber
+    if (!selectedTripId && !selectedFleetNumber) {
+      toast.error('Оберіть транспорт або рейс')
+      return
+    }
+
     const checkedAtValue = checkedAt ? new Date(checkedAt) : null
     if (checkedAtValue && checkedAtValue.getTime() > Date.now() + 5 * 60 * 1000) {
       toast.error('Час перевірки не може бути у майбутньому')
@@ -135,6 +132,7 @@ function ControllerPage() {
 
     fineMutation.mutate({
       cardNumber: cardDetails.cardNumber,
+      fleetNumber: selectedFleetNumber || undefined,
       tripId: selectedTripId ? Number(selectedTripId) : undefined,
       checkedAt: checkedAtValue?.toISOString() || new Date().toISOString(),
       amount: Number(amount),
@@ -147,19 +145,6 @@ function ControllerPage() {
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-5xl space-y-8">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Контролер</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Кабінет контролера</h1>
@@ -222,7 +207,7 @@ function ControllerPage() {
                 </div>
                 <CardDescription>Дані перевіреної картки</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">Номер:</span>
@@ -232,9 +217,7 @@ function ControllerPage() {
                 <div className="grid gap-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Пасажир:</span>
-                    <span className="font-medium">
-                      {cardDetails.firstName} {cardDetails.lastName}
-                    </span>
+                    <span className="font-medium">{cardDetails.userFullName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Баланс:</span>
@@ -242,6 +225,53 @@ function ControllerPage() {
                       {formattedBalance}
                     </span>
                   </div>
+                </div>
+
+                {/* Last Trip Info */}
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    Остання поїздка
+                  </div>
+                  {cardDetails.lastUsageAt ? (
+                    <div className="p-3 bg-background rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Дата:</span>
+                        <span className="font-medium">
+                          {new Date(cardDetails.lastUsageAt).toLocaleString('uk-UA', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      {cardDetails.lastRouteNumber && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3" /> Маршрут:
+                          </span>
+                          <span className="font-medium">
+                            {cardDetails.lastRouteNumber}
+                          </span>
+                        </div>
+                      )}
+                      {cardDetails.lastTransportType && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Bus className="h-3 w-3" /> Транспорт:
+                          </span>
+                          <span className="font-medium">{cardDetails.lastTransportType}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground text-center">
+                      Поїздок не знайдено
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -262,7 +292,7 @@ function ControllerPage() {
                     value={selectedRouteId}
                     onValueChange={(value) => {
                       setSelectedRouteId(value)
-                      setSelectedVehicleId('')
+                      setSelectedFleetNumber('')
                       setSelectedTripId('')
                     }}
                   >
@@ -272,7 +302,7 @@ function ControllerPage() {
                     <SelectContent>
                       {routes?.map((route) => (
                         <SelectItem key={route.id} value={String(route.id)}>
-                          {route.number} • {route.transportTypeName}
+                          {route.number} • {route.transportType}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -282,9 +312,9 @@ function ControllerPage() {
                 <div className="space-y-2">
                   <Label htmlFor="vehicle">Транспорт</Label>
                   <Select
-                    value={selectedVehicleId}
+                    value={selectedFleetNumber}
                     onValueChange={(value) => {
-                      setSelectedVehicleId(value)
+                      setSelectedFleetNumber(value)
                       setSelectedTripId('')
                     }}
                     disabled={!selectedRouteId}
@@ -294,7 +324,7 @@ function ControllerPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {vehicles?.map((vehicle) => (
-                        <SelectItem key={vehicle.id} value={String(vehicle.id)}>
+                        <SelectItem key={vehicle.id} value={vehicle.fleetNumber}>
                           {vehicle.fleetNumber}
                         </SelectItem>
                       ))}
@@ -313,7 +343,7 @@ function ControllerPage() {
                     <SelectContent>
                       {activeTrips.map((trip) => (
                         <SelectItem key={trip.tripId} value={String(trip.tripId)}>
-                          Рейс #{trip.tripId} • {trip.startTime || 'Активний'}
+                          Рейс #{trip.tripId} • {trip.startsAt ? new Date(trip.startsAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) : 'Активний'}
                         </SelectItem>
                       ))}
                     </SelectContent>

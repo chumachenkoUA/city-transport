@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './api'
+import { apiDelete, apiGet, apiPost } from './api'
 
 export type ManagerDriver = {
   id: number
@@ -43,19 +43,19 @@ export type ManagerVehicleModel = {
 export type HireDriverPayload = {
   login: string
   password?: string
-  email: string
-  phone: string
-  fullName: string
-  driverLicenseNumber: string
-  licenseCategories: string[]
-  passportData: {
-    series: string
-    number: string
-  }
+  email?: string
+  phone?: string
+  firstName: string
+  lastName: string
+  driverLicenseNumber?: string
+  licenseCategories?: string
+  passportSeries?: string
+  passportNumber?: string
 }
 
 export type CreateVehiclePayload = {
   fleetNumber: string
+  transportTypeId: number
   modelId: number
   routeId?: number
   routeNumber?: string
@@ -88,4 +88,34 @@ export function hireDriver(payload: HireDriverPayload) {
 
 export function addVehicle(payload: CreateVehiclePayload) {
   return apiPost<{ id: number }>('/manager/vehicles', payload)
+}
+
+// Staff user management
+
+export type StaffRole = 'dispatcher' | 'controller' | 'accountant' | 'municipality' | 'manager'
+
+export type StaffRoleInfo = {
+  role_name: string
+  description: string
+}
+
+export type CreateStaffUserPayload = {
+  login: string
+  password: string
+  role: StaffRole
+  fullName?: string
+  email?: string
+  phone?: string
+}
+
+export function getStaffRoles() {
+  return apiGet<StaffRoleInfo[]>('/manager/staff-roles')
+}
+
+export function createStaffUser(payload: CreateStaffUserPayload) {
+  return apiPost<{ ok: true }>('/manager/staff', payload)
+}
+
+export function removeStaffUser(login: string) {
+  return apiDelete<{ ok: true }>(`/manager/staff/${login}`)
 }

@@ -32,7 +32,8 @@ type ActiveTripDeviationRow = {
   routeNumber: string;
   fleetNumber: string;
   driverName: string;
-  startsAt: Date;
+  plannedStartsAt: Date;
+  actualStartsAt: Date | null;
   delayMinutes: number | null;
 };
 
@@ -290,16 +291,20 @@ export class CtDispatcherService {
         route_number,
         fleet_number,
         full_name,
-        starts_at
+        planned_starts_at,
+        actual_starts_at,
+        start_delay_min
       from dispatcher_api.v_active_trips
-      order by starts_at desc
+      order by actual_starts_at desc
     `)) as unknown as {
       rows: Array<{
         id: number;
         routeNumber: string;
         fleetNumber: string;
-        driverName: string;
-        startsAt: Date;
+        fullName: string;
+        plannedStartsAt: Date;
+        actualStartsAt: Date;
+        startDelayMin: number | null;
       }>;
     };
 
@@ -307,9 +312,85 @@ export class CtDispatcherService {
       id: number;
       routeNumber: string;
       fleetNumber: string;
-      driverName: string;
-      startsAt: Date;
+      fullName: string;
+      plannedStartsAt: Date;
+      actualStartsAt: Date;
+      startDelayMin: number | null;
     }>;
+  }
+
+  async listTrips(status?: string) {
+    const statusFilter = status ? sql`where status = ${status}` : sql``;
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id, route_id, route_number, direction, transport_type,
+        vehicle_id, fleet_number, driver_id, driver_name, driver_login,
+        planned_starts_at, planned_ends_at,
+        actual_starts_at, actual_ends_at,
+        status, passenger_count, start_delay_min
+      from dispatcher_api.v_trips_list
+      ${statusFilter}
+      order by planned_starts_at desc
+      limit 100
+    `)) as unknown as { rows: unknown[] };
+
+    return transformToCamelCase(result.rows);
+  }
+
+  async createTrip(payload: {
+    routeId: number;
+    driverId: number;
+    plannedStartsAt: Date;
+    plannedEndsAt?: Date;
+  }) {
+    const result = (await this.dbService.db.execute(sql`
+      select dispatcher_api.create_trip(
+        ${payload.routeId}::bigint,
+        ${payload.driverId}::bigint,
+        ${payload.plannedStartsAt.toISOString()}::timestamp,
+        ${payload.plannedEndsAt?.toISOString() ?? null}::timestamp
+      ) as "id"
+    `)) as unknown as { rows: Array<{ id: number }> };
+
+    return { id: result.rows[0]?.id };
+  }
+
+  async generateDailyTrips(payload: {
+    routeId: number;
+    driverId: number;
+    date: string;
+    startTime: string;
+    endTime: string;
+    intervalMin: number;
+    tripDurationMin?: number;
+  }) {
+    const result = (await this.dbService.db.execute(sql`
+      select dispatcher_api.generate_daily_trips(
+        ${payload.routeId}::bigint,
+        ${payload.driverId}::bigint,
+        ${payload.date}::date,
+        ${payload.startTime}::time,
+        ${payload.endTime}::time,
+        ${payload.intervalMin}::integer,
+        ${payload.tripDurationMin ?? 60}::integer
+      ) as "count"
+    `)) as unknown as { rows: Array<{ count: number }> };
+
+    return { count: result.rows[0]?.count ?? 0 };
+  }
+
+  async cancelTrip(tripId: number) {
+    await this.dbService.db.execute(sql`
+      select dispatcher_api.cancel_trip(${tripId}::bigint)
+    `);
+    return { ok: true };
+  }
+
+  async deleteTrip(tripId: number) {
+    await this.dbService.db.execute(sql`
+      select dispatcher_api.delete_trip(${tripId}::bigint)
+    `);
+    return { ok: true };
   }
 
   async listDeviations() {
@@ -319,7 +400,8 @@ export class CtDispatcherService {
         route_number,
         fleet_number,
         driver_name,
-        starts_at,
+        planned_starts_at,
+        actual_starts_at,
         delay_minutes
       from dispatcher_api.v_active_trip_deviations
       order by delay_minutes desc nulls last
@@ -402,6 +484,20 @@ export class CtDispatcherService {
     `);
 
     return { ok: true };
+  }
+
+  async deleteSchedule(id: number) {
+    try {
+      await this.dbService.db.execute(sql`
+        SELECT dispatcher_api.delete_schedule(${id}::bigint)
+      `);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('not found')) {
+        throw new NotFoundException(`Schedule ${id} not found`);
+      }
+      throw error;
+    }
   }
 
   async getScheduleDetails(id: number) {

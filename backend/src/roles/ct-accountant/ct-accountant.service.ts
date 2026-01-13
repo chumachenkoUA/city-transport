@@ -25,7 +25,7 @@ export class CtAccountantService {
         ${payload.month}::date,
         ${payload.income}::numeric,
         ${payload.expenses}::numeric,
-        ${payload.note}
+        ${payload.note ?? null}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -67,12 +67,10 @@ export class CtAccountantService {
   async createSalary(payload: CreateSalaryPaymentDto) {
     const result = (await this.dbService.db.execute(sql`
       select accountant_api.pay_salary(
-        ${payload.driverId ?? null}::bigint,
-        ${payload.employeeName ?? null},
-        ${payload.employeeRole ?? 'Інше'},
-        ${payload.rate ?? 0}::numeric,
-        ${payload.units ?? 0}::integer,
-        ${payload.total ?? 0}::numeric
+        ${payload.driverId}::bigint,
+        ${payload.rate ?? null}::numeric,
+        ${payload.units ?? null}::integer,
+        ${payload.total ?? null}::numeric
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -81,10 +79,19 @@ export class CtAccountantService {
 
   async getSalaries(query: SalariesQueryDto) {
     const result = (await this.dbService.db.execute(sql`
-      select id, paid_at, employee_name, role, total
+      select id, paid_at, driver_id, driver_name, license_number, rate, units, total
       from accountant_api.v_salary_history
       limit ${query.limit ?? 50}
     `)) as unknown as { rows: Record<string, unknown>[] };
+    return result.rows;
+  }
+
+  async getDrivers() {
+    const result = (await this.dbService.db.execute(sql`
+      select id, full_name, driver_license_number
+      from accountant_api.v_drivers_list
+      order by full_name
+    `)) as unknown as { rows: Array<{ id: number; full_name: string; driver_license_number: string }> };
     return result.rows;
   }
 

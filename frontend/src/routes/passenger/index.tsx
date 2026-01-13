@@ -24,7 +24,6 @@ import {
   createAppeal,
   type Fine,
   type PassengerCard,
-  type PassengerProfile
 } from '@/lib/passenger-api'
 import {
   Card,

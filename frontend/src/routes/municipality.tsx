@@ -1,16 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Map as MapLibreMap, LngLatBounds } from 'maplibre-gl'
+import type { Map as MapLibreMap, LngLatBoundsLike } from 'maplibre-gl'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -137,6 +129,8 @@ function MunicipalityPage() {
     routeNumber: '',
     transportTypeId: '',
     fleetNumber: '',
+    type: '',
+    status: '',
   })
   const [complaintsQuery, setComplaintsQuery] = useState({
     from: getDateDaysAgo(30),
@@ -144,6 +138,8 @@ function MunicipalityPage() {
     routeNumber: '',
     transportTypeId: '',
     fleetNumber: '',
+    type: '',
+    status: '',
   })
 
   const previewMapRef = useRef<MapLibreMap | null>(null)
@@ -184,7 +180,7 @@ function MunicipalityPage() {
         from: flowQuery.from,
         to: flowQuery.to,
         routeNumber: flowQuery.routeNumber || undefined,
-        transportTypeId: flowQuery.transportTypeId
+        transportTypeId: flowQuery.transportTypeId && flowQuery.transportTypeId !== 'all'
           ? Number(flowQuery.transportTypeId)
           : undefined,
       }),
@@ -197,10 +193,12 @@ function MunicipalityPage() {
         from: complaintsQuery.from,
         to: complaintsQuery.to,
         routeNumber: complaintsQuery.routeNumber || undefined,
-        transportTypeId: complaintsQuery.transportTypeId
+        transportTypeId: complaintsQuery.transportTypeId && complaintsQuery.transportTypeId !== 'all'
           ? Number(complaintsQuery.transportTypeId)
           : undefined,
         fleetNumber: complaintsQuery.fleetNumber || undefined,
+        type: complaintsQuery.type && complaintsQuery.type !== 'all' ? complaintsQuery.type : undefined,
+        status: complaintsQuery.status && complaintsQuery.status !== 'all' ? complaintsQuery.status : undefined,
       }),
   })
 
@@ -262,7 +260,7 @@ function MunicipalityPage() {
 
   const updateComplaintStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
-      updateComplaintStatus(id, { status }),
+      updateComplaintStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['municipality-complaints'] })
       toast.success('Статус скарги оновлено')
@@ -411,19 +409,6 @@ function MunicipalityPage() {
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/">Головна</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Департамент мерії</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Департамент мерії</h1>
@@ -1059,7 +1044,7 @@ function MunicipalityPage() {
                         <SelectValue placeholder="Всі" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Всі</SelectItem>
+                        <SelectItem value="all">Всі</SelectItem>
                         {transportTypes?.map((type) => (
                           <SelectItem key={type.id} value={String(type.id)}>
                             {type.name}
@@ -1112,13 +1097,13 @@ function MunicipalityPage() {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  <CardTitle>Скарги пасажирів</CardTitle>
+                  <CardTitle>Скарги та пропозиції</CardTitle>
                 </div>
-                <CardDescription>Управління скаргами та зверненнями</CardDescription>
+                <CardDescription>Управління скаргами та пропозиціями пасажирів</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Filters */}
-                <div className="grid gap-4 md:grid-cols-5">
+                <div className="grid gap-4 md:grid-cols-4">
                   <div className="space-y-2">
                     <Label htmlFor="comp-from">Від</Label>
                     <Input
@@ -1138,6 +1123,45 @@ function MunicipalityPage() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="comp-feedback-type">Тип звернення</Label>
+                    <Select
+                      value={complaintsForm.type}
+                      onValueChange={(value) =>
+                        setComplaintsForm({ ...complaintsForm, type: value })
+                      }
+                    >
+                      <SelectTrigger id="comp-feedback-type">
+                        <SelectValue placeholder="Всі" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Всі</SelectItem>
+                        <SelectItem value="Скарга">Скарги</SelectItem>
+                        <SelectItem value="Пропозиція">Пропозиції</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="comp-status">Статус</Label>
+                    <Select
+                      value={complaintsForm.status}
+                      onValueChange={(value) =>
+                        setComplaintsForm({ ...complaintsForm, status: value })
+                      }
+                    >
+                      <SelectTrigger id="comp-status">
+                        <SelectValue placeholder="Всі" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Всі</SelectItem>
+                        <SelectItem value="Подано">Нові</SelectItem>
+                        <SelectItem value="Розглядається">Розглядаються</SelectItem>
+                        <SelectItem value="Розглянуто">Розглянуті</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="space-y-2">
                     <Label htmlFor="comp-route">Маршрут</Label>
                     <Input
                       id="comp-route"
@@ -1149,18 +1173,18 @@ function MunicipalityPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="comp-type">Тип транспорту</Label>
+                    <Label htmlFor="comp-transport-type">Тип транспорту</Label>
                     <Select
                       value={complaintsForm.transportTypeId}
                       onValueChange={(value) =>
                         setComplaintsForm({ ...complaintsForm, transportTypeId: value })
                       }
                     >
-                      <SelectTrigger id="comp-type">
+                      <SelectTrigger id="comp-transport-type">
                         <SelectValue placeholder="Всі" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Всі</SelectItem>
+                        <SelectItem value="all">Всі</SelectItem>
                         {transportTypes?.map((type) => (
                           <SelectItem key={type.id} value={String(type.id)}>
                             {type.name}
@@ -1170,7 +1194,7 @@ function MunicipalityPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="comp-fleet">Транспорт</Label>
+                    <Label htmlFor="comp-fleet">Бортовий номер</Label>
                     <Input
                       id="comp-fleet"
                       value={complaintsForm.fleetNumber}
@@ -1180,10 +1204,12 @@ function MunicipalityPage() {
                       placeholder="102"
                     />
                   </div>
+                  <div className="flex items-end">
+                    <Button onClick={handleApplyComplaintsFilters} className="w-full">
+                      Застосувати фільтри
+                    </Button>
+                  </div>
                 </div>
-                <Button onClick={handleApplyComplaintsFilters} className="w-full">
-                  Застосувати фільтри
-                </Button>
 
                 {/* Results */}
                 {complaintsLoading ? (
@@ -1194,20 +1220,18 @@ function MunicipalityPage() {
                       <ComplaintCard
                         key={complaint.id}
                         id={complaint.id}
+                        type={complaint.type}
                         passengerName={complaint.contactInfo || 'Анонім'}
                         routeNumber={complaint.routeNumber ?? undefined}
                         fleetNumber={complaint.fleetNumber ?? undefined}
                         complaintText={complaint.message}
                         createdAt={complaint.createdAt}
-                        status={complaint.status as any}
+                        status={complaint.status}
                         onReview={() =>
-                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'reviewed' })
+                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'Розглядається' })
                         }
                         onResolve={() =>
-                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'resolved' })
-                        }
-                        onReject={() =>
-                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'rejected' })
+                          updateComplaintStatusMutation.mutate({ id: complaint.id, status: 'Розглянуто' })
                         }
                       />
                     ))}
@@ -1215,8 +1239,8 @@ function MunicipalityPage() {
                 ) : (
                   <EmptyState
                     icon={MessageSquare}
-                    title="Немає скарг"
-                    description="Скарги пасажирів з'являться тут"
+                    title="Немає звернень"
+                    description="Скарги та пропозиції пасажирів з'являться тут"
                   />
                 )}
               </CardContent>
@@ -1269,7 +1293,7 @@ function toRouteStopCoords(stops: any[]): [number, number][] {
     .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]))
 }
 
-function getBounds(coords: [number, number][]): LngLatBounds | null {
+function getBounds(coords: [number, number][]): LngLatBoundsLike | null {
   if (coords.length === 0) return null
   const lons = coords.map((c) => c[0])
   const lats = coords.map((c) => c[1])
@@ -1280,5 +1304,5 @@ function getBounds(coords: [number, number][]): LngLatBounds | null {
   return [
     [minLon, minLat],
     [maxLon, maxLat],
-  ] as LngLatBounds
+  ] as [[number, number], [number, number]]
 }

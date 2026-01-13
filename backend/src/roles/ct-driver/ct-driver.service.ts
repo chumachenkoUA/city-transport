@@ -351,21 +351,86 @@ export class CtDriverService {
   }
 
   async startTrip(payload: StartTripDto) {
-    if (!payload.fleetNumber) {
-      throw new BadRequestException('fleetNumber is required');
-    }
-
     const startedAt = payload.startedAt ?? new Date();
-    const direction = payload.direction ?? 'forward';
+
+    // Новий API: приймає tripId (необов'язково) та startedAt
     const result = (await this.dbService.db.execute(sql`
       select driver_api.start_trip(
-        ${payload.fleetNumber},
-        ${startedAt},
-        ${direction}
+        ${payload.tripId ?? null}::bigint,
+        ${startedAt}::timestamp
       ) as "tripId"
     `)) as unknown as { rows: Array<{ tripId: number }> };
 
     return result.rows[0] ?? { tripId: null };
+  }
+
+  async getScheduledTrips() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id,
+        route_id,
+        route_number,
+        direction,
+        transport_type,
+        vehicle_id,
+        fleet_number,
+        planned_starts_at,
+        planned_ends_at,
+        status
+      from driver_api.v_my_scheduled_trips
+      order by planned_starts_at
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        routeId: number;
+        routeNumber: string;
+        direction: string;
+        transportType: string;
+        vehicleId: number;
+        fleetNumber: string;
+        plannedStartsAt: Date;
+        plannedEndsAt: Date | null;
+        status: string;
+      }>;
+    };
+
+    return transformToCamelCase(result.rows);
+  }
+
+  async getActiveTrip() {
+    const result = (await this.dbService.db.execute(sql`
+      select
+        id,
+        route_id,
+        route_number,
+        direction,
+        transport_type,
+        vehicle_id,
+        fleet_number,
+        planned_starts_at,
+        actual_starts_at,
+        passenger_count,
+        start_delay_min
+      from driver_api.v_my_active_trip
+      limit 1
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        routeId: number;
+        routeNumber: string;
+        direction: string;
+        transportType: string;
+        vehicleId: number;
+        fleetNumber: string;
+        plannedStartsAt: Date;
+        actualStartsAt: Date;
+        passengerCount: number;
+        startDelayMin: number | null;
+      }>;
+    };
+
+    const activeTrip = transformToCamelCase(result.rows)[0];
+    return activeTrip ?? null;
   }
 
   async finishTrip(payload: FinishTripDto) {

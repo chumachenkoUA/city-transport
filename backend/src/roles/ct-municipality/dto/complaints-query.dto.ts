@@ -27,4 +27,12 @@ export class MunicipalityComplaintsQueryDto {
   @IsString()
   @IsOptional()
   fleetNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  type?: string; // 'Скарга' | 'Пропозиція'
+
+  @IsString()
+  @IsOptional()
+  status?: string; // 'Подано' | 'Розглядається' | 'Розглянуто'
 }

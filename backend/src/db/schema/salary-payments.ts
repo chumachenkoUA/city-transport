@@ -6,7 +6,6 @@ import {
   integer,
   numeric,
   pgTable,
-  text,
   timestamp,
 } from 'drizzle-orm/pg-core';
 import { drivers } from './drivers';
@@ -15,11 +14,9 @@ export const salaryPayments = pgTable(
   'salary_payments',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    driverId: bigint('driver_id', { mode: 'number' }).references(
-      () => drivers.id,
-    ),
-    employeeName: text('employee_name'),
-    employeeRole: text('employee_role'),
+    driverId: bigint('driver_id', { mode: 'number' })
+      .notNull()
+      .references(() => drivers.id),
     rate: numeric('rate', { precision: 12, scale: 2 }),
     units: integer('units'),
     total: numeric('total', { precision: 12, scale: 2 }).notNull(),
@@ -37,10 +34,6 @@ export const salaryPayments = pgTable(
     salaryPaymentsUnitsCheck: check(
       'salary_payments_units_check',
       sql.raw('"units" is null or "units" > 0'),
-    ),
-    salaryPaymentsEmployeeCheck: check(
-      'salary_payments_employee_check',
-      sql.raw('"driver_id" is not null or "employee_name" is not null'),
     ),
   }),
 );
