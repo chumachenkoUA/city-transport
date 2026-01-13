@@ -21,6 +21,7 @@ import {
   getRoutesByStop,
   getRouteSchedule,
   getRouteStops,
+  getStopsNear,
   type RouteOption,
   type StopGeometry,
   type Route as GuestRoute,
@@ -41,6 +42,8 @@ import {
   ChevronUp,
   Clock,
   Calendar,
+  Locate,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -133,6 +136,11 @@ function MapPage() {
   const [isSelectingPoint, setIsSelectingPoint] = useState<'A' | 'B' | null>(null);
   const [userLocation, setUserLocation] = useState<{ lon: number; lat: number } | null>(null);
   const [currentZoom, setCurrentZoom] = useState(12);
+
+  // Nearby stops state
+  const [showNearbyStops, setShowNearbyStops] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Schedule modal state
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -272,6 +280,17 @@ function MapPage() {
     enabled: !!sidebarSelectedRoute,
   });
 
+  // Nearby stops query
+  const { data: nearbyStops, isLoading: nearbyStopsLoading } = useQuery({
+    queryKey: ['nearby-stops', userLocation?.lon, userLocation?.lat],
+    queryFn: () => getStopsNear({
+      longitude: userLocation!.lon,
+      latitude: userLocation!.lat,
+      radiusMeters: 500,
+    }),
+    enabled: !!userLocation && showNearbyStops,
+  });
+
   const handleStopClick = useCallback(
     (feature: GeoJSON.Feature<GeoJSON.Point, { id: number; name: string }>) => {
       const stop = stopGeometries?.find((s) => s.id === feature.properties.id);
@@ -339,6 +358,52 @@ function MapPage() {
 
   const handleLocate = useCallback((coords: { longitude: number; latitude: number }) => {
     setUserLocation({ lon: coords.longitude, lat: coords.latitude });
+  }, []);
+
+  // Get user's GPS location and show nearby stops
+  const handleFindNearbyStops = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGpsError('Геолокація не підтримується вашим браузером');
+      return;
+    }
+
+    setGpsLoading(true);
+    setGpsError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { longitude, latitude } = position.coords;
+        setUserLocation({ lon: longitude, lat: latitude });
+        setShowNearbyStops(true);
+        setGpsLoading(false);
+      },
+      (error) => {
+        setGpsLoading(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setGpsError('Доступ до геолокації заборонено. Дозвольте доступ у налаштуваннях браузера.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setGpsError('Інформація про місцезнаходження недоступна.');
+            break;
+          case error.TIMEOUT:
+            setGpsError('Час очікування геолокації вичерпано.');
+            break;
+          default:
+            setGpsError('Невідома помилка геолокації.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }, []);
+
+  const handleCloseNearbyStops = useCallback(() => {
+    setShowNearbyStops(false);
+    setGpsError(null);
   }, []);
 
   const handleOpenScheduleModal = useCallback(
@@ -434,6 +499,100 @@ function MapPage() {
         {/* Browse Mode Content */}
         {mode === 'browse' && (
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Nearby Stops Button */}
+            <div className="p-4 border-b">
+              <Button
+                variant={showNearbyStops ? 'default' : 'outline'}
+                className="w-full"
+                onClick={handleFindNearbyStops}
+                disabled={gpsLoading}
+              >
+                {gpsLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Locate className="h-4 w-4 mr-2" />
+                )}
+                {gpsLoading ? 'Визначаємо локацію...' : 'Найближчі зупинки'}
+              </Button>
+
+              {gpsError && (
+                <div className="mt-2 p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">
+                  {gpsError}
+                </div>
+              )}
+            </div>
+
+            {/* Nearby Stops Panel */}
+            {showNearbyStops && (
+              <div className="border-b bg-blue-50 dark:bg-blue-950/30">
+                <div className="p-3 flex items-center justify-between border-b border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2">
+                    <Locate className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-blue-800 dark:text-blue-200">Найближчі зупинки</span>
+                  </div>
+                  <button
+                    onClick={handleCloseNearbyStops}
+                    className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900 rounded"
+                  >
+                    <X className="h-4 w-4 text-blue-600" />
+                  </button>
+                </div>
+
+                {userLocation && (
+                  <div className="px-3 py-2 text-xs text-blue-600 dark:text-blue-400 border-b border-blue-200 dark:border-blue-800">
+                    📍 Ваші координати: {userLocation.lat.toFixed(5)}, {userLocation.lon.toFixed(5)}
+                  </div>
+                )}
+
+                <div className="max-h-[250px] overflow-auto">
+                  {nearbyStopsLoading && (
+                    <div className="p-4 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                      <span className="ml-2 text-sm text-blue-600">Завантаження...</span>
+                    </div>
+                  )}
+
+                  {!nearbyStopsLoading && (!nearbyStops || nearbyStops.length === 0) && (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      Зупинок поблизу не знайдено (радіус 500м)
+                    </div>
+                  )}
+
+                  {!nearbyStopsLoading && nearbyStops && nearbyStops.length > 0 && (
+                    <div className="divide-y divide-blue-200 dark:divide-blue-800">
+                      {nearbyStops.map((stop) => (
+                        <button
+                          key={stop.id}
+                          className="w-full p-3 text-left hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                          onClick={() => {
+                            const stopGeom = stopGeometries?.find(s => s.id === stop.id);
+                            if (stopGeom) {
+                              setSelectedStop(stopGeom);
+                              setClickedStopId(stop.id);
+                            }
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900 dark:text-white">
+                                {stop.name}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                ID: {stop.id} • {stop.lat.toFixed(5)}, {stop.lon.toFixed(5)}
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded text-sm font-medium">
+                              {Math.round(stop.distanceM ?? 0)} м
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Transport Type Filter */}
             <div className="p-4 border-b">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -1023,6 +1182,31 @@ function MapPage() {
                 );
               })}
             </>
+          )}
+
+          {/* User Location Marker */}
+          {userLocation && showNearbyStops && (
+            <MapMarker
+              longitude={userLocation.lon}
+              latitude={userLocation.lat}
+            >
+              <MarkerContent>
+                <div className="relative">
+                  <div className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-500 border-2 border-white shadow-lg">
+                    <div className="h-2 w-2 rounded-full bg-white" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full bg-blue-500 opacity-30 animate-ping" />
+                </div>
+              </MarkerContent>
+              <MarkerPopup>
+                <div className="p-2">
+                  <p className="font-medium text-sm">📍 Ваше місцезнаходження</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {userLocation.lat.toFixed(5)}, {userLocation.lon.toFixed(5)}
+                  </p>
+                </div>
+              </MarkerPopup>
+            </MapMarker>
           )}
 
           {/* Plan Mode: Show point A marker */}
