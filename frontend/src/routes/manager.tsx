@@ -20,7 +20,6 @@ import {
   getManagerRoutes,
   getManagerTransportTypes,
   getManagerModels,
-  getStaffRoles,
   createStaffUser,
   type StaffRole,
 } from '@/lib/manager-api'
@@ -60,9 +59,6 @@ function ManagerPage() {
     login: '',
     password: '',
     role: '' as StaffRole | '',
-    fullName: '',
-    email: '',
-    phone: '',
   })
 
   // Queries
@@ -91,10 +87,14 @@ function ManagerPage() {
     queryFn: getManagerModels,
   })
 
-  const { data: staffRoles } = useQuery({
-    queryKey: ['manager-staff-roles'],
-    queryFn: getStaffRoles,
-  })
+  // Static staff roles (they don't change)
+  const staffRoles = [
+    { role: 'dispatcher' as const, label: 'Диспетчер', description: 'Управління розкладами та призначеннями водіїв' },
+    { role: 'controller' as const, label: 'Контролер', description: 'Перевірка квитків та виписування штрафів' },
+    { role: 'accountant' as const, label: 'Бухгалтер', description: 'Фінанси, витрати та зарплати' },
+    { role: 'municipality' as const, label: 'Муніципалітет', description: 'Маршрути, зупинки та аналітика' },
+    { role: 'manager' as const, label: 'Менеджер', description: 'Управління водіями, транспортом та персоналом' },
+  ]
 
   // Filter models by transport type
   const filteredModels = useMemo(() => {
@@ -155,15 +155,8 @@ function ManagerPage() {
   const createStaffMutation = useMutation({
     mutationFn: createStaffUser,
     onSuccess: () => {
-      setStaffForm({
-        login: '',
-        password: '',
-        role: '',
-        fullName: '',
-        email: '',
-        phone: '',
-      })
-      toast.success('Системного користувача створено успішно!')
+      setStaffForm({ login: '', password: '', role: '' })
+      toast.success('Системного користувача створено!')
     },
     onError: (error: Error) => {
       toast.error('Помилка створення користувача', {
@@ -219,18 +212,7 @@ function ManagerPage() {
       login: staffForm.login,
       password: staffForm.password,
       role: staffForm.role as StaffRole,
-      fullName: staffForm.fullName || undefined,
-      email: staffForm.email || undefined,
-      phone: staffForm.phone || undefined,
     })
-  }
-
-  const staffRoleLabels: Record<StaffRole, string> = {
-    dispatcher: 'Диспетчер',
-    controller: 'Контролер',
-    accountant: 'Бухгалтер',
-    municipality: 'Муніципалітет',
-    manager: 'Менеджер',
   }
 
   return (
@@ -247,13 +229,13 @@ function ManagerPage() {
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="drivers">Водії</TabsTrigger>
-            <TabsTrigger value="vehicles">Транспорт</TabsTrigger>
-            <TabsTrigger value="staff">Персонал</TabsTrigger>
+            <TabsTrigger key="drivers" value="drivers">Водії</TabsTrigger>
+            <TabsTrigger key="vehicles" value="vehicles">Транспорт</TabsTrigger>
+            <TabsTrigger key="staff" value="staff">Персонал</TabsTrigger>
           </TabsList>
 
           {/* Drivers Tab */}
-          <TabsContent value="drivers" className="space-y-6">
+          <TabsContent key="drivers-content" value="drivers" className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <FormSection
                 title="Найм водія"
@@ -375,7 +357,7 @@ function ManagerPage() {
           </TabsContent>
 
           {/* Vehicles Tab */}
-          <TabsContent value="vehicles" className="space-y-6">
+          <TabsContent key="vehicles-content" value="vehicles" className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <FormSection
                 title="Додавання транспорту"
@@ -490,7 +472,7 @@ function ManagerPage() {
           </TabsContent>
 
           {/* Staff Tab */}
-          <TabsContent value="staff" className="space-y-6">
+          <TabsContent key="staff-content" value="staff" className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <FormSection
                 title="Створення системного користувача"
@@ -528,44 +510,13 @@ function ManagerPage() {
                         <SelectValue placeholder="Оберіть роль" />
                       </SelectTrigger>
                       <SelectContent>
-                        {staffRoles?.map((role) => (
-                          <SelectItem key={role.role_name} value={role.role_name}>
-                            {staffRoleLabels[role.role_name as StaffRole] || role.role_name}
+                        {staffRoles.map((role) => (
+                          <SelectItem key={role.role} value={role.role}>
+                            {role.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="staff-fullName">ПІБ (опціонально)</Label>
-                    <Input
-                      id="staff-fullName"
-                      value={staffForm.fullName}
-                      onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })}
-                      placeholder="Іванов Іван Іванович"
-                    />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="staff-email">Email</Label>
-                      <Input
-                        id="staff-email"
-                        type="email"
-                        value={staffForm.email}
-                        onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="staff-phone">Телефон</Label>
-                      <Input
-                        id="staff-phone"
-                        value={staffForm.phone}
-                        onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
-                        placeholder="+380..."
-                      />
-                    </div>
                   </div>
 
                   <Button
@@ -582,31 +533,21 @@ function ManagerPage() {
 
               <div className="space-y-4">
                 <h3 className="text-heading-md">Доступні ролі</h3>
-                {staffRoles && staffRoles.length > 0 ? (
-                  <div className="space-y-2">
-                    {staffRoles.map((role) => (
-                      <Card key={role.role_name}>
-                        <CardContent className="pt-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">
-                                {staffRoleLabels[role.role_name as StaffRole] || role.role_name}
-                              </p>
-                              <p className="text-sm text-muted-foreground">{role.description}</p>
-                            </div>
-                            <Badge variant="outline">{role.role_name}</Badge>
+                <div className="space-y-2">
+                  {staffRoles.map((role) => (
+                    <Card key={role.role}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{role.label}</p>
+                            <p className="text-sm text-muted-foreground">{role.description}</p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={UserCog}
-                    title="Немає ролей"
-                    description="Ролі персоналу не знайдено"
-                  />
-                )}
+                          <Badge variant="outline">{role.role}</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             </div>
           </TabsContent>

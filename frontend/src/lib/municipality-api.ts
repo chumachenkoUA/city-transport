@@ -71,6 +71,36 @@ export type PassengerFlowRow = {
   passengerCount: number
 }
 
+// New analytics types
+export type FlowDetailedRow = {
+  tripId: number
+  tripDate: string
+  routeNumber: string
+  transportType: string
+  fleetNumber: string | null
+  passengerCount: number
+}
+
+export type TopRouteRow = {
+  routeNumber: string
+  transportType: string
+  totalPassengers: number
+  rank: number
+}
+
+export type TrendRow = {
+  tripDate: string
+  dailyPassengers: number
+  movingAvg7d: number
+}
+
+export type FlowSummary = {
+  totalPassengers: number
+  totalTrips: number
+  avgPerTrip: number
+  avgPerDay: number
+}
+
 export type ComplaintRow = {
   id: number
   type: string
@@ -143,6 +173,42 @@ export function getPassengerFlow(params: {
   transportTypeId?: number
 }) {
   return apiGet<PassengerFlowRow[]>('/municipality/passenger-flow', params)
+}
+
+// New analytics API functions
+export function getPassengerFlowDetailed(params: {
+  from: string
+  to: string
+  routeNumber?: string
+  transportTypeId?: number
+}) {
+  return apiGet<FlowDetailedRow[]>('/municipality/passenger-flow/detailed', params)
+}
+
+export function getTopRoutes(params: {
+  from: string
+  to: string
+  transportTypeId?: number
+}) {
+  return apiGet<TopRouteRow[]>('/municipality/passenger-flow/top-routes', params)
+}
+
+export function getPassengerTrend(params: {
+  from: string
+  to: string
+  routeNumber?: string
+  transportTypeId?: number
+}) {
+  return apiGet<TrendRow[]>('/municipality/passenger-flow/trend', params)
+}
+
+export function getFlowSummary(params: {
+  from: string
+  to: string
+  routeNumber?: string
+  transportTypeId?: number
+}) {
+  return apiGet<FlowSummary>('/municipality/passenger-flow/summary', params)
 }
 
 export function getComplaints(params: {

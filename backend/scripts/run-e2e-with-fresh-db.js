@@ -71,6 +71,8 @@ async function main() {
     const setupClient = new Client({ connectionString: testDbUrl });
     await setupClient.connect();
     await setupClient.query('CREATE EXTENSION IF NOT EXISTS postgis');
+    await setupClient.query('CREATE EXTENSION IF NOT EXISTS pgrouting');
+    await setupClient.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
     await setupClient.end();
 
     const migrateResult = spawnSync('pnpm', ['run', 'drizzle:migrate'], {

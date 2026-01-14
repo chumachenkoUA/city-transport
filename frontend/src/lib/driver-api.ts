@@ -29,6 +29,7 @@ export interface DriverTrip {
   endsAt: string | null;
   passengerCount: number;
   plannedStartAt: string | null;
+  plannedEndsAt: string | null;
   startDelayMin: number | null;
   route: {
     id: number;

@@ -272,4 +272,7 @@ END $$;
 -- ============================================================================
 -- Після всіх REVOKE потрібно переконатися, що PUBLIC може підключатися.
 -- Без цього нові користувачі не зможуть підключитися до БД.
-GRANT CONNECT ON DATABASE city_transport TO PUBLIC;
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO PUBLIC', current_database());
+END $$;

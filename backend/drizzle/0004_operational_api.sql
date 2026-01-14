@@ -157,9 +157,11 @@ BEGIN
     END IF;
 
     -- Отримуємо vehicle_id з driver_vehicle_assignments
+    -- ORDER BY assigned_at DESC: найостанніше призначення
     SELECT dva.vehicle_id INTO v_vehicle_id
     FROM public.driver_vehicle_assignments dva
     WHERE dva.driver_id = v_driver_id
+    ORDER BY dva.assigned_at DESC
     LIMIT 1;
 
     IF v_vehicle_id IS NULL THEN RAISE EXCEPTION 'no vehicle assigned'; END IF;
@@ -253,8 +255,10 @@ LIMIT 1;
 -- Legacy: v_my_schedule (для сумісності)
 CREATE OR REPLACE VIEW driver_api.v_my_schedule WITH (security_barrier = true) AS
 SELECT t.id,
-       t.planned_starts_at AS starts_at,
-       t.actual_ends_at AS ends_at,
+       t.planned_starts_at,
+       t.planned_ends_at,
+       t.actual_starts_at,
+       t.actual_ends_at,
        t.passenger_count, t.route_id,
        r.number AS route_number, r.direction, r.transport_type_id,
        tt.name AS transport_type, dva.vehicle_id, v.fleet_number

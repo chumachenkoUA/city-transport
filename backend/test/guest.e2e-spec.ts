@@ -148,7 +148,7 @@ describe('CtGuest (e2e)', () => {
     await request(app.getHttpServer())
       .post('/guest/complaints')
       .send({
-        type: 'Complaint',
+        type: 'complaint',
         message: 'Guest complaint',
         contactInfo: 'guest@example.com',
       })

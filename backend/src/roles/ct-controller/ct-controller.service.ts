@@ -12,6 +12,7 @@ type CardDetailsRow = {
   id: number;
   cardNumber: string;
   balance: string;
+  userFullName: string;
   lastUsageAt: string | null;
   lastRouteNumber: string | null;
   lastTransportType: string | null;
@@ -27,6 +28,7 @@ export class CtControllerService {
         id,
         card_number,
         balance,
+        user_full_name,
         last_usage_at,
         last_route_number,
         last_transport_type
@@ -35,7 +37,7 @@ export class CtControllerService {
       limit 1
     `)) as unknown as { rows: CardDetailsRow[] };
 
-    const card = (transformToCamelCase(result.rows) as CardDetailsRow[])[0];
+    const card = transformToCamelCase(result.rows)[0];
     if (!card) {
       throw new NotFoundException(`Card ${cardNumber} not found`);
     }
@@ -44,13 +46,14 @@ export class CtControllerService {
   }
 
   async issueFine(payload: IssueFineDto) {
+    const checkedAt = payload.checkedAt ?? new Date();
     const result = (await this.dbService.db.execute(sql`
       select controller_api.issue_fine(
         ${payload.cardNumber},
         ${payload.amount},
         ${payload.reason},
         ${payload.fleetNumber ?? null},
-        ${payload.checkedAt ? payload.checkedAt.toISOString() : null},
+        ${checkedAt.toISOString()},
         ${payload.tripId ?? null}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
@@ -74,11 +77,12 @@ export class CtControllerService {
       ? await this.dbService.db.execute(sql`
           select
             trip_id,
-            starts_at,
-            ends_at,
+            planned_starts_at,
+            actual_starts_at,
             route_number,
             transport_type,
-            driver_name
+            driver_name,
+            status
           from controller_api.get_active_trips(
             ${fleetNumber},
             ${checkedAtValue.toISOString()}
@@ -87,11 +91,12 @@ export class CtControllerService {
       : await this.dbService.db.execute(sql`
           select
             trip_id,
-            starts_at,
-            ends_at,
+            planned_starts_at,
+            actual_starts_at,
             route_number,
             transport_type,
-            driver_name
+            driver_name,
+            status
           from controller_api.get_active_trips(${fleetNumber})
         `);
 
@@ -99,22 +104,24 @@ export class CtControllerService {
       result as unknown as {
         rows: Array<{
           tripId: number;
-          startsAt: Date;
-          endsAt: Date | null;
+          plannedStartsAt: Date;
+          actualStartsAt: Date | null;
           routeNumber: string;
           transportType: string;
           driverName: string;
+          status: string;
         }>;
       }
     ).rows;
 
     return transformToCamelCase(rows) as Array<{
       tripId: number;
-      startsAt: Date;
-      endsAt: Date | null;
+      plannedStartsAt: Date;
+      actualStartsAt: Date | null;
       routeNumber: string;
       transportType: string;
       driverName: string;
+      status: string;
     }>;
   }
 

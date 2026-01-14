@@ -110,7 +110,6 @@ export interface DispatcherTrip {
 
 export interface CreateTripPayload {
   routeId: number;
-  vehicleId: number;
   driverId: number;
   plannedStartsAt: string;
   plannedEndsAt?: string;

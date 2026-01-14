@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useRef, useState } from 'react'
-import type { Map as MapLibreMap } from 'maplibre-gl'
+import { useMemo, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -73,7 +72,6 @@ function DriverPage() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [scheduleDate, setScheduleDate] = useState(() => toDateInputValue(new Date()))
-  const [selectedTripId, setSelectedTripId] = useState<number | null>(null)
   const [passengerTripId, setPassengerTripId] = useState<string | null>(null)
   const [passengerCount, setPassengerCount] = useState('')
   const [finishTime, setFinishTime] = useState('')
@@ -84,44 +82,50 @@ function DriverPage() {
     direction: 'forward',
   })
   const [routeQuery, setRouteQuery] = useState<RouteLookupParams | null>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
 
   // Queries
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['driver-profile'],
     queryFn: getDriverProfile,
+    staleTime: 5 * 60 * 1000, // 5 minutes - profile rarely changes
   })
 
   const { data: schedule, isLoading: scheduleLoading } = useQuery({
     queryKey: ['driver-schedule', scheduleDate],
     queryFn: () => getDriverSchedule(scheduleDate || undefined),
+    staleTime: 60 * 1000, // 1 minute
   })
 
   const { data: activeTrip, isLoading: activeTripLoading } = useQuery({
     queryKey: ['driver-active-trip'],
     queryFn: getDriverActiveTrip,
+    staleTime: 30 * 1000, // 30 seconds - needs fresher data
   })
 
   const { data: scheduledTrips, isLoading: scheduledTripsLoading } = useQuery({
     queryKey: ['driver-scheduled-trips'],
     queryFn: getDriverScheduledTrips,
+    staleTime: 30 * 1000, // 30 seconds - aligned with activeTrip for consistency
   })
 
   const { data: transportTypes } = useQuery({
     queryKey: ['transport-types'],
     queryFn: getTransportTypes,
+    staleTime: 10 * 60 * 1000, // 10 minutes - static data
   })
 
   const { data: routeStops } = useQuery({
     queryKey: ['driver-route-stops', routeQuery],
     queryFn: () => getDriverRouteStops(routeQuery!),
     enabled: !!routeQuery,
+    staleTime: 5 * 60 * 1000, // 5 minutes - route data is static
   })
 
   const { data: routePoints } = useQuery({
     queryKey: ['driver-route-points', routeQuery],
     queryFn: () => getDriverRoutePoints(routeQuery!),
     enabled: !!routeQuery,
+    staleTime: 5 * 60 * 1000, // 5 minutes - route data is static
   })
 
   // GPS Tracking
@@ -130,9 +134,39 @@ function DriverPage() {
     enabled: true,
   })
 
-  // Mutations
+  // Mutations with optimistic updates
   const startTripMutation = useMutation({
     mutationFn: startDriverTrip,
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['driver-scheduled-trips'] })
+      await queryClient.cancelQueries({ queryKey: ['driver-active-trip'] })
+
+      // Snapshot previous values
+      const previousScheduledTrips = queryClient.getQueryData(['driver-scheduled-trips'])
+
+      // Optimistically update scheduled trips
+      if (variables.tripId) {
+        queryClient.setQueryData(
+          ['driver-scheduled-trips'],
+          (old: typeof scheduledTrips) =>
+            old?.map((trip) =>
+              trip.id === variables.tripId ? { ...trip, status: 'in_progress' as const } : trip,
+            ),
+        )
+      }
+
+      return { previousScheduledTrips }
+    },
+    onError: (error: Error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousScheduledTrips) {
+        queryClient.setQueryData(['driver-scheduled-trips'], context.previousScheduledTrips)
+      }
+      toast.error('Помилка запуску рейсу', {
+        description: error.message,
+      })
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['driver-schedule'] })
       queryClient.invalidateQueries({ queryKey: ['driver-active-trip'] })
@@ -141,15 +175,31 @@ function DriverPage() {
         description: 'GPS моніторинг активовано',
       })
     },
-    onError: (error: Error) => {
-      toast.error('Помилка запуску рейсу', {
-        description: error.message,
-      })
-    },
   })
 
   const finishTripMutation = useMutation({
     mutationFn: finishDriverTrip,
+    onMutate: async () => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['driver-active-trip'] })
+
+      // Snapshot previous value
+      const previousActiveTrip = queryClient.getQueryData(['driver-active-trip'])
+
+      // Optimistically clear active trip
+      queryClient.setQueryData(['driver-active-trip'], null)
+
+      return { previousActiveTrip }
+    },
+    onError: (error: Error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousActiveTrip) {
+        queryClient.setQueryData(['driver-active-trip'], context.previousActiveTrip)
+      }
+      toast.error('Помилка завершення рейсу', {
+        description: error.message,
+      })
+    },
     onSuccess: () => {
       setFinishTime('')
       queryClient.invalidateQueries({ queryKey: ['driver-schedule'] })
@@ -157,11 +207,6 @@ function DriverPage() {
       queryClient.invalidateQueries({ queryKey: ['driver-scheduled-trips'] })
       toast.success('Рейс завершено!', {
         description: 'Дякуємо за роботу',
-      })
-    },
-    onError: (error: Error) => {
-      toast.error('Помилка завершення рейсу', {
-        description: error.message,
       })
     },
   })
@@ -182,24 +227,25 @@ function DriverPage() {
     },
   })
 
-  // Computed values
-  const resolvedTripId = useMemo(() => {
-    const trips = schedule?.trips ?? []
-    if (trips.length === 0) return null
-    if (selectedTripId && trips.some((trip) => trip.id === selectedTripId)) {
-      return selectedTripId
-    }
-    if (activeTrip?.id && trips.some((trip) => trip.id === activeTrip.id)) {
-      return activeTrip.id
-    }
-    return trips[0].id
-  }, [activeTrip?.id, schedule, selectedTripId])
+  // Combined loading state for trip transitions
+  const isTripTransitioning = startTripMutation.isPending || finishTripMutation.isPending
 
-  const selectedTrip = useMemo(() => {
+  // Computed values
+  const activeTripId = activeTrip?.id
+  const { resolvedTripId, selectedTrip } = useMemo(() => {
     const trips = schedule?.trips ?? []
-    if (trips.length === 0 || !resolvedTripId) return null
-    return trips.find((trip) => trip.id === resolvedTripId) ?? null
-  }, [schedule, resolvedTripId])
+    if (trips.length === 0) return { resolvedTripId: null, selectedTrip: null }
+
+    let tripId: number | null = null
+    if (activeTripId && trips.some((trip) => trip.id === activeTripId)) {
+      tripId = activeTripId
+    } else {
+      tripId = trips[0].id
+    }
+
+    const trip = trips.find((t) => t.id === tripId) ?? null
+    return { resolvedTripId: tripId, selectedTrip: trip }
+  }, [activeTripId, schedule])
 
   const routeOptions = useMemo(() => {
     if (!schedule?.trips?.length) return []
@@ -212,16 +258,8 @@ function DriverPage() {
     return Array.from(seen.values())
   }, [schedule])
 
-  const resolvedPassengerTripId = useMemo(() => {
-    if (passengerTripId) return passengerTripId
-    if (activeTrip?.id) return String(activeTrip.id)
-    const trips = schedule?.trips ?? []
-    if (trips.length === 0) return null
-    return String(trips[0].id)
-  }, [activeTrip, passengerTripId, schedule])
-
-  const passengerTripOptions = useMemo(() => {
-    const options = schedule?.trips ? [...schedule.trips] : []
+  const { passengerTripOptions, resolvedPassengerTripId, selectedPassengerTrip } = useMemo(() => {
+    const options: DriverTrip[] = schedule?.trips ? [...schedule.trips] : []
     if (activeTrip && !options.some((trip) => trip.id === activeTrip.id)) {
       options.unshift({
         id: activeTrip.id,
@@ -229,6 +267,7 @@ function DriverPage() {
         endsAt: null,
         passengerCount: activeTrip.passengerCount,
         plannedStartAt: activeTrip.plannedStartsAt,
+        plannedEndsAt: null,
         startDelayMin: activeTrip.startDelayMin,
         route: {
           id: activeTrip.routeId,
@@ -247,13 +286,19 @@ function DriverPage() {
         stops: [],
       })
     }
-    return options
-  }, [activeTrip, schedule])
 
-  const selectedPassengerTrip = useMemo(() => {
-    if (!resolvedPassengerTripId) return null
-    return passengerTripOptions.find((trip) => String(trip.id) === resolvedPassengerTripId) ?? null
-  }, [passengerTripOptions, resolvedPassengerTripId])
+    let tripId: string | null = null
+    if (passengerTripId) {
+      tripId = passengerTripId
+    } else if (activeTrip?.id) {
+      tripId = String(activeTrip.id)
+    } else if (options.length > 0) {
+      tripId = String(options[0].id)
+    }
+
+    const selected = tripId ? options.find((trip) => String(trip.id) === tripId) ?? null : null
+    return { passengerTripOptions: options, resolvedPassengerTripId: tripId, selectedPassengerTrip: selected }
+  }, [activeTrip, passengerTripId, schedule])
 
   const routeCoordinates = useMemo(() => {
     if (!routePoints?.length) return []
@@ -277,15 +322,10 @@ function DriverPage() {
     const trips = schedule?.trips || []
     const completedTrips = trips.filter((t) => t.endsAt).length
     const totalTrips = trips.length
-    const avgDelay =
-      trips.length > 0
-        ? trips.reduce((sum, t) => sum + (t.startDelayMin || 0), 0) / trips.length
-        : 0
 
     return {
       totalTrips,
       completedTrips,
-      avgDelay: avgDelay.toFixed(1),
     }
   }, [schedule])
 
@@ -369,7 +409,7 @@ function DriverPage() {
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
             {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-3">
               <StatCard
                 title="Рейсів сьогодні"
                 value={stats.totalTrips}
@@ -382,13 +422,6 @@ function DriverPage() {
                 icon={Clock}
                 description={`з ${stats.totalTrips}`}
                 variant={stats.completedTrips === stats.totalTrips ? 'success' : 'default'}
-              />
-              <StatCard
-                title="Середнє відхилення"
-                value={`${stats.avgDelay} хв`}
-                icon={Navigation}
-                description="Від розкладу"
-                variant={Math.abs(Number(stats.avgDelay)) > 5 ? 'warning' : 'success'}
               />
               <StatCard
                 title="GPS статус"
@@ -479,7 +512,7 @@ function DriverPage() {
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Затримка:</span>
                           <Badge variant={activeTrip.startDelayMin > 5 ? 'warning' : 'success'}>
-                            {activeTrip.startDelayMin > 0 ? '+' : ''}{activeTrip.startDelayMin} хв
+                            {activeTrip.startDelayMin > 0 ? '+' : ''}{Math.round(activeTrip.startDelayMin)} хв
                           </Badge>
                         </div>
                       )}
@@ -568,14 +601,13 @@ function DriverPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Старт</TableHead>
-                              <TableHead>План</TableHead>
-                              <TableHead>Відхилення</TableHead>
-                              <TableHead>Фініш</TableHead>
+                              <TableHead>План початок</TableHead>
+                              <TableHead>Факт початок</TableHead>
+                              <TableHead>План кінець</TableHead>
+                              <TableHead>Факт кінець</TableHead>
                               <TableHead>Маршрут</TableHead>
                               <TableHead>Транспорт</TableHead>
                               <TableHead>Пасажири</TableHead>
-                              <TableHead className="text-right">Дії</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -584,11 +616,11 @@ function DriverPage() {
                                 key={trip.id}
                                 className={resolvedTripId === trip.id ? 'bg-muted/40' : undefined}
                               >
-                                <TableCell>{formatDateTime(trip.startsAt)}</TableCell>
                                 <TableCell>{formatDateTime(trip.plannedStartAt)}</TableCell>
-                                <TableCell>{formatDelay(trip.startDelayMin)}</TableCell>
+                                <TableCell>{formatDateTime(trip.startsAt)}</TableCell>
+                                <TableCell>{formatDateTime(trip.plannedEndsAt)}</TableCell>
                                 <TableCell>
-                                  {trip.endsAt ? formatDateTime(trip.endsAt) : 'В процесі'}
+                                  {trip.endsAt ? formatDateTime(trip.endsAt) : '—'}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-wrap items-center gap-2">
@@ -600,15 +632,6 @@ function DriverPage() {
                                 </TableCell>
                                 <TableCell>{trip.vehicle.fleetNumber}</TableCell>
                                 <TableCell>{trip.passengerCount ?? 0}</TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setSelectedTripId(trip.id)}
-                                  >
-                                    Деталі
-                                  </Button>
-                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -683,7 +706,14 @@ function DriverPage() {
           </TabsContent>
 
           {/* Trip Control Tab */}
-          <TabsContent value="control" className="space-y-6">
+          <TabsContent value="control" className="space-y-6 relative">
+            {/* Loading overlay during trip transitions */}
+            {isTripTransitioning && (
+              <div className="absolute inset-0 bg-background/50 flex items-center justify-center rounded-lg z-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            )}
+
             {/* Active Trip Card */}
             {activeTrip && (
               <Card className="border-success/50 bg-success/5">
@@ -714,7 +744,7 @@ function DriverPage() {
                       <p className="text-sm text-muted-foreground">Затримка</p>
                       <p className="font-medium">
                         {activeTrip.startDelayMin != null
-                          ? `${activeTrip.startDelayMin > 0 ? '+' : ''}${activeTrip.startDelayMin} хв`
+                          ? `${activeTrip.startDelayMin > 0 ? '+' : ''}${Math.round(activeTrip.startDelayMin)} хв`
                           : '—'}
                       </p>
                     </div>
@@ -1033,7 +1063,7 @@ function DriverPage() {
                       <h3 className="text-heading-sm">Візуалізація маршруту</h3>
                       <div className="rounded-md border overflow-hidden">
                         <div className="h-[400px]">
-                          <MapView ref={mapRef} center={mapCenter} zoom={12}>
+                          <MapView center={mapCenter} zoom={12}>
                             <MapControls
                               showLocate
                               showFullscreen
@@ -1104,12 +1134,6 @@ function formatDateTime(value?: string | null) {
 function formatTime(value?: string | null) {
   if (!value) return '—'
   return value.length >= 5 ? value.slice(0, 5) : value
-}
-
-function formatDelay(value?: number | null) {
-  if (value == null) return '—'
-  const sign = value > 0 ? '+' : value < 0 ? '−' : ''
-  return `${sign}${Math.abs(value)} хв`
 }
 
 function formatCoord(value?: string | number | null) {

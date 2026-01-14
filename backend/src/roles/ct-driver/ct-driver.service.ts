@@ -106,7 +106,7 @@ export class CtDriverService {
       limit 1
     `)) as unknown as { rows: DriverProfileRow[] };
 
-    const driver = (transformToCamelCase(result.rows) as DriverProfileRow[])[0];
+    const driver = transformToCamelCase(result.rows)[0];
     if (!driver) {
       throw new NotFoundException('Driver profile not found');
     }
@@ -125,8 +125,10 @@ export class CtDriverService {
     const tripsResult = (await this.dbService.db.execute(sql`
       select
         id,
-        starts_at,
-        ends_at,
+        planned_starts_at,
+        planned_ends_at,
+        actual_starts_at,
+        actual_ends_at,
         passenger_count,
         route_id,
         route_number,
@@ -136,87 +138,104 @@ export class CtDriverService {
         vehicle_id,
         fleet_number
       from driver_api.v_my_schedule
-      where starts_at >= ${startOfDay} and starts_at < ${endOfDay}
-      order by starts_at
+      where (planned_starts_at >= ${startOfDay} and planned_starts_at < ${endOfDay})
+         or (actual_starts_at >= ${startOfDay} and actual_starts_at < ${endOfDay})
+      order by coalesce(actual_starts_at, planned_starts_at)
     `)) as unknown as {
-      rows: (DriverScheduleRow & { passengerCount: number })[];
+      rows: (DriverScheduleRow & {
+        passengerCount: number;
+        plannedStartsAt: Date | null;
+        plannedEndsAt: Date | null;
+        actualStartsAt: Date | null;
+        actualEndsAt: Date | null;
+      })[];
     };
 
     const trips = transformToCamelCase(tripsResult.rows) as Array<
-      DriverScheduleRow & { passengerCount: number }
+      DriverScheduleRow & {
+        passengerCount: number;
+        plannedStartsAt: Date | null;
+        plannedEndsAt: Date | null;
+        actualStartsAt: Date | null;
+        actualEndsAt: Date | null;
+      }
     >;
     const routeIds = Array.from(new Set(trips.map((trip) => trip.routeId)));
-    const stopsByRouteId = new Map<number, OrderedRouteStopRow[]>();
-    const pointsByRouteId = new Map<number, RoutePointRow[]>();
+    const stopsByRouteId = new Map<
+      number,
+      Array<{
+        id: number;
+        name: string;
+        lon: string;
+        lat: string;
+        distanceToNextKm: number | null;
+        minutesToNextStop: number | null;
+      }>
+    >();
 
+    // Use DB function for ordered stops with timing (replaces orderRouteStops + buildStopsWithTiming)
     for (const routeId of routeIds) {
       const stopsResult = (await this.dbService.db.execute(sql`
-        select
-          id,
-          stop_id,
-          stop_name,
-          lon,
-          lat,
-          distance_to_next_km,
-          prev_route_stop_id,
-          next_route_stop_id
-        from guest_api.v_route_stops
-        where route_id = ${routeId}
+        SELECT * FROM guest_api.get_route_stops_with_timing(${routeId})
       `)) as unknown as {
-        rows: (RouteStopRow & {
+        rows: Array<{
           id: number;
-          prevRouteStopId: number | null;
-          nextRouteStopId: number | null;
-        })[];
+          stop_id: number;
+          stop_name: string;
+          lon: string;
+          lat: string;
+          sort_order: number;
+          distance_to_next_km: number | null;
+          minutes_to_next_stop: number | null;
+          minutes_from_start: number | null;
+        }>;
       };
 
-      const stops = transformToCamelCase(stopsResult.rows) as Array<
-        RouteStopRow & {
-          id: number;
-          prevRouteStopId: number | null;
-          nextRouteStopId: number | null;
-        }
-      >;
-      stopsByRouteId.set(routeId, this.orderRouteStops(stops));
-
-      const pointsResult = (await this.dbService.db.execute(sql`
-        select
-          id,
-          route_id,
-          lon,
-          lat,
-          prev_route_point_id,
-          next_route_point_id
-        from guest_api.v_route_points
-        where route_id = ${routeId}
-      `)) as unknown as { rows: RoutePointRow[] };
-
-      const points = transformToCamelCase(pointsResult.rows) as RoutePointRow[];
-      pointsByRouteId.set(routeId, this.orderRoutePoints(points));
+      stopsByRouteId.set(
+        routeId,
+        stopsResult.rows.map((stop) => ({
+          id: stop.stop_id,
+          name: stop.stop_name,
+          lon: stop.lon,
+          lat: stop.lat,
+          distanceToNextKm: stop.distance_to_next_km,
+          minutesToNextStop: stop.minutes_to_next_stop,
+        })),
+      );
     }
 
     const tripsWithStops = trips.map((trip) => {
-      const stops = stopsByRouteId.get(trip.routeId) ?? [];
-      const points = pointsByRouteId.get(trip.routeId) ?? [];
-      const stopsWithIntervals = this.buildStopsWithTiming(stops, points).map(
-        (stop) => ({
-          id: stop.id,
-          name: stop.name,
-          lon: stop.lon,
-          lat: stop.lat,
-          distanceToNextKm: stop.distanceToNextKm,
-          minutesToNextStop: stop.minutesToNextStop,
-        }),
-      );
+      const stopsWithIntervals = stopsByRouteId.get(trip.routeId) ?? [];
+
+      // Parse dates (may come as strings from DB)
+      const actualStartsAt = trip.actualStartsAt
+        ? new Date(trip.actualStartsAt)
+        : null;
+      const actualEndsAt = trip.actualEndsAt
+        ? new Date(trip.actualEndsAt)
+        : null;
+      const plannedStartsAt = trip.plannedStartsAt
+        ? new Date(trip.plannedStartsAt)
+        : null;
+      const plannedEndsAt = trip.plannedEndsAt
+        ? new Date(trip.plannedEndsAt)
+        : null;
+
+      // Calculate delay in minutes
+      let startDelayMin: number | null = null;
+      if (actualStartsAt && plannedStartsAt) {
+        startDelayMin = Math.round(
+          (actualStartsAt.getTime() - plannedStartsAt.getTime()) / 60000,
+        );
+      }
 
       return {
         id: trip.id,
-        startsAt:
-          trip.startsAt instanceof Date
-            ? trip.startsAt.toISOString()
-            : trip.startsAt,
-        endsAt:
-          trip.endsAt instanceof Date ? trip.endsAt.toISOString() : trip.endsAt,
+        startsAt: actualStartsAt?.toISOString() ?? null,
+        endsAt: actualEndsAt?.toISOString() ?? null,
+        plannedStartAt: plannedStartsAt?.toISOString() ?? null,
+        plannedEndsAt: plannedEndsAt?.toISOString() ?? null,
+        startDelayMin,
         passengerCount: trip.passengerCount,
         route: {
           id: trip.routeId,
@@ -240,10 +259,6 @@ export class CtDriverService {
     const scheduleRow = primaryTrip
       ? await this.findScheduleByRouteId(primaryTrip.route.id)
       : null;
-    const plannedDepartures = scheduleRow
-      ? this.buildPlannedDepartures(scheduleRow, targetDate)
-      : [];
-    const plannedTripMap = this.buildTripPlanMap(trips, plannedDepartures);
 
     return {
       driver,
@@ -253,11 +268,7 @@ export class CtDriverService {
       route: primaryTrip?.route,
       transportType: primaryTrip?.transportType,
       schedule: scheduleRow ?? null,
-      trips: tripsWithStops.map((trip) => ({
-        ...trip,
-        plannedStartAt: plannedTripMap.get(trip.id)?.plannedStartAt ?? null,
-        startDelayMin: plannedTripMap.get(trip.id)?.startDelayMin ?? null,
-      })),
+      trips: tripsWithStops,
       stops: primaryTrip?.stops ?? [],
     };
   }
@@ -283,9 +294,7 @@ export class CtDriverService {
       limit 1
     `)) as unknown as { rows: ActiveTripRow[] };
 
-    const activeTrip = (
-      transformToCamelCase(result.rows) as ActiveTripRow[]
-    )[0];
+    const activeTrip = transformToCamelCase(result.rows)[0];
     if (!activeTrip) {
       return null;
     }
@@ -313,41 +322,29 @@ export class CtDriverService {
 
   async getRouteStops(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
+    // Use ordered view (replaces orderRouteStops)
     const result = (await this.dbService.db.execute(sql`
-      select
-        id,
-        route_id,
-        stop_id,
-        stop_name,
-        lon,
-        lat,
-        distance_to_next_km,
-        prev_route_stop_id,
-        next_route_stop_id
-      from guest_api.v_route_stops
-      where route_id = ${routeId}
+      SELECT id, route_id, stop_id, stop_name, lon, lat,
+             distance_to_next_km, prev_route_stop_id, next_route_stop_id, sort_order
+      FROM guest_api.v_route_stops_ordered
+      WHERE route_id = ${routeId}
+      ORDER BY sort_order
     `)) as unknown as { rows: OrderedRouteStopRow[] };
 
-    const stops = transformToCamelCase(result.rows) as OrderedRouteStopRow[];
-    return this.orderRouteStops(stops);
+    return transformToCamelCase(result.rows);
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
+    // Use ordered view (replaces orderRoutePoints)
     const result = (await this.dbService.db.execute(sql`
-      select
-        id,
-        route_id,
-        lon,
-        lat,
-        prev_route_point_id,
-        next_route_point_id
-      from guest_api.v_route_points
-      where route_id = ${routeId}
+      SELECT id, route_id, lon, lat, prev_route_point_id, next_route_point_id, sort_order
+      FROM guest_api.v_route_points_ordered
+      WHERE route_id = ${routeId}
+      ORDER BY sort_order
     `)) as unknown as { rows: RoutePointRow[] };
 
-    const points = transformToCamelCase(result.rows) as RoutePointRow[];
-    return this.orderRoutePoints(points);
+    return transformToCamelCase(result.rows);
   }
 
   async startTrip(payload: StartTripDto) {
@@ -730,7 +727,7 @@ export class CtDriverService {
       limit 1
     `)) as unknown as { rows: ScheduleRow[] };
 
-    const schedules = transformToCamelCase(result.rows) as ScheduleRow[];
+    const schedules = transformToCamelCase(result.rows);
     return schedules[0] ?? null;
   }
 
@@ -786,10 +783,15 @@ export class CtDriverService {
   private buildTripPlanMap(
     trips: Array<DriverScheduleRow & { passengerCount: number }>,
     plannedDepartures: Date[],
+    routeDurationMin: number,
   ) {
     const map = new Map<
       number,
-      { plannedStartAt: string | null; startDelayMin: number | null }
+      {
+        plannedStartAt: string | null;
+        plannedEndsAt: string | null;
+        startDelayMin: number | null;
+      }
     >();
     if (!plannedDepartures.length) {
       return map;
@@ -797,7 +799,11 @@ export class CtDriverService {
 
     for (const trip of trips) {
       if (!(trip.startsAt instanceof Date)) {
-        map.set(trip.id, { plannedStartAt: null, startDelayMin: null });
+        map.set(trip.id, {
+          plannedStartAt: null,
+          plannedEndsAt: null,
+          startDelayMin: null,
+        });
         continue;
       }
       let best: Date | null = null;
@@ -811,8 +817,13 @@ export class CtDriverService {
         }
       }
 
+      const plannedEndsAt = best
+        ? new Date(best.getTime() + routeDurationMin * 60 * 1000)
+        : null;
+
       map.set(trip.id, {
         plannedStartAt: best ? best.toISOString() : null,
+        plannedEndsAt: plannedEndsAt ? plannedEndsAt.toISOString() : null,
         startDelayMin: best
           ? Math.round((trip.startsAt.getTime() - best.getTime()) / 60000)
           : null,

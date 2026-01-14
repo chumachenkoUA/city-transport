@@ -23,39 +23,30 @@ describe('CtPassenger (e2e)', () => {
     );
     token = login.token;
 
-    const cardsResponse = await request(app.getHttpServer())
-      .get('/passenger/cards')
+    const cardResponse = await request(app.getHttpServer())
+      .get('/passenger/card')
       .set(authHeader(token))
       .expect(200);
-    const cards = cardsResponse.body as Array<{
+    const card = cardResponse.body as {
       id?: number;
-      card_number?: string;
-    }>;
-    const primary =
-      cards.find((item) => item.card_number === seed.passenger.cardNumber) ??
-      cards[0];
-    cardId = Number(primary?.id ?? seed.passenger.cardId);
-    cardNumber = primary?.card_number ?? seed.passenger.cardNumber;
+      cardNumber?: string;
+    };
+    cardId = Number(card?.id ?? seed.passenger.cardId);
+    cardNumber = card?.cardNumber ?? seed.passenger.cardNumber;
   });
 
   afterAll(async () => {
     await releaseTestApp();
   });
 
-  it('lists passenger cards', async () => {
+  it('gets passenger card', async () => {
     const response = await request(app.getHttpServer())
-      .get('/passenger/cards')
+      .get('/passenger/card')
       .set(authHeader(token))
       .expect(200);
 
-    expect(Array.isArray(response.body)).toBe(true);
-    const cards = response.body as Array<{
-      id?: number;
-      card_number?: string;
-    }>;
-    expect(
-      cards.some((item) => item.card_number === seed.passenger.cardNumber),
-    ).toBe(true);
+    expect(response.body).toHaveProperty('cardNumber');
+    expect(response.body.cardNumber).toBe(seed.passenger.cardNumber);
   });
 
   it('tops up a card', async () => {
@@ -158,7 +149,7 @@ describe('CtPassenger (e2e)', () => {
       .post('/passenger/complaints')
       .set(authHeader(token))
       .send({
-        type: 'Complaint',
+        type: 'complaint',
         message: 'Passenger complaint',
         routeNumber: seed.routeNumber,
         transportType: seed.transportTypeName,

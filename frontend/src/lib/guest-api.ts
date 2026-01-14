@@ -29,6 +29,15 @@ export interface Stop {
   distanceM?: number;
 }
 
+export interface RouteStop {
+  id: number;           // route_stops table ID
+  stopId: number;       // actual stop ID
+  stopName: string;
+  lon: string;
+  lat: string;
+  distanceToNextKm: string | null;
+}
+
 export interface RouteGeometry {
   routeId: number;
   number: string;
@@ -82,7 +91,7 @@ export function getRouteStops(params: {
   routeId: number;
   direction?: string;
 }) {
-  return apiGet<Stop[]>('/guest/routes/stops', params);
+  return apiGet<RouteStop[]>('/guest/routes/stops', params);
 }
 
 export function getRouteGeometry(params: {

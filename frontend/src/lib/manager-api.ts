@@ -94,11 +94,6 @@ export function addVehicle(payload: CreateVehiclePayload) {
 
 export type StaffRole = 'dispatcher' | 'controller' | 'accountant' | 'municipality' | 'manager'
 
-export type StaffRoleInfo = {
-  role_name: string
-  description: string
-}
-
 export type CreateStaffUserPayload = {
   login: string
   password: string
@@ -106,10 +101,6 @@ export type CreateStaffUserPayload = {
   fullName?: string
   email?: string
   phone?: string
-}
-
-export function getStaffRoles() {
-  return apiGet<StaffRoleInfo[]>('/manager/staff-roles')
 }
 
 export function createStaffUser(payload: CreateStaffUserPayload) {

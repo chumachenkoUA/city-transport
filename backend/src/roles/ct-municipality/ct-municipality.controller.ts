@@ -77,6 +77,26 @@ export class CtMunicipalityController {
     return this.ctMunicipalityService.getPassengerFlow(query);
   }
 
+  @Get('passenger-flow/detailed')
+  getPassengerFlowDetailed(@Query() query: PassengerFlowQueryDto) {
+    return this.ctMunicipalityService.getPassengerFlowDetailed(query);
+  }
+
+  @Get('passenger-flow/top-routes')
+  getTopRoutes(@Query() query: PassengerFlowQueryDto) {
+    return this.ctMunicipalityService.getTopRoutes(query);
+  }
+
+  @Get('passenger-flow/trend')
+  getPassengerTrend(@Query() query: PassengerFlowQueryDto) {
+    return this.ctMunicipalityService.getPassengerTrend(query);
+  }
+
+  @Get('passenger-flow/summary')
+  getFlowSummary(@Query() query: PassengerFlowQueryDto) {
+    return this.ctMunicipalityService.getFlowSummary(query);
+  }
+
   @Get('complaints')
   getComplaints(@Query() query: MunicipalityComplaintsQueryDto) {
     return this.ctMunicipalityService.getComplaints(query);

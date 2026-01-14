@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import { IsTimeAfter } from '../../../common/validators';
 
 export class CreateScheduleDto {

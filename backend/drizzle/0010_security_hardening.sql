@@ -112,7 +112,7 @@ GRANT EXECUTE ON FUNCTION municipality_api.update_complaint_status(bigint, text)
 -- 10. ACCOUNTANT_API - Financial management
 GRANT EXECUTE ON FUNCTION accountant_api.upsert_budget(date, numeric, numeric, text) TO ct_accountant_role;
 GRANT EXECUTE ON FUNCTION accountant_api.add_expense(text, numeric, text, text, timestamp) TO ct_accountant_role;
-GRANT EXECUTE ON FUNCTION accountant_api.pay_salary(bigint, text, text, numeric, integer, numeric) TO ct_accountant_role;
+GRANT EXECUTE ON FUNCTION accountant_api.pay_salary(bigint, numeric, integer, numeric) TO ct_accountant_role;
 GRANT EXECUTE ON FUNCTION accountant_api.get_financial_report(date, date) TO ct_accountant_role;
 GRANT EXECUTE ON FUNCTION accountant_api.calculate_driver_salary(bigint, date) TO ct_accountant_role;
 

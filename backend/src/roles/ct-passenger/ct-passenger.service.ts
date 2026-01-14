@@ -133,14 +133,16 @@ export class CtPassengerService {
     const result = (await this.dbService.db.execute(sql`
       SELECT id, login, full_name, email, phone, registered_at
       FROM passenger_api.v_my_profile
-    `)) as unknown as { rows: Array<{
-      id: number;
-      login: string;
-      full_name: string;
-      email: string;
-      phone: string;
-      registered_at: string;
-    }> };
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        login: string;
+        full_name: string;
+        email: string;
+        phone: string;
+        registered_at: string;
+      }>;
+    };
 
     const row = result.rows[0];
     if (!row) {

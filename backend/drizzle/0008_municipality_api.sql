@@ -113,14 +113,23 @@ BEGIN
         FROM public.route_points next_p
         JOIN ordered_points op ON next_p.prev_route_point_id = op.id
     ),
+    -- Step 1: Get previous point coordinates using LAG
+    points_with_prev AS (
+        SELECT id, route_id, lon, lat, sort_order,
+               LAG(lon) OVER (ORDER BY sort_order) AS prev_lon,
+               LAG(lat) OVER (ORDER BY sort_order) AS prev_lat
+        FROM ordered_points
+    ),
+    -- Step 2: Calculate segment distance, then cumulative distance
     point_distances AS (
         SELECT id, route_id, lon, lat, sort_order,
-               SUM(COALESCE(ST_DistanceSphere(
-                   ST_MakePoint(lon::double precision, lat::double precision),
-                   ST_MakePoint(LAG(lon) OVER (ORDER BY sort_order)::double precision,
-                                LAG(lat) OVER (ORDER BY sort_order)::double precision)
-               ), 0)) OVER (ORDER BY sort_order) / 1000.0 AS distance_km
-        FROM ordered_points
+               SUM(COALESCE(
+                   ST_DistanceSphere(
+                       ST_MakePoint(lon::double precision, lat::double precision),
+                       ST_MakePoint(prev_lon::double precision, prev_lat::double precision)
+                   ), 0
+               )) OVER (ORDER BY sort_order) / 1000.0 AS distance_km
+        FROM points_with_prev
     ),
     ordered_stops AS (
         SELECT rs.id, rs.stop_id, rs.prev_route_stop_id, rs.next_route_stop_id, 1 AS sort_order
@@ -290,3 +299,149 @@ GRANT SELECT ON municipality_api.v_passenger_flow_analytics TO ct_municipality_r
 GRANT SELECT ON municipality_api.v_complaints_dashboard TO ct_municipality_role;
 GRANT EXECUTE ON FUNCTION municipality_api.set_route_active(bigint, boolean) TO ct_municipality_role;
 GRANT EXECUTE ON FUNCTION municipality_api.update_complaint_status(bigint, text) TO ct_municipality_role;
+
+-- ============================================
+-- 8. PASSENGER FLOW ANALYTICS (with analytical functions)
+-- ============================================
+
+-- 8.1 BASE FACT VIEW (without aggregation - allows filtering)
+-- Uses LATERAL join to get vehicle at time of trip
+CREATE OR REPLACE VIEW municipality_api.v_trip_passenger_fact AS
+SELECT
+  t.id AS trip_id,
+  t.actual_starts_at::date AS trip_date,
+  t.actual_starts_at AS trip_datetime,
+  t.route_id,
+  r.number AS route_number,
+  r.transport_type_id,
+  tt.name AS transport_type,
+  COALESCE(t.passenger_count, 0) AS passenger_count,
+  t.driver_id,
+  v.fleet_number
+FROM public.trips t
+JOIN public.routes r ON r.id = t.route_id
+JOIN public.transport_types tt ON tt.id = r.transport_type_id
+LEFT JOIN LATERAL (
+  SELECT dva.vehicle_id
+  FROM public.driver_vehicle_assignments dva
+  WHERE dva.driver_id = t.driver_id
+    AND dva.assigned_at <= t.actual_starts_at
+  ORDER BY dva.assigned_at DESC
+  LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
+WHERE t.status = 'completed' AND t.actual_starts_at IS NOT NULL;
+
+-- 8.2 TOP ROUTES FUNCTION with RANK()
+CREATE OR REPLACE FUNCTION municipality_api.get_top_routes(
+  p_from date,
+  p_to date,
+  p_transport_type_id integer DEFAULT NULL,
+  p_limit integer DEFAULT 5
+)
+RETURNS TABLE (
+  route_number text,
+  transport_type text,
+  total_passengers bigint,
+  rank integer
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+  SELECT route_number, transport_type, total_passengers, rnk::integer
+  FROM (
+    SELECT
+      f.route_number,
+      f.transport_type,
+      COALESCE(SUM(f.passenger_count), 0)::bigint AS total_passengers,
+      RANK() OVER (ORDER BY COALESCE(SUM(f.passenger_count), 0) DESC) AS rnk
+    FROM municipality_api.v_trip_passenger_fact f
+    WHERE f.trip_date BETWEEN p_from AND p_to
+      AND (p_transport_type_id IS NULL OR f.transport_type_id = p_transport_type_id)
+    GROUP BY f.route_number, f.transport_type
+  ) x
+  WHERE rnk <= p_limit
+  ORDER BY rnk, total_passengers DESC;
+$$;
+
+-- 8.3 DAILY TREND with 7-day MOVING AVERAGE using AVG() OVER
+CREATE OR REPLACE FUNCTION municipality_api.get_passenger_trend(
+  p_from date,
+  p_to date,
+  p_route_number text DEFAULT NULL,
+  p_transport_type_id integer DEFAULT NULL
+)
+RETURNS TABLE (
+  trip_date date,
+  daily_passengers bigint,
+  moving_avg_7d integer
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+  SELECT
+    trip_date,
+    daily_passengers,
+    AVG(daily_passengers) OVER (
+      ORDER BY trip_date
+      ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    )::integer AS moving_avg_7d
+  FROM (
+    SELECT
+      f.trip_date,
+      COALESCE(SUM(f.passenger_count), 0)::bigint AS daily_passengers
+    FROM municipality_api.v_trip_passenger_fact f
+    WHERE f.trip_date BETWEEN p_from AND p_to
+      AND (p_route_number IS NULL OR f.route_number = p_route_number)
+      AND (p_transport_type_id IS NULL OR f.transport_type_id = p_transport_type_id)
+    GROUP BY f.trip_date
+  ) daily
+  ORDER BY trip_date;
+$$;
+
+-- 8.4 SUMMARY METRICS FUNCTION
+CREATE OR REPLACE FUNCTION municipality_api.get_flow_summary(
+  p_from date,
+  p_to date,
+  p_route_number text DEFAULT NULL,
+  p_transport_type_id integer DEFAULT NULL
+)
+RETURNS TABLE (
+  total_passengers bigint,
+  total_trips bigint,
+  avg_per_trip numeric,
+  avg_per_day numeric
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+  SELECT
+    COALESCE(SUM(f.passenger_count), 0)::bigint,
+    COALESCE(COUNT(*), 0)::bigint,
+    COALESCE(ROUND(AVG(f.passenger_count), 1), 0),
+    COALESCE(
+      ROUND(SUM(f.passenger_count)::numeric / NULLIF(COUNT(DISTINCT f.trip_date), 0), 1),
+      0
+    )
+  FROM municipality_api.v_trip_passenger_fact f
+  WHERE f.trip_date BETWEEN p_from AND p_to
+    AND (p_route_number IS NULL OR f.route_number = p_route_number)
+    AND (p_transport_type_id IS NULL OR f.transport_type_id = p_transport_type_id);
+$$;
+
+-- 8.5 PERFORMANCE INDEXES
+CREATE INDEX IF NOT EXISTS idx_trips_status_actual_starts
+  ON public.trips(status, actual_starts_at)
+  WHERE status = 'completed' AND actual_starts_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trips_route_id
+  ON public.trips(route_id);
+
+CREATE INDEX IF NOT EXISTS idx_dva_driver_assigned
+  ON public.driver_vehicle_assignments(driver_id, assigned_at DESC);
+
+-- 8.6 GRANTS FOR NEW OBJECTS
+GRANT SELECT ON municipality_api.v_trip_passenger_fact TO ct_municipality_role;
+GRANT EXECUTE ON FUNCTION municipality_api.get_top_routes(date, date, integer, integer) TO ct_municipality_role;
+GRANT EXECUTE ON FUNCTION municipality_api.get_passenger_trend(date, date, text, integer) TO ct_municipality_role;
+GRANT EXECUTE ON FUNCTION municipality_api.get_flow_summary(date, date, text, integer) TO ct_municipality_role;

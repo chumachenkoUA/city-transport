@@ -164,7 +164,9 @@ export class CtManagerService {
     const result = (await this.dbService.db.execute(sql`
       SELECT role_name, description
       FROM manager_api.v_staff_roles
-    `)) as unknown as { rows: Array<{ role_name: string; description: string }> };
+    `)) as unknown as {
+      rows: Array<{ role_name: string; description: string }>;
+    };
 
     return result.rows;
   }

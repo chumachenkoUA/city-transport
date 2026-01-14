@@ -39,11 +39,12 @@ export type Vehicle = {
 
 export type ControllerTrip = {
   tripId: number
-  startsAt: string
-  endsAt: string | null
+  plannedStartsAt: string
+  actualStartsAt: string | null
   routeNumber: string
   transportType: string
   driverName: string
+  status: string
 }
 
 export function getRoutes() {

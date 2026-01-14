@@ -44,6 +44,7 @@ import {
   Calendar,
   Locate,
   X,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -119,6 +120,7 @@ function MapPage() {
     () => new Set()
   );
   const [showAllRoutes, setShowAllRoutes] = useState(false);
+  const [routeSearchQuery, setRouteSearchQuery] = useState('');
   const [clickedStopId, setClickedStopId] = useState<number | null>(null);
   const [selectedStop, setSelectedStop] = useState<StopGeometry | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState(true);
@@ -194,6 +196,16 @@ function MapPage() {
     return groupRoutesByNumber(routes);
   }, [routes]);
 
+  // Filter routes by search query
+  const filteredGroupedRoutes = useMemo(() => {
+    if (!routeSearchQuery.trim()) return groupedRoutes;
+    const query = routeSearchQuery.toLowerCase().trim();
+    return groupedRoutes.filter((group) =>
+      group.number.toLowerCase().includes(query) ||
+      group.transportTypeName.toLowerCase().includes(query)
+    );
+  }, [groupedRoutes, routeSearchQuery]);
+
   const routeIdToGroupKey = useMemo(() => {
     const map = new Map<number, string>();
     for (const group of groupedRoutes) {
@@ -242,8 +254,9 @@ function MapPage() {
     const stopIds = new Set<number>();
     for (const query of routeStopsQueries) {
       if (query.data) {
-        for (const stop of query.data) {
-          stopIds.add(stop.id);
+        for (const routeStop of query.data) {
+          // Use stopId (the actual stop ID), not id (route_stops junction table ID)
+          stopIds.add(routeStop.stopId);
         }
       }
     }
@@ -632,13 +645,35 @@ function MapPage() {
             </div>
 
             {/* Routes List */}
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto flex flex-col">
+              {/* Search input */}
+              <div className="p-3 border-b">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Пошук маршруту..."
+                    value={routeSearchQuery}
+                    onChange={(e) => setRouteSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {routeSearchQuery && (
+                    <button
+                      onClick={() => setRouteSearchQuery('')}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                    >
+                      <X className="h-4 w-4 text-gray-400" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <button
                 className="w-full px-4 py-3 flex items-center justify-between text-left border-b hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={() => setExpandedRoutes(!expandedRoutes)}
               >
                 <span className="font-medium text-gray-900 dark:text-white">
-                  Маршрути ({groupedRoutes.length})
+                  Маршрути ({filteredGroupedRoutes.length}{routeSearchQuery ? ` з ${groupedRoutes.length}` : ''})
                 </span>
                 {expandedRoutes ? (
                   <ChevronUp className="h-4 w-4 text-gray-500" />
@@ -648,14 +683,29 @@ function MapPage() {
               </button>
 
               {expandedRoutes && (
-                <div className="divide-y dark:divide-gray-700">
+                <div className="divide-y dark:divide-gray-700 flex-1 overflow-auto">
                   {routesLoading && (
                     <div className="p-4 text-center">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-500" />
                     </div>
                   )}
 
-                  {groupedRoutes?.map((group) => {
+                  {filteredGroupedRoutes.length === 0 && !routesLoading && (
+                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                      <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">Маршрути не знайдено</p>
+                      {routeSearchQuery && (
+                        <button
+                          onClick={() => setRouteSearchQuery('')}
+                          className="mt-2 text-blue-500 hover:text-blue-600 text-sm"
+                        >
+                          Очистити пошук
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {filteredGroupedRoutes.map((group) => {
                     const groupKey = `${group.number}-${group.transportTypeId}`;
                     const isSelected = selectedRouteNumbers.has(groupKey);
                     const isDisabled = showAllRoutes;
@@ -712,7 +762,7 @@ function MapPage() {
 
                           {group.intervalMin && (
                             <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                              ~{group.intervalMin} хв
+                              ≈{group.intervalMin} хв
                             </span>
                           )}
 
@@ -768,7 +818,7 @@ function MapPage() {
                                       </span>
                                     </div>
                                     <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">
-                                      ~{sidebarSchedule.schedule.intervalMin} хв
+                                      ≈{sidebarSchedule.schedule.intervalMin} хв
                                     </span>
                                   </div>
 
@@ -1013,7 +1063,7 @@ function MapPage() {
                                       </span>
                                     ) : route.intervalMin ? (
                                       <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                                        ~{route.intervalMin} хв
+                                        ≈{route.intervalMin} хв
                                       </span>
                                     ) : null}
                                     <button
@@ -1157,7 +1207,7 @@ function MapPage() {
                                       </span>
                                     ) : route.intervalMin ? (
                                       <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                                        ~{route.intervalMin} хв
+                                        ≈{route.intervalMin} хв
                                       </span>
                                     ) : null}
                                     <button

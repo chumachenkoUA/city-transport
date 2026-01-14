@@ -156,7 +156,7 @@ export function ScheduleModal({
                 <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded">
                   <span className="text-sm text-muted-foreground">Інтервал:</span>
                   <span className="font-bold text-blue-600 dark:text-blue-400">
-                    ~{scheduleData.schedule.intervalMin} хв
+                    ≈{scheduleData.schedule.intervalMin} хв
                   </span>
                 </div>
               </div>

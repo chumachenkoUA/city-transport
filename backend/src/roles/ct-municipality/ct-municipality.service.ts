@@ -57,6 +57,35 @@ type PassengerFlowRow = {
   passengerCount: number;
 };
 
+type FlowDetailedRow = {
+  tripId: number;
+  tripDate: string;
+  routeNumber: string;
+  transportType: string;
+  fleetNumber: string | null;
+  passengerCount: number;
+};
+
+type TopRouteRow = {
+  routeNumber: string;
+  transportType: string;
+  totalPassengers: number;
+  rank: number;
+};
+
+type TrendRow = {
+  tripDate: string;
+  dailyPassengers: number;
+  movingAvg7d: number;
+};
+
+type FlowSummaryRow = {
+  totalPassengers: number;
+  totalTrips: number;
+  avgPerTrip: number;
+  avgPerDay: number;
+};
+
 type ComplaintRow = {
   id: number;
   type: string;
@@ -144,7 +173,7 @@ export class CtMunicipalityService {
       order by number
     `)) as unknown as { rows: RouteRow[] };
 
-    return transformToCamelCase(result.rows) as RouteRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async listRouteStops(routeId: number) {
@@ -163,7 +192,7 @@ export class CtMunicipalityService {
       where route_id = ${routeId}
     `)) as unknown as { rows: RouteStopRow[] };
 
-    const stops = transformToCamelCase(result.rows) as RouteStopRow[];
+    const stops = transformToCamelCase(result.rows);
     return this.orderRouteStops(stops);
   }
 
@@ -180,7 +209,7 @@ export class CtMunicipalityService {
       where route_id = ${routeId}
     `)) as unknown as { rows: RoutePointRow[] };
 
-    const points = transformToCamelCase(result.rows) as RoutePointRow[];
+    const points = transformToCamelCase(result.rows);
     return this.orderRoutePoints(points);
   }
 
@@ -250,7 +279,85 @@ export class CtMunicipalityService {
       order by v.trip_date desc
     `)) as unknown as { rows: PassengerFlowRow[] };
 
-    return transformToCamelCase(result.rows) as PassengerFlowRow[];
+    return transformToCamelCase(result.rows);
+  }
+
+  // ===== NEW ANALYTICS METHODS =====
+
+  async getPassengerFlowDetailed(query: PassengerFlowQueryDto) {
+    const { from, to } = this.parsePeriod(query);
+    const routeNumber = query.routeNumber ?? null;
+    const transportTypeId = query.transportTypeId ?? null;
+
+    const result = (await this.dbService.db.execute(sql`
+      select
+        trip_id,
+        trip_date,
+        route_number,
+        transport_type,
+        fleet_number,
+        passenger_count
+      from municipality_api.v_trip_passenger_fact
+      where trip_date between ${from}::date and ${to}::date
+        and (${routeNumber}::text is null or route_number = ${routeNumber})
+        and (${transportTypeId}::integer is null or transport_type_id = ${transportTypeId})
+      order by trip_date desc, trip_id desc
+    `)) as unknown as { rows: FlowDetailedRow[] };
+
+    return transformToCamelCase(result.rows);
+  }
+
+  async getTopRoutes(query: PassengerFlowQueryDto) {
+    const { from, to } = this.parsePeriod(query);
+    const transportTypeId = query.transportTypeId ?? null;
+
+    const result = (await this.dbService.db.execute(sql`
+      select * from municipality_api.get_top_routes(
+        ${from}::date,
+        ${to}::date,
+        ${transportTypeId}::integer,
+        5
+      )
+    `)) as unknown as { rows: TopRouteRow[] };
+
+    return transformToCamelCase(result.rows);
+  }
+
+  async getPassengerTrend(query: PassengerFlowQueryDto) {
+    const { from, to } = this.parsePeriod(query);
+    const routeNumber = query.routeNumber ?? null;
+    const transportTypeId = query.transportTypeId ?? null;
+
+    const result = (await this.dbService.db.execute(sql`
+      select * from municipality_api.get_passenger_trend(
+        ${from}::date,
+        ${to}::date,
+        ${routeNumber}::text,
+        ${transportTypeId}::integer
+      )
+    `)) as unknown as { rows: TrendRow[] };
+
+    return transformToCamelCase(result.rows);
+  }
+
+  async getFlowSummary(query: PassengerFlowQueryDto) {
+    const { from, to } = this.parsePeriod(query);
+    const routeNumber = query.routeNumber ?? null;
+    const transportTypeId = query.transportTypeId ?? null;
+
+    const result = (await this.dbService.db.execute(sql`
+      select * from municipality_api.get_flow_summary(
+        ${from}::date,
+        ${to}::date,
+        ${routeNumber}::text,
+        ${transportTypeId}::integer
+      )
+    `)) as unknown as { rows: FlowSummaryRow[] };
+
+    const row = result.rows[0];
+    return row
+      ? transformToCamelCase([row])[0]
+      : { totalPassengers: 0, totalTrips: 0, avgPerTrip: 0, avgPerDay: 0 };
   }
 
   async getComplaints(query: MunicipalityComplaintsQueryDto) {
@@ -294,7 +401,7 @@ export class CtMunicipalityService {
       order by v.created_at desc
     `)) as unknown as { rows: ComplaintRow[] };
 
-    return transformToCamelCase(result.rows) as ComplaintRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async setRouteActive(routeId: number, isActive: boolean) {
@@ -333,7 +440,7 @@ export class CtMunicipalityService {
       limit 1
     `)) as unknown as { rows: RouteRow[] };
 
-    const routes = transformToCamelCase(result.rows) as RouteRow[];
+    const routes = transformToCamelCase(result.rows);
     return routes[0] ?? null;
   }
 

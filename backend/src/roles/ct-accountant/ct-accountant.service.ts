@@ -57,10 +57,40 @@ export class CtAccountantService {
   }
 
   async getExpenses(query: ExpensesQueryDto) {
-    const result = (await this.dbService.db.execute(sql`
-      select * from accountant_api.v_expenses
-      limit ${query.limit ?? 50}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+
+    // Build dynamic query with optional filters
+    let result;
+    if (query.from && query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_expenses
+        where occurred_at >= ${query.from}::date
+          and occurred_at < (${query.to}::date + interval '1 day')
+        order by occurred_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.from) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_expenses
+        where occurred_at >= ${query.from}::date
+        order by occurred_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_expenses
+        where occurred_at < (${query.to}::date + interval '1 day')
+        order by occurred_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_expenses
+        order by occurred_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    }
     return result.rows;
   }
 
@@ -78,11 +108,43 @@ export class CtAccountantService {
   }
 
   async getSalaries(query: SalariesQueryDto) {
-    const result = (await this.dbService.db.execute(sql`
-      select id, paid_at, driver_id, driver_name, license_number, rate, units, total
-      from accountant_api.v_salary_history
-      limit ${query.limit ?? 50}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+
+    let result;
+    if (query.from && query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select id, paid_at, driver_id, driver_name, license_number, rate, units, total
+        from accountant_api.v_salary_history
+        where paid_at >= ${query.from}::date
+          and paid_at < (${query.to}::date + interval '1 day')
+        order by paid_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.from) {
+      result = (await this.dbService.db.execute(sql`
+        select id, paid_at, driver_id, driver_name, license_number, rate, units, total
+        from accountant_api.v_salary_history
+        where paid_at >= ${query.from}::date
+        order by paid_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select id, paid_at, driver_id, driver_name, license_number, rate, units, total
+        from accountant_api.v_salary_history
+        where paid_at < (${query.to}::date + interval '1 day')
+        order by paid_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else {
+      result = (await this.dbService.db.execute(sql`
+        select id, paid_at, driver_id, driver_name, license_number, rate, units, total
+        from accountant_api.v_salary_history
+        order by paid_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    }
     return result.rows;
   }
 
@@ -91,7 +153,13 @@ export class CtAccountantService {
       select id, full_name, driver_license_number
       from accountant_api.v_drivers_list
       order by full_name
-    `)) as unknown as { rows: Array<{ id: number; full_name: string; driver_license_number: string }> };
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        full_name: string;
+        driver_license_number: string;
+      }>;
+    };
     return result.rows;
   }
 

@@ -7,9 +7,7 @@ import {
 } from 'class-validator';
 
 @ValidatorConstraint({ async: false })
-export class SalaryTotalMatchesConstraint
-  implements ValidatorConstraintInterface
-{
+export class SalaryTotalMatchesConstraint implements ValidatorConstraintInterface {
   validate(total: number, args: ValidationArguments) {
     const obj = args.object as { rate?: number; units?: number };
     const { rate, units } = obj;

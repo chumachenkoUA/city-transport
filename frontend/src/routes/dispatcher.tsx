@@ -117,11 +117,21 @@ function DispatcherPage() {
 
   // Trips form
   const [tripRouteId, setTripRouteId] = useState('')
-  const [tripVehicleId, setTripVehicleId] = useState('')
   const [tripDriverId, setTripDriverId] = useState('')
   const [tripPlannedStart, setTripPlannedStart] = useState('')
   const [tripPlannedEnd, setTripPlannedEnd] = useState('')
   const [tripStatusFilter, setTripStatusFilter] = useState<string>('all')
+  const [tripSearch, setTripSearch] = useState('')
+  const [tripDateFilter, setTripDateFilter] = useState('')
+  const [tripRouteFilter, setTripRouteFilter] = useState('')
+
+  // Schedules filters
+  const [scheduleSearch, setScheduleSearch] = useState('')
+  const [scheduleRouteFilter, setScheduleRouteFilter] = useState('')
+  const [scheduleTransportFilter, setScheduleTransportFilter] = useState('')
+
+  // Assignments filters
+  const [assignmentSearch, setAssignmentSearch] = useState('')
 
   // Generate trips form
   const [genRouteId, setGenRouteId] = useState('')
@@ -228,10 +238,11 @@ function DispatcherPage() {
     return vehicles.filter((v) => v.routeId === Number(updateRouteId))
   }, [vehicles, updateRouteId])
 
-  const tripVehicles = useMemo(() => {
-    if (!vehicles || !tripRouteId) return vehicles
-    return vehicles.filter((v) => v.routeId === Number(tripRouteId))
-  }, [vehicles, tripRouteId])
+  // Get vehicle assigned to selected driver
+  const selectedDriverAssignment = useMemo(() => {
+    if (!tripDriverId || !assignments) return null
+    return assignments.find((a) => a.driverId === Number(tripDriverId)) ?? null
+  }, [tripDriverId, assignments])
 
   const genVehicles = useMemo(() => {
     if (!vehicles || !genRouteId) return vehicles
@@ -247,6 +258,76 @@ function DispatcherPage() {
     if (!selectedAssignmentVehicle || !routes?.length) return null
     return routes.find((r) => r.id === selectedAssignmentVehicle.routeId) ?? null
   }, [routes, selectedAssignmentVehicle])
+
+  // Filtered trips
+  const filteredTrips = useMemo(() => {
+    if (!trips) return []
+    return trips.filter((trip) => {
+      // Text search
+      if (tripSearch) {
+        const search = tripSearch.toLowerCase()
+        const matchesSearch =
+          trip.routeNumber.toLowerCase().includes(search) ||
+          trip.fleetNumber.toLowerCase().includes(search) ||
+          trip.driverName.toLowerCase().includes(search)
+        if (!matchesSearch) return false
+      }
+      // Date filter
+      if (tripDateFilter) {
+        const tripDate = new Date(trip.plannedStartsAt).toISOString().split('T')[0]
+        if (tripDate !== tripDateFilter) return false
+      }
+      // Route filter
+      if (tripRouteFilter && trip.routeId !== Number(tripRouteFilter)) {
+        return false
+      }
+      return true
+    })
+  }, [trips, tripSearch, tripDateFilter, tripRouteFilter])
+
+  // Filtered schedules
+  const filteredSchedules = useMemo(() => {
+    if (!schedules) return []
+    return schedules.filter((schedule) => {
+      // Text search
+      if (scheduleSearch) {
+        const search = scheduleSearch.toLowerCase()
+        const matchesSearch =
+          schedule.routeNumber.toLowerCase().includes(search) ||
+          (schedule.fleetNumber?.toLowerCase().includes(search) ?? false)
+        if (!matchesSearch) return false
+      }
+      // Route filter
+      if (scheduleRouteFilter && schedule.routeId !== Number(scheduleRouteFilter)) {
+        return false
+      }
+      // Transport type filter
+      if (scheduleTransportFilter && schedule.transportType !== scheduleTransportFilter) {
+        return false
+      }
+      return true
+    })
+  }, [schedules, scheduleSearch, scheduleRouteFilter, scheduleTransportFilter])
+
+  // Filtered assignments
+  const filteredAssignments = useMemo(() => {
+    if (!assignments) return []
+    if (!assignmentSearch) return assignments
+    const search = assignmentSearch.toLowerCase()
+    return assignments.filter((a) =>
+      a.driverName.toLowerCase().includes(search) ||
+      a.driverLogin.toLowerCase().includes(search) ||
+      a.fleetNumber.toLowerCase().includes(search) ||
+      a.routeNumber.toLowerCase().includes(search)
+    )
+  }, [assignments, assignmentSearch])
+
+  // Get unique transport types for filter
+  const transportTypes = useMemo(() => {
+    if (!schedules) return []
+    const types = new Set(schedules.map((s) => s.transportType).filter(Boolean))
+    return Array.from(types)
+  }, [schedules])
 
   // Map data
   const routeCoordinates = useMemo(() => {
@@ -363,7 +444,6 @@ function DispatcherPage() {
       queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
       queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
       setTripRouteId('')
-      setTripVehicleId('')
       setTripDriverId('')
       setTripPlannedStart('')
       setTripPlannedEnd('')
@@ -476,13 +556,16 @@ function DispatcherPage() {
   }
 
   const handleCreateTrip = () => {
-    if (!tripRouteId || !tripVehicleId || !tripDriverId || !tripPlannedStart) {
+    if (!tripRouteId || !tripDriverId || !tripPlannedStart) {
       toast.error('Заповніть всі обов\'язкові поля')
+      return
+    }
+    if (!selectedDriverAssignment) {
+      toast.error('Водій не має призначеного транспорту')
       return
     }
     createTripMutation.mutate({
       routeId: Number(tripRouteId),
-      vehicleId: Number(tripVehicleId),
       driverId: Number(tripDriverId),
       plannedStartsAt: new Date(tripPlannedStart).toISOString(),
       plannedEndsAt: tripPlannedEnd ? new Date(tripPlannedEnd).toISOString() : undefined,
@@ -681,28 +764,6 @@ function DispatcherPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="trip-vehicle">Транспорт *</Label>
-                    <Select
-                      value={tripVehicleId}
-                      onValueChange={setTripVehicleId}
-                      disabled={!tripRouteId}
-                    >
-                      <SelectTrigger id="trip-vehicle">
-                        <SelectValue
-                          placeholder={tripRouteId ? 'Оберіть транспорт' : 'Спочатку оберіть маршрут'}
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tripVehicles?.map((vehicle) => (
-                          <SelectItem key={vehicle.id} value={String(vehicle.id)}>
-                            {vehicle.fleetNumber}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="trip-driver">Водій *</Label>
                     <Select value={tripDriverId} onValueChange={setTripDriverId}>
                       <SelectTrigger id="trip-driver">
@@ -716,6 +777,20 @@ function DispatcherPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Транспорт (авто)</Label>
+                    <Input
+                      value={selectedDriverAssignment?.fleetNumber || '—'}
+                      readOnly
+                      className="bg-muted cursor-not-allowed"
+                    />
+                    {tripDriverId && !selectedDriverAssignment && (
+                      <p className="text-sm text-destructive">
+                        Водій не має призначеного транспорту
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
@@ -871,32 +946,77 @@ function DispatcherPage() {
             {/* Trips List */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Список рейсів</CardTitle>
-                    <CardDescription>Заплановані та виконані рейси</CardDescription>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Список рейсів</CardTitle>
+                      <CardDescription>
+                        {filteredTrips.length} з {trips?.length || 0} рейсів
+                      </CardDescription>
+                    </div>
+                    {(tripSearch || tripDateFilter || tripRouteFilter || tripStatusFilter !== 'all') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setTripSearch('')
+                          setTripDateFilter('')
+                          setTripRouteFilter('')
+                          setTripStatusFilter('all')
+                        }}
+                      >
+                        Скинути фільтри
+                      </Button>
+                    )}
                   </div>
-                  <Select value={tripStatusFilter} onValueChange={setTripStatusFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Фільтр статусу" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Всі</SelectItem>
-                      <SelectItem value="scheduled">Заплановані</SelectItem>
-                      <SelectItem value="in_progress">Виконуються</SelectItem>
-                      <SelectItem value="completed">Завершені</SelectItem>
-                      <SelectItem value="cancelled">Скасовані</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Input
+                      placeholder="Пошук (маршрут, водій, борт)..."
+                      value={tripSearch}
+                      onChange={(e) => setTripSearch(e.target.value)}
+                      className="md:col-span-1"
+                    />
+                    <Input
+                      type="date"
+                      value={tripDateFilter}
+                      onChange={(e) => setTripDateFilter(e.target.value)}
+                      className="md:col-span-1"
+                    />
+                    <Select value={tripRouteFilter || '_all'} onValueChange={(v) => setTripRouteFilter(v === '_all' ? '' : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Всі маршрути" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Всі маршрути</SelectItem>
+                        {routes?.map((route) => (
+                          <SelectItem key={route.id} value={String(route.id)}>
+                            {route.number} • {directionLabels[route.direction]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={tripStatusFilter} onValueChange={setTripStatusFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Всі статуси" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Всі статуси</SelectItem>
+                        <SelectItem value="scheduled">Заплановані</SelectItem>
+                        <SelectItem value="in_progress">Виконуються</SelectItem>
+                        <SelectItem value="completed">Завершені</SelectItem>
+                        <SelectItem value="cancelled">Скасовані</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {tripsLoading ? (
                   <TableSkeleton rows={5} cols={8} />
-                ) : trips && trips.length > 0 ? (
-                  <div className="rounded-md border">
+                ) : filteredTrips.length > 0 ? (
+                  <div className="rounded-md border max-h-[600px] overflow-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>Маршрут</TableHead>
                           <TableHead>Транспорт</TableHead>
@@ -909,7 +1029,7 @@ function DispatcherPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {trips.map((trip) => (
+                        {filteredTrips.map((trip) => (
                           <TableRow key={trip.id}>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -1011,6 +1131,12 @@ function DispatcherPage() {
                       </TableBody>
                     </Table>
                   </div>
+                ) : trips && trips.length > 0 ? (
+                  <EmptyState
+                    icon={RouteIcon}
+                    title="Рейсів не знайдено"
+                    description="Змініть фільтри для пошуку рейсів"
+                  />
                 ) : (
                   <EmptyState
                     icon={RouteIcon}
@@ -1116,13 +1242,67 @@ function DispatcherPage() {
 
               {/* Schedule List & Update */}
               <div className="space-y-4">
-                <h3 className="text-heading-md">Список розкладів</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-heading-md">Список розкладів</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {filteredSchedules.length} з {schedules?.length || 0}
+                  </span>
+                </div>
+
+                {/* Schedules filters */}
+                <div className="grid gap-3 md:grid-cols-4">
+                  <Input
+                    placeholder="Пошук (маршрут, борт)..."
+                    value={scheduleSearch}
+                    onChange={(e) => setScheduleSearch(e.target.value)}
+                  />
+                  <Select value={scheduleRouteFilter || '_all'} onValueChange={(v) => setScheduleRouteFilter(v === '_all' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Всі маршрути" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">Всі маршрути</SelectItem>
+                      {routes?.map((route) => (
+                        <SelectItem key={route.id} value={String(route.id)}>
+                          {route.number} • {directionLabels[route.direction]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={scheduleTransportFilter || '_all'} onValueChange={(v) => setScheduleTransportFilter(v === '_all' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Всі типи" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">Всі типи</SelectItem>
+                      {transportTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(scheduleSearch || scheduleRouteFilter || scheduleTransportFilter) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setScheduleSearch('')
+                        setScheduleRouteFilter('')
+                        setScheduleTransportFilter('')
+                      }}
+                    >
+                      Скинути
+                    </Button>
+                  )}
+                </div>
+
                 {schedulesLoading ? (
                   <TableSkeleton rows={5} cols={6} />
-                ) : schedules && schedules.length > 0 ? (
-                  <div className="rounded-md border">
+                ) : filteredSchedules.length > 0 ? (
+                  <div className="rounded-md border max-h-[400px] overflow-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>Маршрут</TableHead>
                           <TableHead>Напрямок</TableHead>
@@ -1133,7 +1313,7 @@ function DispatcherPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {schedules.map((schedule) => (
+                        {filteredSchedules.map((schedule) => (
                           <TableRow
                             key={schedule.id}
                             className={
@@ -1183,6 +1363,12 @@ function DispatcherPage() {
                       </TableBody>
                     </Table>
                   </div>
+                ) : schedules && schedules.length > 0 ? (
+                  <EmptyState
+                    icon={Calendar}
+                    title="Розкладів не знайдено"
+                    description="Змініть фільтри для пошуку"
+                  />
                 ) : (
                   <EmptyState
                     icon={Calendar}
@@ -1426,11 +1612,23 @@ function DispatcherPage() {
 
               {/* Assignments List */}
               <div className="space-y-4">
-                <h3 className="text-heading-md">Список призначень</h3>
-                {assignments && assignments.length > 0 ? (
-                  <div className="rounded-md border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-heading-md">Список призначень</h3>
+                  <span className="text-sm text-muted-foreground">
+                    {filteredAssignments.length} з {assignments?.length || 0}
+                  </span>
+                </div>
+
+                <Input
+                  placeholder="Пошук (водій, борт, маршрут)..."
+                  value={assignmentSearch}
+                  onChange={(e) => setAssignmentSearch(e.target.value)}
+                />
+
+                {filteredAssignments.length > 0 ? (
+                  <div className="rounded-md border max-h-[500px] overflow-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>Водій</TableHead>
                           <TableHead>Транспорт</TableHead>
@@ -1439,7 +1637,7 @@ function DispatcherPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {assignments.map((assignment) => (
+                        {filteredAssignments.map((assignment) => (
                           <TableRow key={assignment.id}>
                             <TableCell>
                               <div className="space-y-1">
@@ -1466,6 +1664,12 @@ function DispatcherPage() {
                       </TableBody>
                     </Table>
                   </div>
+                ) : assignments && assignments.length > 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title="Призначень не знайдено"
+                    description="Змініть пошуковий запит"
+                  />
                 ) : (
                   <EmptyState
                     icon={Users}

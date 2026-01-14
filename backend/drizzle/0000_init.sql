@@ -249,7 +249,9 @@ CREATE TABLE "schedules" (
 	"sunday" boolean DEFAULT false NOT NULL,
 	"valid_from" date,
 	"valid_to" date,
-	CONSTRAINT "schedules_interval_check" CHECK ("interval_min" > 0)
+	CONSTRAINT "schedules_interval_check" CHECK ("interval_min" > 0),
+	CONSTRAINT "schedules_time_check" CHECK ("work_end_time" > "work_start_time"),
+	CONSTRAINT "schedules_route_vehicle_period_unique" UNIQUE("route_id", "vehicle_id", "valid_from")
 );
 --> statement-breakpoint
 
@@ -497,3 +499,32 @@ ALTER TABLE "vehicle_gps_logs" ADD CONSTRAINT "vehicle_gps_logs_vehicle_id_vehic
 ALTER TABLE "vehicle_models" ADD CONSTRAINT "vehicle_models_type_id_transport_types_id_fk" FOREIGN KEY ("type_id") REFERENCES "public"."transport_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_vehicle_model_id_vehicle_models_id_fk" FOREIGN KEY ("vehicle_model_id") REFERENCES "public"."vehicle_models"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;
+
+-- ============================================================================
+-- UTILITY FUNCTIONS (public schema)
+-- ============================================================================
+-- Ці функції замінюють дублюючий TypeScript код в сервісах
+
+-- Distance calculation using PostGIS (replaces haversineKm in 3+ services)
+CREATE OR REPLACE FUNCTION public.distance_km(
+  lon1 numeric, lat1 numeric,
+  lon2 numeric, lat2 numeric
+) RETURNS numeric AS $$
+  SELECT COALESCE(ST_DistanceSphere(
+    ST_MakePoint(lon1::float, lat1::float),
+    ST_MakePoint(lon2::float, lat2::float)
+  ) / 1000.0, 0)::numeric;
+$$ LANGUAGE SQL IMMUTABLE;
+
+-- Time parsing: converts time to total minutes (replaces parseTimeToMinutes in 4+ services)
+CREATE OR REPLACE FUNCTION public.parse_time_to_minutes(time_val time)
+RETURNS numeric AS $$
+  SELECT EXTRACT(HOUR FROM time_val) * 60 + EXTRACT(MINUTE FROM time_val);
+$$ LANGUAGE SQL IMMUTABLE;
+
+-- Format minutes to HH:MM string (replaces formatMinutes in 3+ services)
+CREATE OR REPLACE FUNCTION public.format_minutes_to_time(total_minutes numeric)
+RETURNS text AS $$
+  SELECT LPAD((total_minutes::int / 60 % 24)::text, 2, '0') || ':' ||
+         LPAD((total_minutes::int % 60)::text, 2, '0');
+$$ LANGUAGE SQL IMMUTABLE;

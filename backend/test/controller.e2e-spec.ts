@@ -42,7 +42,7 @@ describe('CtController (e2e)', () => {
         cardNumber: seed.passenger.cardNumber,
         amount: 60,
         reason: 'No ticket',
-        fleetNumber: seed.vehicles[1].fleetNumber,
+        tripId: seed.trips.activeId, // Must be in_progress trip
       })
       .expect(201);
 

@@ -116,11 +116,6 @@ function minToTime(totalMin: number) {
     .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function formatDate(value: string | undefined) {
-  if (!value || value.length !== 8) return null;
-  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
-}
-
 function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -420,7 +415,8 @@ export async function seedDatabase() {
         }
 
         // 2. Stops (Representative Pattern)
-        const representativeTrip = tripCandidates[0];
+        // IMPORTANT: Use the same trip that was used for shapes to ensure consistency
+        const representativeTrip = tripWithShape || tripCandidates[0];
         const tripStops = representativeTrip
           ? stopTimesByTrip.get(representativeTrip.trip_id)
           : undefined;
@@ -851,18 +847,37 @@ export async function seedDatabase() {
       }
     }
 
-    for (let index = 0; index < vehicles.length; index++) {
-      const driverEntry = drivers[index % drivers.length];
-      if (!driverEntry) continue;
+    // Create 1:1 driver-vehicle mapping (each driver gets exactly ONE vehicle)
+    const driverVehicleMap = new Map<
+      number,
+      { vehicleId: number; routeId: number }
+    >();
+    const assignableCount = Math.min(vehicles.length, drivers.length);
+
+    for (let index = 0; index < assignableCount; index++) {
+      const driverEntry = drivers[index];
+      const vehicle = vehicles[index];
+      if (!driverEntry || !vehicle) continue;
+
       await db
         .insert(schema.driverVehicleAssignments)
         .values({
           driverId: driverEntry.id,
-          vehicleId: vehicles[index].id,
+          vehicleId: vehicle.id,
           assignedAt: new Date(),
         })
         .onConflictDoNothing();
+
+      // Store mapping for trip generation
+      driverVehicleMap.set(driverEntry.id, {
+        vehicleId: vehicle.id,
+        routeId: vehicle.routeId,
+      });
     }
+
+    console.log(
+      `   Assigned ${assignableCount} drivers to vehicles (1:1 mapping)`,
+    );
 
     // J. Passenger History (passenger1)
     console.log('🧾 Seeding passenger1 history...');
@@ -1064,17 +1079,23 @@ export async function seedDatabase() {
     const historicalTrips: Array<typeof schema.trips.$inferSelect> = [];
 
     if (someRoutes.length > 0 && vehicles.length > 0 && drivers.length > 0) {
-      const historicalTripCount = 120;
+      // Generate ~300 historical completed trips over last 30 days
+      const historicalTripCount = 300;
       const tripInserts: Array<typeof schema.trips.$inferInsert> = [];
 
+      // Build array of assigned drivers with their routes
+      const assignedDrivers = Array.from(driverVehicleMap.entries()).map(
+        ([driverId, assignment]) => ({
+          driverId,
+          routeId: assignment.routeId,
+        }),
+      );
+
       for (let i = 0; i < historicalTripCount; i++) {
-        const route = someRoutes[i % someRoutes.length];
-        const routeVehicles = vehiclesByRoute.get(route.id);
-        if (!routeVehicles || routeVehicles.length === 0) {
-          continue;
-        }
-        const vehicle = routeVehicles[i % routeVehicles.length];
-        const driverEntry = drivers[i % drivers.length];
+        // Use driver-route pairs from assignments (1:1 mapping)
+        const assignment = assignedDrivers[i % assignedDrivers.length];
+        if (!assignment) continue;
+
         const daysBack = randomInt(1, 30);
         const plannedStartsAt = daysAgo(daysBack);
         plannedStartsAt.setHours(randomInt(6, 22), randomInt(0, 50), 0, 0);
@@ -1088,8 +1109,8 @@ export async function seedDatabase() {
         const actualEndsAt = addMinutes(actualStartsAt, actualDuration);
 
         tripInserts.push({
-          routeId: route.id,
-          driverId: driverEntry.id,
+          routeId: assignment.routeId,
+          driverId: assignment.driverId,
           plannedStartsAt,
           plannedEndsAt,
           actualStartsAt,
@@ -1107,19 +1128,19 @@ export async function seedDatabase() {
         historicalTrips.push(...inserted);
       }
 
-      // Create 3 active trips with UNIQUE driver_id (partial unique index)
-      // Vehicle is determined by driver_vehicle_assignments
-      const activeTripsCount = Math.min(3, drivers.length);
+      // Create 3 active trips using driver-route assignments (1:1)
+      const activeTripsCount = Math.min(3, assignedDrivers.length);
       const usedDriverIds = new Set<number>();
 
       for (let i = 0; i < activeTripsCount; i++) {
-        const route = someRoutes[i % someRoutes.length];
+        // Find an assigned driver not already in use for active trips
+        const assignment = assignedDrivers.find(
+          (a) => !usedDriverIds.has(a.driverId),
+        );
+        if (!assignment) continue;
 
-        // Find a driver not already in use for active trips
-        const driverEntry = drivers.find((d) => !usedDriverIds.has(d.id));
-        if (!driverEntry) continue;
-
-        usedDriverIds.add(driverEntry.id);
+        usedDriverIds.add(assignment.driverId);
+        const vehicleInfo = driverVehicleMap.get(assignment.driverId);
 
         // Trip planned 30-40 minutes ago, started with 5-10 min delay
         const minutesAgo = 30 + i * 10; // 30, 40, 50 minutes ago
@@ -1131,8 +1152,8 @@ export async function seedDatabase() {
         const [activeTrip] = await db
           .insert(schema.trips)
           .values({
-            routeId: route.id,
-            driverId: driverEntry.id,
+            routeId: assignment.routeId, // Use driver's assigned route
+            driverId: assignment.driverId,
             plannedStartsAt,
             plannedEndsAt,
             actualStartsAt,
@@ -1142,74 +1163,100 @@ export async function seedDatabase() {
           })
           .returning();
 
-        // Get vehicle from driver's assignment for GPS logs
-        if (activeTrip) {
-          const assignmentResult = (await db.execute(sql`
-            SELECT vehicle_id FROM driver_vehicle_assignments
-            WHERE driver_id = ${driverEntry.id} LIMIT 1
-          `)) as unknown as { rows: Array<{ vehicle_id: number }> };
-          const vehicleId = assignmentResult.rows[0]?.vehicle_id;
+        // Generate GPS logs using the driver's assigned vehicle
+        if (activeTrip && vehicleInfo) {
+          const firstStopResult = (await db.execute(sql`
+            SELECT s.lon, s.lat
+            FROM ${sql.raw('route_stops')} rs
+            JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
+            WHERE rs.route_id = ${assignment.routeId}
+              AND rs.prev_route_stop_id IS NULL
+            LIMIT 1
+          `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
+          const firstStop = firstStopResult.rows[0];
 
-          if (vehicleId) {
-            const firstStopResult = (await db.execute(sql`
-              SELECT s.lon, s.lat
-              FROM ${sql.raw('route_stops')} rs
-              JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
-              WHERE rs.route_id = ${route.id}
-                AND rs.prev_route_stop_id IS NULL
-              LIMIT 1
-            `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
-            const firstStop = firstStopResult.rows[0];
-
-            if (firstStop?.lon && firstStop?.lat) {
-              for (let j = 0; j < 4; j++) {
-                await db.insert(schema.vehicleGpsLogs).values({
-                  vehicleId,
-                  lon: firstStop.lon,
-                  lat: firstStop.lat,
-                  recordedAt: addMinutes(new Date(), -j * 3),
-                });
-              }
+          if (firstStop?.lon && firstStop?.lat) {
+            for (let j = 0; j < 4; j++) {
+              await db.insert(schema.vehicleGpsLogs).values({
+                vehicleId: vehicleInfo.vehicleId,
+                lon: firstStop.lon,
+                lat: firstStop.lat,
+                recordedAt: addMinutes(new Date(), -j * 3),
+              });
             }
           }
         }
       }
 
-      // Create scheduled trips for today and tomorrow
-      console.log('📅 Seeding scheduled trips...');
+      // Create scheduled trips for today + 3 days ahead using driver-route assignments
+      console.log('📅 Seeding scheduled trips for 4 days...');
       const now = new Date();
-      const todayBase = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const currentHour = now.getHours();
+      const todayBase = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      );
       const scheduledTrips: Array<typeof schema.trips.$inferInsert> = [];
 
-      // Create ~20 scheduled trips for today (future hours) and tomorrow
-      for (let i = 0; i < 20; i++) {
-        const route = someRoutes[i % someRoutes.length];
-        const driverEntry = drivers[i % drivers.length];
+      // Schedule configuration
+      const workStartHour = 6;
+      const workEndHour = 22;
+      const intervalMinutes = 30; // Trip every 30 minutes
 
-        // First 10 trips - today (afternoon/evening hours), next 10 - tomorrow
-        const dayOffset = i < 10 ? 0 : 1;
-        const baseHour = i < 10 ? 14 + (i % 8) : 6 + (i % 12); // Today: 14-21, Tomorrow: 6-17
+      // Generate trips for 4 days (today + 3 days ahead)
+      for (let dayOffset = 0; dayOffset <= 3; dayOffset++) {
         const tripDate = new Date(todayBase);
         tripDate.setDate(tripDate.getDate() + dayOffset);
-        tripDate.setHours(baseHour, (i * 17) % 60, 0, 0);
 
-        const plannedStartsAt = tripDate;
-        const plannedEndsAt = addMinutes(plannedStartsAt, randomInt(30, 50));
+        // For today, start from next hour; for future days, start from workStartHour
+        const startHour =
+          dayOffset === 0
+            ? Math.max(currentHour + 1, workStartHour)
+            : workStartHour;
 
-        scheduledTrips.push({
-          routeId: route.id,
-          driverId: driverEntry.id,
-          plannedStartsAt,
-          plannedEndsAt,
-          actualStartsAt: null, // Not started yet
-          actualEndsAt: null,
-          status: 'scheduled',
-          passengerCount: 0,
-        });
+        // Generate trips at regular intervals
+        for (let hour = startHour; hour < workEndHour; hour++) {
+          for (let minute = 0; minute < 60; minute += intervalMinutes) {
+            // Use driver-route pairs from assignments (1:1 mapping)
+            const tripIndex = scheduledTrips.length;
+            const assignment =
+              assignedDrivers[tripIndex % assignedDrivers.length];
+            if (!assignment) continue;
+
+            const plannedStartsAt = new Date(tripDate);
+            plannedStartsAt.setHours(hour, minute, 0, 0);
+
+            // Skip if this time is in the past
+            if (plannedStartsAt <= now) continue;
+
+            const plannedEndsAt = addMinutes(
+              plannedStartsAt,
+              randomInt(35, 50),
+            );
+
+            scheduledTrips.push({
+              routeId: assignment.routeId, // Use driver's assigned route
+              driverId: assignment.driverId,
+              plannedStartsAt,
+              plannedEndsAt,
+              actualStartsAt: null,
+              actualEndsAt: null,
+              status: 'scheduled',
+              passengerCount: 0,
+            });
+          }
+        }
       }
 
+      console.log(`   Created ${scheduledTrips.length} scheduled trips`);
       if (scheduledTrips.length > 0) {
-        await db.insert(schema.trips).values(scheduledTrips);
+        // Insert in batches to avoid timeout
+        const batchSize = 100;
+        for (let i = 0; i < scheduledTrips.length; i += batchSize) {
+          const batch = scheduledTrips.slice(i, i + batchSize);
+          await db.insert(schema.trips).values(batch);
+        }
       }
     }
 
@@ -1269,7 +1316,8 @@ export async function seedDatabase() {
 
     if (ticketTrips.length > 0 && ticketCards.length > 0) {
       const ticketsToInsert: Array<typeof schema.tickets.$inferInsert> = [];
-      for (let i = 0; i < 300; i++) {
+      // Generate ~500 tickets for completed trips
+      for (let i = 0; i < 500; i++) {
         const trip = randomChoice(ticketTrips);
         const card = randomChoice(ticketCards);
         // Use actualStartsAt/actualEndsAt for completed trips
@@ -1372,7 +1420,7 @@ export async function seedDatabase() {
         complaintTopics[i % complaintTopics.length] === 'Пропозиція маршруту';
       complaintsToInsert.push({
         userId: user?.id,
-        type: isSuggestion ? 'Пропозиція' : 'Скарга',
+        type: isSuggestion ? 'suggestion' : 'complaint',
         message: complaintTopics[i % complaintTopics.length],
         status: randomChoice(complaintStatuses),
         routeId: route?.id,

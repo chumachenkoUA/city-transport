@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateGuestComplaintDto {
   @IsString()
@@ -8,6 +14,7 @@ export class CreateGuestComplaintDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(5000)
   message!: string;
 
   @IsString()

@@ -199,7 +199,9 @@ export class TripsService {
       })
       .from(trips)
       .innerJoin(routes, eq(routes.id, trips.routeId))
-      .where(and(eq(routes.number, routeNumber), eq(trips.status, 'in_progress')))
+      .where(
+        and(eq(routes.number, routeNumber), eq(trips.status, 'in_progress')),
+      )
       .orderBy(desc(trips.actualStartsAt))
       .limit(1);
 

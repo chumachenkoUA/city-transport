@@ -280,8 +280,30 @@ CREATE OR REPLACE FUNCTION dispatcher_api.create_schedule(
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
-DECLARE v_id bigint;
+DECLARE
+    v_id bigint;
+    v_vehicle_route_id bigint;
 BEGIN
+    -- Validate: vehicle must belong to the route
+    IF p_vehicle_id IS NOT NULL THEN
+        SELECT route_id INTO v_vehicle_route_id
+        FROM public.vehicles WHERE id = p_vehicle_id;
+
+        IF v_vehicle_route_id IS NULL THEN
+            RAISE EXCEPTION 'Vehicle % not found', p_vehicle_id;
+        END IF;
+
+        IF v_vehicle_route_id != p_route_id THEN
+            RAISE EXCEPTION 'Vehicle % belongs to route %, not route %',
+                p_vehicle_id, v_vehicle_route_id, p_route_id;
+        END IF;
+    END IF;
+
+    -- Validate: end time must be after start time
+    IF p_end <= p_start THEN
+        RAISE EXCEPTION 'End time (%) must be after start time (%)', p_end, p_start;
+    END IF;
+
     INSERT INTO public.schedules (
         route_id, vehicle_id, work_start_time, work_end_time, interval_min,
         monday, tuesday, wednesday, thursday, friday, saturday, sunday,
@@ -317,12 +339,54 @@ CREATE OR REPLACE FUNCTION dispatcher_api.update_schedule(
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
+DECLARE
+    v_current_route_id bigint;
+    v_current_start time;
+    v_current_end time;
+    v_vehicle_route_id bigint;
+    v_final_route_id bigint;
+    v_final_start time;
+    v_final_end time;
 BEGIN
+    -- Get current schedule values
+    SELECT route_id, work_start_time, work_end_time
+    INTO v_current_route_id, v_current_start, v_current_end
+    FROM public.schedules WHERE id = p_schedule_id;
+
+    IF v_current_route_id IS NULL THEN
+        RAISE EXCEPTION 'Schedule % not found', p_schedule_id;
+    END IF;
+
+    -- Calculate final values
+    v_final_route_id := COALESCE(p_route_id, v_current_route_id);
+    v_final_start := COALESCE(p_start, v_current_start);
+    v_final_end := COALESCE(p_end, v_current_end);
+
+    -- Validate: vehicle must belong to the route
+    IF p_vehicle_id IS NOT NULL THEN
+        SELECT route_id INTO v_vehicle_route_id
+        FROM public.vehicles WHERE id = p_vehicle_id;
+
+        IF v_vehicle_route_id IS NULL THEN
+            RAISE EXCEPTION 'Vehicle % not found', p_vehicle_id;
+        END IF;
+
+        IF v_vehicle_route_id != v_final_route_id THEN
+            RAISE EXCEPTION 'Vehicle % belongs to route %, not route %',
+                p_vehicle_id, v_vehicle_route_id, v_final_route_id;
+        END IF;
+    END IF;
+
+    -- Validate: end time must be after start time
+    IF v_final_end <= v_final_start THEN
+        RAISE EXCEPTION 'End time (%) must be after start time (%)', v_final_end, v_final_start;
+    END IF;
+
     UPDATE public.schedules
-    SET route_id = COALESCE(p_route_id, route_id),
+    SET route_id = v_final_route_id,
         vehicle_id = COALESCE(p_vehicle_id, vehicle_id),
-        work_start_time = COALESCE(p_start, work_start_time),
-        work_end_time = COALESCE(p_end, work_end_time),
+        work_start_time = v_final_start,
+        work_end_time = v_final_end,
         interval_min = COALESCE(p_interval, interval_min),
         monday = COALESCE(p_monday, monday),
         tuesday = COALESCE(p_tuesday, tuesday),
@@ -407,7 +471,72 @@ SELECT * FROM (
 ) deviations
 WHERE ABS(deviations.delay_minutes) > 5;
 
--- 5. GRANTS
+-- ============================================================================
+-- 5. DEPARTURE TIMES GENERATION
+-- ============================================================================
+-- Замінює buildDepartureTimes() який був продубльований в dispatcher та guest сервісах
+
+CREATE OR REPLACE FUNCTION dispatcher_api.get_departure_times(
+  p_work_start_time time,
+  p_work_end_time time,
+  p_interval_min integer
+)
+RETURNS TABLE (departure_time text)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+BEGIN
+  IF p_interval_min <= 0 THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT public.format_minutes_to_time(
+    public.parse_time_to_minutes(p_work_start_time) + (n * p_interval_min)
+  )
+  FROM generate_series(0,
+    ((public.parse_time_to_minutes(p_work_end_time) -
+      public.parse_time_to_minutes(p_work_start_time)) / p_interval_min)::int
+  ) AS n;
+END;
+$$;
+
+-- ============================================================================
+-- 6. DASHBOARD AGGREGATION
+-- ============================================================================
+-- Замінює getDashboard() який робив 6 паралельних запитів в одному API виклику
+
+CREATE OR REPLACE FUNCTION dispatcher_api.get_dashboard()
+RETURNS TABLE (
+  active_trips integer,
+  deviations integer,
+  schedules_today integer,
+  unassigned_drivers integer,
+  unassigned_vehicles integer
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    (SELECT COUNT(*)::integer FROM dispatcher_api.v_active_trips),
+    (SELECT COUNT(*)::integer FROM dispatcher_api.v_active_trip_deviations),
+    (SELECT COUNT(*)::integer FROM dispatcher_api.v_schedules_list),
+    (SELECT COUNT(*)::integer FROM dispatcher_api.v_drivers_list d
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.driver_vehicle_assignments dva
+        WHERE dva.driver_id = d.id
+      )
+    ),
+    (SELECT COUNT(*)::integer FROM dispatcher_api.v_vehicles_list v
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.driver_vehicle_assignments dva
+        WHERE dva.vehicle_id = v.id
+      )
+    );
+END;
+$$;
+
+-- 7. GRANTS
 GRANT SELECT ON ALL TABLES IN SCHEMA dispatcher_api TO ct_dispatcher_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA dispatcher_api TO ct_dispatcher_role;
 
@@ -429,3 +558,7 @@ GRANT EXECUTE ON FUNCTION dispatcher_api.update_schedule(
     date, date
 ) TO ct_dispatcher_role;
 GRANT EXECUTE ON FUNCTION dispatcher_api.delete_schedule(bigint) TO ct_dispatcher_role;
+
+-- New utility functions
+GRANT EXECUTE ON FUNCTION dispatcher_api.get_departure_times(time, time, integer) TO ct_dispatcher_role;
+GRANT EXECUTE ON FUNCTION dispatcher_api.get_dashboard() TO ct_dispatcher_role;

@@ -47,6 +47,7 @@ AS $$
 DECLARE
     v_u_id bigint;
     v_t_id bigint;
+    v_trip_status text;
     v_driver_id bigint;
     v_vehicle_id bigint;
     v_f_id bigint;
@@ -57,12 +58,17 @@ BEGIN
     END IF;
 
     IF p_trip_id IS NOT NULL THEN
-        -- Отримуємо trip і driver_id
-        SELECT t.id, t.driver_id INTO v_t_id, v_driver_id
+        -- Отримуємо trip і driver_id та статус
+        SELECT t.id, t.driver_id, t.status INTO v_t_id, v_driver_id, v_trip_status
         FROM public.trips t WHERE t.id = p_trip_id;
 
         IF v_t_id IS NULL THEN
             RAISE EXCEPTION 'Trip % not found', p_trip_id;
+        END IF;
+
+        -- SECURITY: Only allow fines on in_progress trips
+        IF v_trip_status != 'in_progress' THEN
+            RAISE EXCEPTION 'Cannot issue fine: trip % is not in progress (status: %)', p_trip_id, v_trip_status;
         END IF;
 
         -- Якщо вказано fleet - перевіряємо чи співпадає з призначенням водія

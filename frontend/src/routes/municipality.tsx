@@ -43,10 +43,29 @@ import {
   getMunicipalityStops,
   getMunicipalityTransportTypes,
   getPassengerFlow,
+  getPassengerFlowDetailed,
+  getTopRoutes,
+  getPassengerTrend,
+  getFlowSummary,
   setMunicipalityRouteActive,
   updateMunicipalityStop,
   updateComplaintStatus,
 } from '@/lib/municipality-api'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart'
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+} from 'recharts'
 import { toast } from 'sonner'
 import {
   MapPin,
@@ -59,6 +78,10 @@ import {
   ArrowDown,
   Loader2,
   Map as MapIcon,
+  Users,
+  Route as RouteIcon,
+  Calculator,
+  Calendar,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/municipality')({
@@ -70,7 +93,6 @@ type StopDraft = {
   name: string
   lon: string
   lat: string
-  distanceToNextKm: string
 }
 
 type PointDraft = {
@@ -177,6 +199,58 @@ function MunicipalityPage() {
     queryKey: ['municipality-passenger-flow', flowQuery],
     queryFn: () =>
       getPassengerFlow({
+        from: flowQuery.from,
+        to: flowQuery.to,
+        routeNumber: flowQuery.routeNumber || undefined,
+        transportTypeId: flowQuery.transportTypeId && flowQuery.transportTypeId !== 'all'
+          ? Number(flowQuery.transportTypeId)
+          : undefined,
+      }),
+  })
+
+  // New analytics queries
+  const { data: flowDetailed, isLoading: flowDetailedLoading } = useQuery({
+    queryKey: ['municipality-flow-detailed', flowQuery],
+    queryFn: () =>
+      getPassengerFlowDetailed({
+        from: flowQuery.from,
+        to: flowQuery.to,
+        routeNumber: flowQuery.routeNumber || undefined,
+        transportTypeId: flowQuery.transportTypeId && flowQuery.transportTypeId !== 'all'
+          ? Number(flowQuery.transportTypeId)
+          : undefined,
+      }),
+  })
+
+  const { data: topRoutes, isLoading: topRoutesLoading } = useQuery({
+    queryKey: ['municipality-top-routes', flowQuery],
+    queryFn: () =>
+      getTopRoutes({
+        from: flowQuery.from,
+        to: flowQuery.to,
+        transportTypeId: flowQuery.transportTypeId && flowQuery.transportTypeId !== 'all'
+          ? Number(flowQuery.transportTypeId)
+          : undefined,
+      }),
+  })
+
+  const { data: trendData, isLoading: trendLoading } = useQuery({
+    queryKey: ['municipality-trend', flowQuery],
+    queryFn: () =>
+      getPassengerTrend({
+        from: flowQuery.from,
+        to: flowQuery.to,
+        routeNumber: flowQuery.routeNumber || undefined,
+        transportTypeId: flowQuery.transportTypeId && flowQuery.transportTypeId !== 'all'
+          ? Number(flowQuery.transportTypeId)
+          : undefined,
+      }),
+  })
+
+  const { data: flowSummary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['municipality-flow-summary', flowQuery],
+    queryFn: () =>
+      getFlowSummary({
         from: flowQuery.from,
         to: flowQuery.to,
         routeNumber: flowQuery.routeNumber || undefined,
@@ -366,10 +440,9 @@ function MunicipalityPage() {
     }
 
     const stops = routeStopsDrafts
-      .filter((s) => s.stopId && s.distanceToNextKm)
+      .filter((s) => s.stopId)
       .map((s) => ({
         stopId: Number(s.stopId),
-        distanceToNextKm: Number(s.distanceToNextKm),
       }))
 
     const points = routePointsDrafts
@@ -679,21 +752,6 @@ function MunicipalityPage() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="w-32 space-y-2">
-                          <Label htmlFor={`dist-${index}`}>Відстань (км)</Label>
-                          <Input
-                            id={`dist-${index}`}
-                            type="number"
-                            step="0.1"
-                            value={stop.distanceToNextKm}
-                            onChange={(e) => {
-                              const newStops = [...routeStopsDrafts]
-                              newStops[index] = { ...newStops[index], distanceToNextKm: e.target.value }
-                              setRouteStopsDrafts(newStops)
-                            }}
-                            placeholder="0.5"
-                          />
-                        </div>
                         <div className="flex gap-1">
                           <Button
                             size="icon"
@@ -994,6 +1052,7 @@ function MunicipalityPage() {
 
           {/* Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6">
+            {/* Filters */}
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -1002,9 +1061,8 @@ function MunicipalityPage() {
                 </div>
                 <CardDescription>Статистика використання транспорту за період</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Filters */}
-                <div className="grid gap-4 md:grid-cols-4">
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-5">
                   <div className="space-y-2">
                     <Label htmlFor="flow-from">Від</Label>
                     <Input
@@ -1053,32 +1111,258 @@ function MunicipalityPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-end">
+                    <Button onClick={handleApplyFlowFilters} className="w-full">
+                      Застосувати
+                    </Button>
+                  </div>
                 </div>
-                <Button onClick={handleApplyFlowFilters} className="w-full">
-                  Застосувати фільтри
-                </Button>
+              </CardContent>
+            </Card>
 
-                {/* Results */}
-                {flowLoading ? (
-                  <TableSkeleton rows={5} cols={3} />
-                ) : passengerFlow && passengerFlow.length > 0 ? (
-                  <div className="space-y-4">
-                    {passengerFlow.map((flow, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-4 border rounded-lg"
+            {/* Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-full bg-primary/10 p-3">
+                      <Users className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Всього пасажирів</p>
+                      <p className="text-2xl font-bold">
+                        {summaryLoading ? '...' : (flowSummary?.totalPassengers ?? 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-full bg-info/10 p-3">
+                      <RouteIcon className="h-6 w-6 text-info" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Всього рейсів</p>
+                      <p className="text-2xl font-bold">
+                        {summaryLoading ? '...' : (flowSummary?.totalTrips ?? 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-full bg-success/10 p-3">
+                      <Calculator className="h-6 w-6 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Сер. на рейс</p>
+                      <p className="text-2xl font-bold">
+                        {summaryLoading ? '...' : (flowSummary?.avgPerTrip ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="rounded-full bg-warning/10 p-3">
+                      <Calendar className="h-6 w-6 text-warning" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Сер. на день</p>
+                      <p className="text-2xl font-bold">
+                        {summaryLoading ? '...' : (flowSummary?.avgPerDay ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Top 5 Routes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Топ-5 маршрутів</CardTitle>
+                  <CardDescription>За кількістю пасажирів (RANK)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {topRoutesLoading ? (
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : topRoutes && topRoutes.length > 0 ? (
+                    <ChartContainer
+                      config={{
+                        totalPassengers: {
+                          label: 'Пасажирів',
+                          color: 'hsl(var(--primary))',
+                        },
+                      }}
+                      className="h-[300px]"
+                    >
+                      <BarChart
+                        data={topRoutes}
+                        layout="vertical"
+                        margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
                       >
-                        <div>
-                          <p className="font-medium">Маршрут {flow.routeNumber}</p>
-                          <p className="text-sm text-muted-foreground">{flow.transportType}</p>
-                          <p className="text-xs text-muted-foreground">{flow.tripDate}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold">{flow.passengerCount || 0}</p>
-                          <p className="text-sm text-muted-foreground">пасажирів</p>
-                        </div>
-                      </div>
-                    ))}
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                        <XAxis type="number" />
+                        <YAxis
+                          type="category"
+                          dataKey="routeNumber"
+                          width={60}
+                          tickFormatter={(value) => `${value}`}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatter={(value, name, item) => (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-medium">{item.payload.transportType}</span>
+                                  <span>{Number(value).toLocaleString()} пасажирів</span>
+                                </div>
+                              )}
+                            />
+                          }
+                        />
+                        <Bar
+                          dataKey="totalPassengers"
+                          fill="var(--color-totalPassengers)"
+                          radius={[0, 4, 4, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <EmptyState
+                      icon={TrendingUp}
+                      title="Немає даних"
+                      description="Дані з'являться після накопичення статистики"
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Trend Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Тренд пасажиропотоку</CardTitle>
+                  <CardDescription>Денні дані + 7-денне ковзне середнє (AVG OVER)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {trendLoading ? (
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : trendData && trendData.length > 0 ? (
+                    <ChartContainer
+                      config={{
+                        dailyPassengers: {
+                          label: 'Денні дані',
+                          color: 'hsl(var(--muted-foreground))',
+                        },
+                        movingAvg7d: {
+                          label: '7-денний тренд',
+                          color: 'hsl(var(--primary))',
+                        },
+                      }}
+                      className="h-[300px]"
+                    >
+                      <LineChart
+                        data={trendData}
+                        margin={{ left: 10, right: 10, top: 10, bottom: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="tripDate"
+                          tickFormatter={(value) => {
+                            const date = new Date(value)
+                            return `${date.getDate()}.${date.getMonth() + 1}`
+                          }}
+                        />
+                        <YAxis />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(value) => {
+                                const date = new Date(value)
+                                return date.toLocaleDateString('uk-UA')
+                              }}
+                            />
+                          }
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="dailyPassengers"
+                          stroke="var(--color-dailyPassengers)"
+                          strokeWidth={1}
+                          dot={false}
+                          name="Денні дані"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="movingAvg7d"
+                          stroke="var(--color-movingAvg7d)"
+                          strokeWidth={2}
+                          dot={false}
+                          name="7-денний тренд"
+                        />
+                      </LineChart>
+                    </ChartContainer>
+                  ) : (
+                    <EmptyState
+                      icon={TrendingUp}
+                      title="Немає даних"
+                      description="Дані з'являться після накопичення статистики"
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Detailed Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Деталізація рейсів</CardTitle>
+                <CardDescription>Дата, бортовий номер, кількість пасажирів</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {flowDetailedLoading ? (
+                  <TableSkeleton rows={5} cols={5} />
+                ) : flowDetailed && flowDetailed.length > 0 ? (
+                  <div className="rounded-md border max-h-[400px] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Дата</TableHead>
+                          <TableHead>Бортовий номер</TableHead>
+                          <TableHead>Маршрут</TableHead>
+                          <TableHead>Транспорт</TableHead>
+                          <TableHead className="text-right">Пасажирів</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {flowDetailed.map((row) => (
+                          <TableRow key={row.tripId}>
+                            <TableCell>{row.tripDate}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{row.fleetNumber || '—'}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge>{row.routeNumber}</Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{row.transportType}</TableCell>
+                            <TableCell className="text-right font-medium">{row.passengerCount}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 ) : (
                   <EmptyState
@@ -1260,7 +1544,7 @@ function getDateDaysAgo(days: number): string {
 }
 
 function emptyStop(): StopDraft {
-  return { stopId: '', name: '', lon: '', lat: '', distanceToNextKm: '' }
+  return { stopId: '', name: '', lon: '', lat: '' }
 }
 
 function emptyPoint(): PointDraft {

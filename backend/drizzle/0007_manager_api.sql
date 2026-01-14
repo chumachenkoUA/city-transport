@@ -27,7 +27,9 @@ RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE
-    v_allowed_roles text[] := ARRAY['dispatcher', 'controller', 'accountant', 'municipality', 'manager'];
+    -- SECURITY: Removed 'manager' to prevent privilege escalation
+    -- Managers should not be able to create other managers
+    v_allowed_roles text[] := ARRAY['dispatcher', 'controller', 'accountant', 'municipality'];
     v_pg_role text;
 BEGIN
     -- Validate role is in whitelist
@@ -84,14 +86,14 @@ END;
 $$;
 
 -- View of staff roles for reference
+-- Note: manager role is not listed because managers cannot create other managers
 CREATE OR REPLACE VIEW manager_api.v_staff_roles AS
-SELECT unnest(ARRAY['dispatcher', 'controller', 'accountant', 'municipality', 'manager']) AS role_name,
+SELECT unnest(ARRAY['dispatcher', 'controller', 'accountant', 'municipality']) AS role_name,
        unnest(ARRAY[
            'Manages schedules and driver assignments',
            'Issues fines and validates tickets',
            'Manages finances, expenses, and salaries',
-           'Manages routes, stops, and analyzes data',
-           'Manages drivers, vehicles, and staff accounts'
+           'Manages routes, stops, and analyzes data'
        ]) AS description;
 
 -- =============================================================================

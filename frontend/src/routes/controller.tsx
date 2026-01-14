@@ -1,17 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { FormSection } from '@/components/domain/forms'
 import { ErrorState } from '@/components/domain/data-display'
-import { Search, CreditCard, AlertTriangle, CheckCircle2, Loader2, Clock, Bus, MapPin } from 'lucide-react'
+import { Search, CreditCard, AlertTriangle, CheckCircle2, Loader2, Clock, Bus, MapPin, User } from 'lucide-react'
 import {
   checkControllerCard,
   issueControllerFine,
@@ -33,7 +32,6 @@ function ControllerPage() {
   const [selectedTripId, setSelectedTripId] = useState('')
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
-  const [checkedAt, setCheckedAt] = useState('')
 
   // Routes query
   const { data: routes } = useQuery({
@@ -41,22 +39,26 @@ function ControllerPage() {
     queryFn: getRoutes,
   })
 
-  // Vehicles query (filtered by route)
+  // Vehicles query (filtered by route if selected)
   const { data: vehicles } = useQuery({
     queryKey: ['controller-vehicles', selectedRouteId],
     queryFn: () => getVehicles(selectedRouteId ? Number(selectedRouteId) : undefined),
-    enabled: !!selectedRouteId,
   })
 
   // Active trips query
-  const { data: activeTrips } = useQuery({
-    queryKey: ['controller-trips', selectedFleetNumber, checkedAt],
-    queryFn: () => {
-      if (!selectedFleetNumber) return Promise.resolve([])
-      return getActiveTrips(selectedFleetNumber, checkedAt ? new Date(checkedAt).toISOString() : undefined)
-    },
+  const { data: activeTrips, isLoading: tripsLoading } = useQuery({
+    queryKey: ['controller-trips', selectedFleetNumber],
+    queryFn: () => getActiveTrips(selectedFleetNumber),
     enabled: !!selectedFleetNumber,
+    refetchInterval: 30000, // Auto-refresh every 30s
   })
+
+  // Auto-select first trip when trips load
+  useEffect(() => {
+    if (activeTrips && activeTrips.length > 0 && !selectedTripId) {
+      setSelectedTripId(String(activeTrips[0].tripId))
+    }
+  }, [activeTrips, selectedTripId])
 
   // Check card mutation
   const checkMutation = useMutation({
@@ -68,6 +70,7 @@ function ControllerPage() {
       })
     },
     onError: (error: Error) => {
+      setCardDetails(null)
       toast.error('Помилка перевірки картки', {
         description: error.message,
       })
@@ -77,17 +80,13 @@ function ControllerPage() {
   // Issue fine mutation
   const fineMutation = useMutation({
     mutationFn: issueControllerFine,
-    onSuccess: (data) => {
-      toast.success('Штраф виписано успішно!', {
-        description: `ID штрафу: ${data.fineId}`,
-      })
-      // Reset form
+    onSuccess: () => {
+      toast.success('Штраф виписано успішно!')
+      // Reset fine form only
       setAmount('')
       setReason('')
-      setSelectedRouteId('')
-      setSelectedFleetNumber('')
-      setSelectedTripId('')
-      setCheckedAt('')
+      setCardNumber('')
+      setCardDetails(null)
     },
     onError: (error: Error) => {
       toast.error('Помилка виписування штрафу', {
@@ -118,15 +117,8 @@ function ControllerPage() {
       return
     }
 
-    // Need either tripId or fleetNumber
     if (!selectedTripId && !selectedFleetNumber) {
       toast.error('Оберіть транспорт або рейс')
-      return
-    }
-
-    const checkedAtValue = checkedAt ? new Date(checkedAt) : null
-    if (checkedAtValue && checkedAtValue.getTime() > Date.now() + 5 * 60 * 1000) {
-      toast.error('Час перевірки не може бути у майбутньому')
       return
     }
 
@@ -134,17 +126,20 @@ function ControllerPage() {
       cardNumber: cardDetails.cardNumber,
       fleetNumber: selectedFleetNumber || undefined,
       tripId: selectedTripId ? Number(selectedTripId) : undefined,
-      checkedAt: checkedAtValue?.toISOString() || new Date().toISOString(),
+      checkedAt: new Date().toISOString(),
       amount: Number(amount),
       reason,
     })
   }
 
-  const isFormValid = cardDetails && amount && reason
+  const selectedVehicle = vehicles?.find(v => v.fleetNumber === selectedFleetNumber)
+  const selectedTrip = activeTrips?.find(t => String(t.tripId) === selectedTripId)
+  const hasActiveTrip = activeTrips && activeTrips.length > 0
+  const isFormValid = cardDetails && amount && reason && (selectedTripId || selectedFleetNumber)
 
   return (
     <div className="px-4 py-8 lg:px-8">
-      <div className="mx-auto max-w-5xl space-y-8">
+      <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-display-sm">Кабінет контролера</h1>
@@ -153,203 +148,249 @@ function ControllerPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Card Check Section */}
-          <FormSection
-            title="Перевірка картки"
-            description="Введіть номер транспортної картки пасажира"
-          >
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Label htmlFor="card-number">Номер картки</Label>
-                  <Input
-                    id="card-number"
-                    type="text"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    placeholder="Наприклад: CARD-001"
-                    onKeyDown={(e) => e.key === 'Enter' && handleCheckCard()}
-                  />
-                </div>
-                <div className="self-end">
-                  <Button
-                    onClick={handleCheckCard}
-                    disabled={checkMutation.isPending}
-                  >
-                    {checkMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                    <span className="ml-2">Перевірити</span>
-                  </Button>
-                </div>
+        {/* Step 1: Transport Selection */}
+        <FormSection
+          title="1. Оберіть транспорт"
+          description="Виберіть транспортний засіб, на якому проводите перевірку"
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="route">Маршрут (фільтр)</Label>
+                <Select
+                  value={selectedRouteId || '_all'}
+                  onValueChange={(value) => {
+                    setSelectedRouteId(value === '_all' ? '' : value)
+                    setSelectedFleetNumber('')
+                    setSelectedTripId('')
+                  }}
+                >
+                  <SelectTrigger id="route">
+                    <SelectValue placeholder="Всі маршрути" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_all">Всі маршрути</SelectItem>
+                    {routes?.map((route) => (
+                      <SelectItem key={route.id} value={String(route.id)}>
+                        {route.number} • {route.transportType}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {checkMutation.error && (
-                <ErrorState
-                  title="Помилка"
-                  message={checkMutation.error.message}
-                  onRetry={handleCheckCard}
-                />
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="vehicle">Бортовий номер *</Label>
+                <Select
+                  value={selectedFleetNumber}
+                  onValueChange={(value) => {
+                    setSelectedFleetNumber(value)
+                    setSelectedTripId('')
+                  }}
+                >
+                  <SelectTrigger id="vehicle">
+                    <SelectValue placeholder="Оберіть транспорт" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles?.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.fleetNumber}>
+                        {vehicle.fleetNumber}
+                        {vehicle.routeNumber && ` • ${vehicle.routeNumber}`}
+                        {vehicle.transportType && ` • ${vehicle.transportType}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </FormSection>
 
-          {/* Card Details Display */}
-          {cardDetails && (
-            <Card className="border-success/30 bg-success/5">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                  <CardTitle>Інформація про картку</CardTitle>
-                </div>
-                <CardDescription>Дані перевіреної картки</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Номер:</span>
-                  <Badge variant="outline">{cardDetails.cardNumber}</Badge>
-                </div>
-                <Separator />
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Пасажир:</span>
-                    <span className="font-medium">{cardDetails.userFullName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Баланс:</span>
-                    <span className={`font-medium ${Number(cardDetails.balance) < 0 ? 'text-destructive' : 'text-success'}`}>
-                      {formattedBalance}
-                    </span>
-                  </div>
+            {/* Active trips display */}
+            {selectedFleetNumber && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Активні рейси</Label>
+                  {tripsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </div>
 
-                {/* Last Trip Info */}
-                <Separator />
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                    Остання поїздка
+                {hasActiveTrip ? (
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {activeTrips.map((trip) => (
+                      <div
+                        key={trip.tripId}
+                        onClick={() => setSelectedTripId(String(trip.tripId))}
+                        className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                          selectedTripId === String(trip.tripId)
+                            ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                            : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant={trip.status === 'in_progress' ? 'default' : 'secondary'}>
+                            {trip.status === 'in_progress' ? 'В дорозі' : trip.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">#{trip.tripId}</span>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Bus className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="font-medium">{trip.routeNumber}</span>
+                            <span className="text-muted-foreground">• {trip.transportType}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <User className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-muted-foreground">{trip.driverName}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {trip.actualStartsAt
+                                ? `Розп. ${new Date(trip.actualStartsAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`
+                                : `План ${new Date(trip.plannedStartsAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {cardDetails.lastUsageAt ? (
-                    <div className="p-3 bg-background rounded-lg border space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Дата:</span>
-                        <span className="font-medium">
+                ) : (
+                  <div className="p-6 rounded-lg border border-dashed text-center">
+                    <Bus className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Немає активних рейсів на транспорті {selectedFleetNumber}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Штраф можна виписати, але без прив'язки до рейсу
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </FormSection>
+
+        {/* Step 2: Card Check */}
+        {selectedFleetNumber && (
+          <FormSection
+            title="2. Перевірка картки"
+            description="Введіть номер транспортної картки пасажира"
+          >
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label htmlFor="card-number">Номер картки</Label>
+                    <Input
+                      id="card-number"
+                      type="text"
+                      value={cardNumber}
+                      onChange={(e) => setCardNumber(e.target.value)}
+                      placeholder="Наприклад: CARD-001"
+                      onKeyDown={(e) => e.key === 'Enter' && handleCheckCard()}
+                    />
+                  </div>
+                  <div className="self-end">
+                    <Button
+                      onClick={handleCheckCard}
+                      disabled={checkMutation.isPending}
+                    >
+                      {checkMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
+                      <span className="ml-2">Перевірити</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {checkMutation.error && (
+                  <ErrorState
+                    title="Картку не знайдено"
+                    message={checkMutation.error.message}
+                    onRetry={handleCheckCard}
+                  />
+                )}
+              </div>
+
+              {/* Card Details Display */}
+              {cardDetails && (
+                <Card className="border-success/30 bg-success/5">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-success" />
+                      <CardTitle className="text-base">Картка знайдена</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      <Badge variant="outline">{cardDetails.cardNumber}</Badge>
+                    </div>
+                    <Separator />
+                    <div className="grid gap-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Пасажир:</span>
+                        <span className="font-medium">{cardDetails.userFullName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Баланс:</span>
+                        <span className={`font-medium ${Number(cardDetails.balance) < 0 ? 'text-destructive' : 'text-success'}`}>
+                          {formattedBalance}
+                        </span>
+                      </div>
+                    </div>
+
+                    {cardDetails.lastUsageAt && (
+                      <>
+                        <Separator />
+                        <div className="text-xs text-muted-foreground">
+                          <span>Остання поїздка: </span>
                           {new Date(cardDetails.lastUsageAt).toLocaleString('uk-UA', {
                             day: '2-digit',
                             month: '2-digit',
-                            year: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
-                        </span>
-                      </div>
-                      {cardDetails.lastRouteNumber && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" /> Маршрут:
-                          </span>
-                          <span className="font-medium">
-                            {cardDetails.lastRouteNumber}
-                          </span>
+                          {cardDetails.lastRouteNumber && ` • ${cardDetails.lastRouteNumber}`}
                         </div>
-                      )}
-                      {cardDetails.lastTransportType && (
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Bus className="h-3 w-3" /> Транспорт:
-                          </span>
-                          <span className="font-medium">{cardDetails.lastTransportType}</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground text-center">
-                      Поїздок не знайдено
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </FormSection>
+        )}
 
-        {/* Fine Issuance Section */}
-        {cardDetails && (
+        {/* Step 3: Issue Fine */}
+        {cardDetails && selectedFleetNumber && (
           <FormSection
-            title="Виписування штрафу"
-            description="Заповніть деталі порушення та виписати штраф"
+            title="3. Виписування штрафу"
+            description="Вкажіть суму та причину штрафу"
           >
             <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="route">Маршрут</Label>
-                  <Select
-                    value={selectedRouteId}
-                    onValueChange={(value) => {
-                      setSelectedRouteId(value)
-                      setSelectedFleetNumber('')
-                      setSelectedTripId('')
-                    }}
-                  >
-                    <SelectTrigger id="route">
-                      <SelectValue placeholder="Оберіть маршрут" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routes?.map((route) => (
-                        <SelectItem key={route.id} value={String(route.id)}>
-                          {route.number} • {route.transportType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {/* Summary of selected context */}
+              <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-1">
+                <div className="flex items-center gap-2">
+                  <Bus className="h-4 w-4 text-muted-foreground" />
+                  <span>Транспорт: <strong>{selectedFleetNumber}</strong></span>
+                  {selectedVehicle?.routeNumber && (
+                    <span className="text-muted-foreground">• Маршрут {selectedVehicle.routeNumber}</span>
+                  )}
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="vehicle">Транспорт</Label>
-                  <Select
-                    value={selectedFleetNumber}
-                    onValueChange={(value) => {
-                      setSelectedFleetNumber(value)
-                      setSelectedTripId('')
-                    }}
-                    disabled={!selectedRouteId}
-                  >
-                    <SelectTrigger id="vehicle">
-                      <SelectValue placeholder={selectedRouteId ? "Оберіть транспорт" : "Спочатку оберіть маршрут"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicles?.map((vehicle) => (
-                        <SelectItem key={vehicle.id} value={vehicle.fleetNumber}>
-                          {vehicle.fleetNumber}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                {selectedTrip && (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span>Рейс: <strong>#{selectedTrip.tripId}</strong></span>
+                    <span className="text-muted-foreground">• Водій: {selectedTrip.driverName}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  <span>Пасажир: <strong>{cardDetails.userFullName}</strong></span>
+                  <span className="text-muted-foreground">• {cardDetails.cardNumber}</span>
                 </div>
               </div>
-
-              {activeTrips && activeTrips.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="trip">Рейс (опціонально)</Label>
-                  <Select value={selectedTripId} onValueChange={setSelectedTripId}>
-                    <SelectTrigger id="trip">
-                      <SelectValue placeholder="Оберіть рейс" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeTrips.map((trip) => (
-                        <SelectItem key={trip.tripId} value={String(trip.tripId)}>
-                          Рейс #{trip.tripId} • {trip.startsAt ? new Date(trip.startsAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }) : 'Активний'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
@@ -364,33 +405,21 @@ function ControllerPage() {
                     placeholder="50.00"
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="checked-at">Час перевірки (опціонально)</Label>
+                  <Label htmlFor="reason">Причина *</Label>
                   <Input
-                    id="checked-at"
-                    type="datetime-local"
-                    value={checkedAt}
-                    onChange={(e) => setCheckedAt(e.target.value)}
+                    id="reason"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Безквитковий проїзд"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="reason">Причина штрафу *</Label>
-                <Textarea
-                  id="reason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Опишіть порушення..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 p-4 bg-warning/10 border border-warning/30 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-warning" />
+              <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
                 <p className="text-sm text-muted-foreground">
-                  Переконайтесь, що всі дані введено коректно перед виписуванням штрафу
+                  Перевірте дані перед виписуванням штрафу
                 </p>
               </div>
 

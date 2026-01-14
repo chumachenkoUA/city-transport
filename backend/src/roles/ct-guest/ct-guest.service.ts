@@ -197,7 +197,7 @@ export class CtGuestService {
       left join guest_api.v_schedules s on s.route_id = r.id
       where rs.stop_id = ${stopId}
     `)) as unknown as { rows: RouteByStopRow[] };
-    const routesByStop = transformToCamelCase(result.rows) as RouteByStopRow[];
+    const routesByStop = transformToCamelCase(result.rows);
 
     // Calculate estimated arrival time for each route
     const now = new Date();
@@ -291,25 +291,29 @@ export class CtGuestService {
 
   async getRouteStops(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
-    const rows = await this.findRouteStops(routeId);
-    return this.orderRouteStops(rows);
+    // Use ordered view (replaces findRouteStops + orderRouteStops)
+    const result = (await this.dbService.db.execute(sql`
+      SELECT id, route_id, stop_id, stop_name, lon, lat,
+             distance_to_next_km, prev_route_stop_id, next_route_stop_id, sort_order
+      FROM guest_api.v_route_stops_ordered
+      WHERE route_id = ${routeId}
+      ORDER BY sort_order
+    `)) as unknown as { rows: RouteStopRow[] };
+
+    return transformToCamelCase(result.rows);
   }
 
   async getRoutePoints(payload: RouteLookupDto) {
     const routeId = await this.resolveRouteId(payload);
+    // Use ordered view (replaces orderRoutePoints)
     const result = (await this.dbService.db.execute(sql`
-      select
-        id,
-        route_id,
-        lon,
-        lat,
-        prev_route_point_id,
-        next_route_point_id
-      from guest_api.v_route_points
-      where route_id = ${routeId}
+      SELECT id, route_id, lon, lat, prev_route_point_id, next_route_point_id, sort_order
+      FROM guest_api.v_route_points_ordered
+      WHERE route_id = ${routeId}
+      ORDER BY sort_order
     `)) as unknown as { rows: RoutePointRow[] };
 
-    return transformToCamelCase(result.rows) as RoutePointRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async getRouteGeometry(payload: RouteLookupDto) {
@@ -325,7 +329,7 @@ export class CtGuestService {
       where route_id = ${routeId}
     `)) as unknown as { rows: RouteGeometryRow[] };
 
-    const geometries = transformToCamelCase(result.rows) as RouteGeometryRow[];
+    const geometries = transformToCamelCase(result.rows);
     return geometries[0] ?? null;
   }
 
@@ -359,7 +363,7 @@ export class CtGuestService {
       rows: RouteGeometryRow[];
     };
 
-    return transformToCamelCase(result.rows) as RouteGeometryRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async getStopGeometries() {
@@ -371,7 +375,7 @@ export class CtGuestService {
       from guest_api.v_stop_geometries
     `)) as unknown as { rows: StopGeometryRow[] };
 
-    return transformToCamelCase(result.rows) as StopGeometryRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async submitComplaint(payload: CreateGuestComplaintDto) {
@@ -528,7 +532,7 @@ export class CtGuestService {
       where route_id = ${routeId}
     `)) as unknown as { rows: RoutePointRow[] };
 
-    const points = transformToCamelCase(allPoints.rows) as RoutePointRow[];
+    const points = transformToCamelCase(allPoints.rows);
 
     if (points.length === 0) {
       throw new NotFoundException(`No route points found for route ${routeId}`);
@@ -854,7 +858,7 @@ export class CtGuestService {
       limit 1
     `)) as unknown as { rows: RouteRow[] };
 
-    const route = (transformToCamelCase(result.rows) as RouteRow[])[0];
+    const route = transformToCamelCase(result.rows)[0];
 
     if (!route) {
       throw new NotFoundException(
@@ -885,7 +889,7 @@ export class CtGuestService {
       from guest_api.find_nearby_stops(${lon}, ${lat}, ${radius}, ${limit})
     `)) as unknown as { rows: StopNearRow[] };
 
-    return transformToCamelCase(result.rows) as StopNearRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private async findStopsByIds(stopIds: number[]) {
@@ -903,7 +907,7 @@ export class CtGuestService {
       where id in (${sql.join(stopParams, sql`, `)})
     `)) as unknown as { rows: StopRow[] };
 
-    return transformToCamelCase(result.rows) as StopRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private async findRoutesByIds(routeIds: number[]) {
@@ -922,7 +926,7 @@ export class CtGuestService {
       where id in (${sql.join(routeParams, sql`, `)})
     `)) as unknown as { rows: RouteRow[] };
 
-    return transformToCamelCase(result.rows) as RouteRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private async findPgRoutingPath(
@@ -958,7 +962,7 @@ export class CtGuestService {
       order by path_id, seq
     `)) as unknown as { rows: PgrPathRow[] };
 
-    return transformToCamelCase(result.rows) as PgrPathRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private buildRouteOptionFromPath(
@@ -1118,7 +1122,7 @@ export class CtGuestService {
       where route_id = ${routeId}
     `)) as unknown as { rows: RouteStopRow[] };
 
-    return transformToCamelCase(result.rows) as RouteStopRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private orderRouteStops(rows: RouteStopRow[]) {
@@ -1164,7 +1168,7 @@ export class CtGuestService {
       limit 1
     `)) as unknown as { rows: ScheduleRow[] };
 
-    const schedules = transformToCamelCase(result.rows) as ScheduleRow[];
+    const schedules = transformToCamelCase(result.rows);
     return schedules[0] ?? null;
   }
 
@@ -1181,7 +1185,7 @@ export class CtGuestService {
       limit 1
     `)) as unknown as { rows: RouteRow[] };
 
-    const routes = transformToCamelCase(result.rows) as RouteRow[];
+    const routes = transformToCamelCase(result.rows);
     return routes[0] ?? null;
   }
 

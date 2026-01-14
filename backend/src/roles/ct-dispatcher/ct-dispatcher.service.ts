@@ -407,57 +407,45 @@ export class CtDispatcherService {
       order by delay_minutes desc nulls last
     `)) as unknown as { rows: ActiveTripDeviationRow[] };
 
-    return transformToCamelCase(result.rows) as ActiveTripDeviationRow[];
+    return transformToCamelCase(result.rows);
   }
 
   async getDashboard() {
-    const [activeTrips, schedules, drivers, vehicles, assignments, deviations] =
-      await Promise.all([
-        this.listActiveTrips(),
-        this.listSchedules(),
-        this.listDrivers(),
-        this.listVehicles(),
-        this.listAssignments(),
-        this.listDeviations(),
-      ]);
+    // Single DB call replaces 6 parallel queries
+    const result = (await this.dbService.db.execute(sql`
+      SELECT * FROM dispatcher_api.get_dashboard()
+    `)) as unknown as {
+      rows: Array<{
+        active_trips: number;
+        deviations: number;
+        schedules_today: number;
+        unassigned_drivers: number;
+        unassigned_vehicles: number;
+      }>;
+    };
 
-    const assignedDrivers = new Set(assignments.map((row) => row.driverId));
-    const assignedVehicles = new Set(assignments.map((row) => row.vehicleId));
-    const unassignedDrivers = drivers.filter(
-      (driver) => !assignedDrivers.has(driver.id),
-    ).length;
-    const unassignedVehicles = vehicles.filter(
-      (vehicle) => !assignedVehicles.has(vehicle.id),
-    ).length;
-
-    const deviationCount = deviations.length;
-
+    const row = result.rows[0];
     return {
-      activeTrips: activeTrips.length,
-      deviations: deviationCount,
-      schedulesToday: schedules.length,
-      unassignedDrivers,
-      unassignedVehicles,
+      activeTrips: row?.active_trips ?? 0,
+      deviations: row?.deviations ?? 0,
+      schedulesToday: row?.schedules_today ?? 0,
+      unassignedDrivers: row?.unassigned_drivers ?? 0,
+      unassignedVehicles: row?.unassigned_vehicles ?? 0,
     };
   }
 
   async getRoutePoints(routeId: number) {
+    // Use ordered view (replaces orderRoutePoints)
     const result = (await this.dbService.db.execute(sql`
-      select
-        id,
-        route_id,
-        lon,
-        lat,
-        prev_route_point_id,
-        next_route_point_id
-      from guest_api.v_route_points
-      where route_id = ${routeId}
+      SELECT id, route_id, lon, lat, prev_route_point_id, next_route_point_id, sort_order
+      FROM guest_api.v_route_points_ordered
+      WHERE route_id = ${routeId}
+      ORDER BY sort_order
     `)) as unknown as {
       rows: RoutePointRow[];
     };
 
-    const points = transformToCamelCase(result.rows) as RoutePointRow[];
-    return this.orderRoutePoints(points);
+    return transformToCamelCase(result.rows);
   }
 
   async updateSchedule(id: number, payload: UpdateDispatcherScheduleDto) {
@@ -503,42 +491,36 @@ export class CtDispatcherService {
   async getScheduleDetails(id: number) {
     const schedule = await this.findScheduleById(id);
 
+    // Use DB function for ordered stops with timing (replaces buildStopsWithTiming + orderRouteStops)
     const stopsResult = (await this.dbService.db.execute(sql`
-      select
-        id,
-        stop_id,
-        stop_name,
-        distance_to_next_km,
-        lon,
-        lat,
-        prev_route_stop_id,
-        next_route_stop_id
-      from guest_api.v_route_stops
-      where route_id = ${schedule.routeId}
-    `)) as unknown as { rows: StopRow[] };
+      SELECT * FROM guest_api.get_route_stops_with_timing(${schedule.routeId})
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        stop_id: number;
+        stop_name: string;
+        lon: string;
+        lat: string;
+        sort_order: number;
+        distance_to_next_km: number | null;
+        minutes_to_next_stop: number | null;
+        minutes_from_start: number | null;
+      }>;
+    };
 
-    const stops = transformToCamelCase(stopsResult.rows) as StopRow[];
-    const orderedStops = this.orderRouteStops(stops);
-    const routePoints = await this.getRoutePoints(schedule.routeId);
+    const stopsWithIntervals = stopsResult.rows.map((stop) => ({
+      id: stop.stop_id,
+      name: stop.stop_name,
+      lon: stop.lon,
+      lat: stop.lat,
+      distanceToNextKm: stop.distance_to_next_km,
+      minutesToNextStop: stop.minutes_to_next_stop,
+    }));
 
-    let totalMinutes = 0;
-    const stopsWithIntervals = this.buildStopsWithTiming(
-      orderedStops,
-      routePoints,
-    ).map((stop) => {
-      if (stop.minutesToNextStop !== null) {
-        totalMinutes += stop.minutesToNextStop;
-      }
-
-      return {
-        id: stop.id,
-        name: stop.name,
-        lon: stop.lon,
-        lat: stop.lat,
-        distanceToNextKm: stop.distanceToNextKm,
-        minutesToNextStop: stop.minutesToNextStop,
-      };
-    });
+    const totalMinutes = stopsResult.rows.reduce(
+      (sum, stop) => sum + (stop.minutes_to_next_stop ?? 0),
+      0,
+    );
 
     const routeDurationMin =
       stopsWithIntervals.length > 0 ? this.roundTo1(totalMinutes) : null;
@@ -546,11 +528,17 @@ export class CtDispatcherService {
       routeDurationMin !== null
         ? this.addMinutes(schedule.workStartTime, routeDurationMin)
         : null;
-    const departures = this.buildDepartureTimes(
-      schedule.workStartTime,
-      schedule.workEndTime,
-      schedule.intervalMin,
-    );
+
+    // Use DB function for departure times (replaces buildDepartureTimes)
+    const departuresResult = (await this.dbService.db.execute(sql`
+      SELECT * FROM dispatcher_api.get_departure_times(
+        ${schedule.workStartTime}::time,
+        ${schedule.workEndTime}::time,
+        ${schedule.intervalMin}
+      )
+    `)) as unknown as { rows: Array<{ departure_time: string }> };
+
+    const departures = departuresResult.rows.map((r) => r.departure_time);
 
     return {
       id: schedule.id,
@@ -617,9 +605,7 @@ export class CtDispatcherService {
       limit 1
     `)) as unknown as { rows: MonitoringRow[] };
 
-    const monitoring = (
-      transformToCamelCase(result.rows) as MonitoringRow[]
-    )[0];
+    const monitoring = transformToCamelCase(result.rows)[0];
     if (!monitoring) {
       throw new NotFoundException(
         `Vehicle ${fleetNumber} not found in monitoring`,
@@ -805,7 +791,7 @@ export class CtDispatcherService {
       limit 1
     `)) as unknown as { rows: VehicleRow[] };
 
-    const vehicle = (transformToCamelCase(result.rows) as VehicleRow[])[0];
+    const vehicle = transformToCamelCase(result.rows)[0];
     if (!vehicle) {
       throw new NotFoundException(`Vehicle ${fleetNumber} not found`);
     }
@@ -829,7 +815,7 @@ export class CtDispatcherService {
       limit 1
     `)) as unknown as { rows: VehicleRow[] };
 
-    const vehicle = (transformToCamelCase(result.rows) as VehicleRow[])[0];
+    const vehicle = transformToCamelCase(result.rows)[0];
     if (!vehicle) {
       throw new NotFoundException(`Vehicle ${vehicleId} not found`);
     }
@@ -1037,7 +1023,7 @@ export class CtDispatcherService {
       where route_id = ${routeId}
     `)) as unknown as { rows: StopRow[] };
 
-    return transformToCamelCase(result.rows) as StopRow[];
+    return transformToCamelCase(result.rows);
   }
 
   private orderRouteStops<

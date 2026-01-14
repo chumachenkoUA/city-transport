@@ -22,7 +22,7 @@ export async function getTestApp(): Promise<INestApplication> {
       }).compile();
 
       const instance = moduleFixture.createNestApplication();
-      
+
       // Match global config from main.ts
       instance.useGlobalFilters(new PostgresExceptionFilter());
       instance.useGlobalInterceptors(new TransformInterceptor());

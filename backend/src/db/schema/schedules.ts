@@ -8,6 +8,7 @@ import {
   integer,
   pgTable,
   time,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 import { vehicles } from './vehicles';
@@ -39,10 +40,17 @@ export const schedules = pgTable(
     validFrom: date('valid_from'),
     validTo: date('valid_to'),
   },
-  () => ({
+  (table) => ({
     schedulesIntervalCheck: check(
       'schedules_interval_check',
       sql.raw('"interval_min" > 0'),
     ),
+    schedulesTimeCheck: check(
+      'schedules_time_check',
+      sql.raw('"work_end_time" > "work_start_time"'),
+    ),
+    schedulesRouteVehiclePeriodUnique: unique(
+      'schedules_route_vehicle_period_unique',
+    ).on(table.routeId, table.vehicleId, table.validFrom),
   }),
 );

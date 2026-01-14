@@ -360,6 +360,7 @@ $$;
 -- Дозволяє анонімним користувачам (ct_guest_role) подавати скарги
 -- user_id = NULL для анонімних скарг (p_contact_info для зворотного зв'язку)
 -- Опціонально можна вказати маршрут та/або транспортний засіб
+-- VALIDATION: If route_number/transport_type provided but not found - raise exception
 CREATE OR REPLACE FUNCTION guest_api.submit_complaint(
     p_type text,
     p_message text,
@@ -375,16 +376,36 @@ DECLARE
     v_route_id INT;
     v_vehicle_id BIGINT;
 BEGIN
+    -- Validate complaint type
+    IF p_type NOT IN ('complaint', 'suggestion') THEN
+        RAISE EXCEPTION 'Invalid type: %. Must be complaint or suggestion', p_type;
+    END IF;
+
+    -- Validate message length
+    IF length(p_message) > 5000 THEN
+        RAISE EXCEPTION 'Message too long (max 5000 characters)';
+    END IF;
+
+    -- Validate route if provided
     IF p_route_number IS NOT NULL AND p_transport_type IS NOT NULL THEN
         SELECT r.id INTO v_route_id
         FROM public.routes r
         JOIN public.transport_types tt ON tt.id = r.transport_type_id
         WHERE r.number = p_route_number AND tt.name = p_transport_type
         LIMIT 1;
+
+        IF v_route_id IS NULL THEN
+            RAISE EXCEPTION 'Route not found: % (%)', p_route_number, p_transport_type;
+        END IF;
     END IF;
 
+    -- Validate vehicle if provided
     IF p_vehicle_number IS NOT NULL THEN
         SELECT id INTO v_vehicle_id FROM public.vehicles WHERE fleet_number = p_vehicle_number LIMIT 1;
+
+        IF v_vehicle_id IS NULL THEN
+            RAISE EXCEPTION 'Vehicle not found: %', p_vehicle_number;
+        END IF;
     END IF;
 
     INSERT INTO public.complaints_suggestions (
@@ -396,7 +417,140 @@ END;
 $$;
 
 -- ============================================================================
--- 8. GRANT - Надання прав доступу
+-- 8. ORDERED VIEWS - Впорядковані зупинки та точки маршруту
+-- ============================================================================
+-- Ці VIEW замінюють функції orderRouteStops() та orderRoutePoints()
+-- які були продубльовані в 4+ TypeScript сервісах
+
+-- Ordered route stops view (replaces orderRouteStops in driver, dispatcher, guest, municipality services)
+CREATE OR REPLACE VIEW guest_api.v_route_stops_ordered AS
+WITH RECURSIVE ordered AS (
+  SELECT rs.id, rs.route_id, rs.stop_id, rs.distance_to_next_km,
+         rs.prev_route_stop_id, rs.next_route_stop_id,
+         s.name AS stop_name, s.lon, s.lat,
+         1 AS sort_order
+  FROM public.route_stops rs
+  JOIN public.stops s ON s.id = rs.stop_id
+  WHERE rs.prev_route_stop_id IS NULL
+  UNION ALL
+  SELECT rs.id, rs.route_id, rs.stop_id, rs.distance_to_next_km,
+         rs.prev_route_stop_id, rs.next_route_stop_id,
+         s.name, s.lon, s.lat,
+         o.sort_order + 1
+  FROM public.route_stops rs
+  JOIN public.stops s ON s.id = rs.stop_id
+  JOIN ordered o ON rs.prev_route_stop_id = o.id
+)
+SELECT * FROM ordered;
+
+-- Ordered route points view (replaces orderRoutePoints in driver, dispatcher, guest services)
+CREATE OR REPLACE VIEW guest_api.v_route_points_ordered AS
+WITH RECURSIVE ordered AS (
+  SELECT id, route_id, lon, lat, prev_route_point_id, next_route_point_id,
+         1 AS sort_order
+  FROM public.route_points
+  WHERE prev_route_point_id IS NULL
+  UNION ALL
+  SELECT rp.id, rp.route_id, rp.lon, rp.lat, rp.prev_route_point_id, rp.next_route_point_id,
+         o.sort_order + 1
+  FROM public.route_points rp
+  JOIN ordered o ON rp.prev_route_point_id = o.id
+)
+SELECT * FROM ordered;
+
+-- ============================================================================
+-- 9. TIMING FUNCTION - Зупинки з часом до наступної
+-- ============================================================================
+-- Замінює buildStopsWithTiming() який був продубльований в driver та dispatcher сервісах
+-- Використовує середню швидкість 25 км/год для розрахунку часу
+
+CREATE OR REPLACE FUNCTION guest_api.get_route_stops_with_timing(p_route_id bigint)
+RETURNS TABLE (
+  id bigint,
+  stop_id bigint,
+  stop_name text,
+  lon numeric,
+  lat numeric,
+  sort_order int,
+  distance_to_next_km numeric,
+  minutes_to_next_stop numeric,
+  minutes_from_start numeric
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  v_avg_speed_kmh CONSTANT numeric := 25;
+BEGIN
+  RETURN QUERY
+  WITH ordered_stops AS (
+    SELECT os.id, os.stop_id, os.stop_name, os.lon, os.lat, os.sort_order, os.distance_to_next_km
+    FROM guest_api.v_route_stops_ordered os
+    WHERE os.route_id = p_route_id
+  ),
+  with_timing AS (
+    SELECT
+      os.id,
+      os.stop_id,
+      os.stop_name,
+      os.lon,
+      os.lat,
+      os.sort_order,
+      os.distance_to_next_km,
+      CASE
+        WHEN os.distance_to_next_km IS NOT NULL
+        THEN ROUND((os.distance_to_next_km / v_avg_speed_kmh) * 60, 1)
+        ELSE NULL
+      END AS minutes_to_next_stop,
+      ROUND(COALESCE(SUM(os.distance_to_next_km)
+        OVER (ORDER BY os.sort_order ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0)
+        / v_avg_speed_kmh * 60, 1) AS minutes_from_start
+    FROM ordered_stops os
+  )
+  SELECT wt.id, wt.stop_id, wt.stop_name, wt.lon, wt.lat, wt.sort_order,
+         wt.distance_to_next_km, wt.minutes_to_next_stop, wt.minutes_from_start
+  FROM with_timing wt
+  ORDER BY wt.sort_order;
+END;
+$$;
+
+-- ============================================================================
+-- 10. NEAREST STOP FUNCTION - Пошук найближчої зупинки
+-- ============================================================================
+-- Замінює findNearestStop() та findNearestPointIndex() з TypeScript сервісів
+
+CREATE OR REPLACE FUNCTION guest_api.find_nearest_stop_to_point(
+  p_lon numeric,
+  p_lat numeric,
+  p_limit integer DEFAULT 1
+)
+RETURNS TABLE (
+  id bigint,
+  name text,
+  lon numeric,
+  lat numeric,
+  distance_meters numeric
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    s.id,
+    s.name,
+    s.lon,
+    s.lat,
+    ST_DistanceSphere(
+      ST_MakePoint(p_lon::float, p_lat::float),
+      ST_MakePoint(s.lon::float, s.lat::float)
+    )::numeric AS distance_meters
+  FROM public.stops s
+  ORDER BY distance_meters
+  LIMIT p_limit;
+END;
+$$;
+
+-- ============================================================================
+-- 11. GRANT - Надання прав доступу
 -- ============================================================================
 -- SELECT на VIEW: читання публічної інформації
 -- EXECUTE на функції: виклик функцій пошуку та подання скарг
@@ -409,3 +563,5 @@ GRANT EXECUTE ON FUNCTION guest_api.search_stops_by_name(text, integer) TO ct_gu
 GRANT EXECUTE ON FUNCTION guest_api.plan_route(numeric, numeric, numeric, numeric, numeric, integer, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
 GRANT EXECUTE ON FUNCTION guest_api.plan_route_pgrouting(bigint[], bigint[], integer, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
 GRANT EXECUTE ON FUNCTION guest_api.submit_complaint(text, text, text, text, text, text) TO ct_guest_role, ct_passenger_role;
+GRANT EXECUTE ON FUNCTION guest_api.get_route_stops_with_timing(bigint) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;
+GRANT EXECUTE ON FUNCTION guest_api.find_nearest_stop_to_point(numeric, numeric, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;

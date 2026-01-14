@@ -117,11 +117,12 @@ export interface PassengerRoute {
 }
 
 export interface PassengerRouteStop {
-  id: number;
-  name: string;
+  id: number;           // route_stops table ID
+  stopId: number;       // actual stop ID
+  stopName: string;
   lon: string;
   lat: string;
-  distanceToNextKm: number | null;
+  distanceToNextKm: string | null;
 }
 
 export interface PassengerRoutePoint {

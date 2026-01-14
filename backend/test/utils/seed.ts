@@ -29,6 +29,8 @@ type PassengerSeed = {
 type TripsSeed = {
   finishedId: number;
   activeId: number;
+  cancelledId: number;
+  scheduledId: number;
 };
 
 export type SeedData = {
@@ -40,6 +42,7 @@ export type SeedData = {
   vehicles: VehicleSeed[];
   drivers: DriverSeed[];
   passenger: PassengerSeed;
+  passenger2: PassengerSeed; // Second passenger for authorization bypass testing
   trips: TripsSeed;
   fineId: number;
 };
@@ -82,16 +85,6 @@ export async function ensureSeedData(): Promise<SeedData> {
     try {
       await client.query('BEGIN');
 
-      await client.query('GRANT USAGE ON SCHEMA auth TO ct_admin_role');
-      await client.query(
-        'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO ct_admin_role',
-      );
-      await client.query(
-        'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ct_admin_role',
-      );
-      await client.query(
-        'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ct_admin_role',
-      );
       await client.query(`
         DO $$
         BEGIN
@@ -107,175 +100,56 @@ export async function ensureSeedData(): Promise<SeedData> {
           END IF;
         END $$;
       `);
-      await client.query(
-        'GRANT SELECT ON public.transport_types TO ct_dispatcher_role, ct_manager_role, ct_municipality_role',
-      );
-      await client.query(
-        'GRANT SELECT ON public.routes TO ct_dispatcher_role, ct_manager_role, ct_municipality_role',
-      );
-      await client.query(
-        'GRANT SELECT ON public.schedules TO ct_dispatcher_role',
-      );
-      await client.query(
-        'ALTER TABLE public.schedules ADD COLUMN IF NOT EXISTS vehicle_id bigint',
-      );
+      // All views, functions and grants are already created by migrations
+      // We only need to seed test data
 
-      await client.query(`
-        CREATE OR REPLACE FUNCTION dispatcher_api.create_schedule_v2(
-          p_route_number text,
-          p_transport_type text,
-          p_start time,
-          p_end time,
-          p_interval integer
-        )
-        RETURNS bigint
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        SET search_path = public, pg_catalog
-        AS $$
-        DECLARE
-          v_route_id bigint;
-          v_id bigint;
-        BEGIN
-          SELECT r.id INTO v_route_id
-          FROM public.routes r
-          JOIN public.transport_types tt ON tt.id = r.transport_type_id
-          WHERE r.number = p_route_number AND tt.name = p_transport_type
-          LIMIT 1;
+      // Create staff users (PostgreSQL roles) for testing
+      const staffUsers = [
+        { login: 'ct_manager', role: 'ct_manager_role' },
+        { login: 'ct_controller', role: 'ct_controller_role' },
+        { login: 'ct_dispatcher', role: 'ct_dispatcher_role' },
+        { login: 'ct_accountant', role: 'ct_accountant_role' },
+        { login: 'ct_municipality', role: 'ct_municipality_role' },
+      ];
 
-          IF v_route_id IS NULL THEN
-            RAISE EXCEPTION 'Route not found';
-          END IF;
+      for (const staff of staffUsers) {
+        const roleExists = await client.query(
+          `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+          [staff.login],
+        );
+        if (!roleExists.rows[0]) {
+          await client.query(
+            `CREATE ROLE ${staff.login} LOGIN PASSWORD '${PASSWORD}'`,
+          );
+          await client.query(`GRANT ${staff.role} TO ${staff.login}`);
+        }
+      }
 
-          SELECT id INTO v_id FROM public.schedules
-          WHERE route_id = v_route_id
-          ORDER BY id
-          LIMIT 1;
+      // Create passenger PostgreSQL roles
+      const passengerLogins = ['pupkin', 'pupkin2'];
+      for (const login of passengerLogins) {
+        const roleExists = await client.query(
+          `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+          [login],
+        );
+        if (!roleExists.rows[0]) {
+          await client.query(`CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`);
+          await client.query(`GRANT ct_passenger_role TO ${login}`);
+        }
+      }
 
-          IF v_id IS NULL THEN
-            INSERT INTO public.schedules (route_id, work_start_time, work_end_time, interval_min)
-            VALUES (v_route_id, p_start, p_end, p_interval)
-            RETURNING id INTO v_id;
-          ELSE
-            UPDATE public.schedules
-            SET work_start_time = p_start,
-                work_end_time = p_end,
-                interval_min = p_interval
-            WHERE id = v_id
-            RETURNING id INTO v_id;
-          END IF;
-
-          RETURN v_id;
-        END;
-        $$;
-      `);
-
-      await client.query(`
-        CREATE OR REPLACE FUNCTION dispatcher_api.create_schedule(
-          p_route_id bigint,
-          p_vehicle_id bigint,
-          p_start time,
-          p_end time,
-          p_interval integer
-        )
-        RETURNS bigint
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        SET search_path = public, pg_catalog
-        AS $$
-        DECLARE
-          v_id bigint;
-        BEGIN
-          INSERT INTO public.schedules (route_id, vehicle_id, work_start_time, work_end_time, interval_min)
-          VALUES (p_route_id, p_vehicle_id, p_start, p_end, p_interval)
-          RETURNING id INTO v_id;
-          RETURN v_id;
-        END;
-        $$;
-      `);
-
-      await client.query(`
-        CREATE OR REPLACE FUNCTION dispatcher_api.update_schedule(
-          p_schedule_id bigint,
-          p_route_id bigint DEFAULT NULL,
-          p_vehicle_id bigint DEFAULT NULL,
-          p_start time DEFAULT NULL,
-          p_end time DEFAULT NULL,
-          p_interval integer DEFAULT NULL
-        )
-        RETURNS void
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        SET search_path = public, pg_catalog
-        AS $$
-        BEGIN
-          UPDATE public.schedules
-          SET route_id = COALESCE(p_route_id, route_id),
-              vehicle_id = COALESCE(p_vehicle_id, vehicle_id),
-              work_start_time = COALESCE(p_start, work_start_time),
-              work_end_time = COALESCE(p_end, work_end_time),
-              interval_min = COALESCE(p_interval, interval_min)
-          WHERE id = p_schedule_id;
-        END;
-        $$;
-      `);
-
-      await client.query(
-        'GRANT EXECUTE ON FUNCTION dispatcher_api.create_schedule(bigint, bigint, time, time, integer) TO ct_dispatcher_role',
-      );
-      await client.query(
-        'GRANT EXECUTE ON FUNCTION dispatcher_api.update_schedule(bigint, bigint, bigint, time, time, integer) TO ct_dispatcher_role',
-      );
-
-      await client.query(`
-        CREATE OR REPLACE VIEW dispatcher_api.v_schedules_list AS
-        SELECT
-          s.id,
-          s.route_id,
-          r.number as route_number,
-          r.direction as direction,
-          tt.name as transport_type,
-          s.work_start_time,
-          s.work_end_time,
-          s.interval_min,
-          s.vehicle_id,
-          v.fleet_number
-        FROM public.schedules s
-        JOIN public.routes r ON r.id = s.route_id
-        JOIN public.transport_types tt ON tt.id = r.transport_type_id
-        LEFT JOIN public.vehicles v ON v.id = s.vehicle_id;
-      `);
-
-      await client.query(`
-        CREATE OR REPLACE VIEW dispatcher_api.v_vehicle_monitoring AS
-        SELECT
-          v.id,
-          v.fleet_number,
-          v.route_id,
-          r.number as route_number,
-          r.direction as direction,
-          tt.name as transport_type,
-          v.last_lon,
-          v.last_lat,
-          v.last_recorded_at,
-          CASE WHEN v.last_recorded_at > (now() - interval '5 minutes')
-            THEN 'active'
-            ELSE 'inactive'
-          END as status,
-          d.full_name as current_driver_name
-        FROM public.vehicles v
-        JOIN public.routes r ON r.id = v.route_id
-        JOIN public.transport_types tt ON tt.id = r.transport_type_id
-        LEFT JOIN public.trips t ON t.vehicle_id = v.id AND t.ends_at IS NULL
-        LEFT JOIN public.drivers d ON d.id = t.driver_id;
-      `);
-
-      await client.query(
-        'GRANT SELECT ON dispatcher_api.v_schedules_list TO ct_dispatcher_role',
-      );
-      await client.query(
-        'GRANT SELECT ON dispatcher_api.v_vehicle_monitoring TO ct_dispatcher_role',
-      );
+      // Create driver PostgreSQL roles
+      const driverLogins = ['driver1', 'driver2'];
+      for (const login of driverLogins) {
+        const roleExists = await client.query(
+          `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+          [login],
+        );
+        if (!roleExists.rows[0]) {
+          await client.query(`CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`);
+          await client.query(`GRANT ct_driver_role TO ${login}`);
+        }
+      }
 
       const transportTypeName = 'Bus';
       await client.query(
@@ -494,6 +368,50 @@ export async function ensureSeedData(): Promise<SeedData> {
         );
       }
 
+      // Create second passenger for authorization bypass testing
+      const passenger2Login = 'pupkin2';
+      const passenger2Email = 'pupkin2@test.local';
+      const passenger2Phone = '+380000000011';
+
+      const passenger2Result = await client.query<{ id: number }>(
+        'SELECT id FROM public.users WHERE login = $1',
+        [passenger2Login],
+      );
+      let passenger2Id = toNumber(passenger2Result.rows[0]?.id);
+      if (!passenger2Id) {
+        const inserted = await client.query<{ id: number }>(
+          `INSERT INTO public.users (login, email, phone, full_name)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
+          [
+            passenger2Login,
+            passenger2Email,
+            passenger2Phone,
+            'Passenger Pupkin2',
+          ],
+        );
+        passenger2Id = toNumber(inserted.rows[0]?.id);
+      }
+
+      const existingCard2 = await client.query<{
+        id: number;
+        card_number: string;
+      }>(
+        'SELECT id, card_number FROM public.transport_cards WHERE user_id = $1 LIMIT 1',
+        [passenger2Id],
+      );
+      let card2Id = toNumber(existingCard2.rows[0]?.id);
+      const card2Number =
+        existingCard2.rows[0]?.card_number ?? `CARD-${passenger2Id}`;
+
+      if (!card2Id) {
+        const inserted = await client.query<{ id: number }>(
+          'INSERT INTO public.transport_cards (user_id, balance, card_number) VALUES ($1, $2, $3) RETURNING id',
+          [passenger2Id, 50, card2Number],
+        );
+        card2Id = toNumber(inserted.rows[0]?.id);
+      }
+
       const assignments = [
         { driverId: drivers[0].id, vehicleId: vehicles[0].id },
         { driverId: drivers[1].id, vehicleId: vehicles[1].id },
@@ -512,39 +430,115 @@ export async function ensureSeedData(): Promise<SeedData> {
       }
 
       const now = new Date();
+
+      // Finished/completed trip
       const finishedTripResult = await client.query<{ id: number }>(
-        'SELECT id FROM public.trips WHERE driver_id = $1 AND ends_at IS NOT NULL ORDER BY ends_at DESC LIMIT 1',
-        [drivers[0].id],
+        'SELECT id FROM public.trips WHERE driver_id = $1 AND status = $2 ORDER BY actual_ends_at DESC LIMIT 1',
+        [drivers[0].id, 'completed'],
       );
       let finishedTripId = toNumber(finishedTripResult.rows[0]?.id);
       if (!finishedTripId) {
-        const startedAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        const endedAt = new Date(now.getTime() - 60 * 60 * 1000);
+        const plannedStartsAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        const plannedEndsAt = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+        const actualStartsAt = plannedStartsAt;
+        const actualEndsAt = plannedEndsAt;
         const inserted = await client.query<{ id: number }>(
           `INSERT INTO public.trips
-            (route_id, vehicle_id, driver_id, starts_at, ends_at, passenger_count)
-           VALUES ($1, $2, $3, $4, $5, $6)
+            (route_id, driver_id, planned_starts_at, planned_ends_at, actual_starts_at, actual_ends_at, status, passenger_count)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
-          [routeId, vehicles[0].id, drivers[0].id, startedAt, endedAt, 12],
+          [
+            routeId,
+            drivers[0].id,
+            plannedStartsAt,
+            plannedEndsAt,
+            actualStartsAt,
+            actualEndsAt,
+            'completed',
+            12,
+          ],
         );
         finishedTripId = toNumber(inserted.rows[0]?.id);
       }
 
+      // Active/in_progress trip
       const activeTripResult = await client.query<{ id: number }>(
-        'SELECT id FROM public.trips WHERE driver_id = $1 AND ends_at IS NULL ORDER BY starts_at DESC LIMIT 1',
-        [drivers[1].id],
+        'SELECT id FROM public.trips WHERE driver_id = $1 AND status = $2 ORDER BY actual_starts_at DESC LIMIT 1',
+        [drivers[1].id, 'in_progress'],
       );
       let activeTripId = toNumber(activeTripResult.rows[0]?.id);
       if (!activeTripId) {
-        const startedAt = new Date(now.getTime() - 30 * 60 * 1000);
+        const plannedStartsAt = new Date(now.getTime() - 30 * 60 * 1000);
+        const plannedEndsAt = new Date(now.getTime() + 30 * 60 * 1000);
+        const actualStartsAt = plannedStartsAt;
         const inserted = await client.query<{ id: number }>(
           `INSERT INTO public.trips
-            (route_id, vehicle_id, driver_id, starts_at, ends_at, passenger_count)
-           VALUES ($1, $2, $3, $4, $5, $6)
+            (route_id, driver_id, planned_starts_at, planned_ends_at, actual_starts_at, status, passenger_count)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
-          [routeId, vehicles[1].id, drivers[1].id, startedAt, null, 8],
+          [
+            routeId,
+            drivers[1].id,
+            plannedStartsAt,
+            plannedEndsAt,
+            actualStartsAt,
+            'in_progress',
+            8,
+          ],
         );
         activeTripId = toNumber(inserted.rows[0]?.id);
+      }
+
+      // Cancelled trip (for testing issue_fine should fail on non in_progress trips)
+      const cancelledTripResult = await client.query<{ id: number }>(
+        'SELECT id FROM public.trips WHERE driver_id = $1 AND status = $2 ORDER BY planned_starts_at DESC LIMIT 1',
+        [drivers[0].id, 'cancelled'],
+      );
+      let cancelledTripId = toNumber(cancelledTripResult.rows[0]?.id);
+      if (!cancelledTripId) {
+        const plannedStartsAt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const plannedEndsAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        const inserted = await client.query<{ id: number }>(
+          `INSERT INTO public.trips
+            (route_id, driver_id, planned_starts_at, planned_ends_at, status, passenger_count)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id`,
+          [
+            routeId,
+            drivers[0].id,
+            plannedStartsAt,
+            plannedEndsAt,
+            'cancelled',
+            0,
+          ],
+        );
+        cancelledTripId = toNumber(inserted.rows[0]?.id);
+      }
+
+      // Scheduled trip (for testing issue_fine should fail on non in_progress trips)
+      const scheduledTripResult = await client.query<{ id: number }>(
+        'SELECT id FROM public.trips WHERE driver_id = $1 AND status = $2 ORDER BY planned_starts_at DESC LIMIT 1',
+        [drivers[0].id, 'scheduled'],
+      );
+      let scheduledTripId = toNumber(scheduledTripResult.rows[0]?.id);
+      if (!scheduledTripId) {
+        const plannedStartsAt = new Date(now.getTime() + 60 * 60 * 1000);
+        const plannedEndsAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+        const inserted = await client.query<{ id: number }>(
+          `INSERT INTO public.trips
+            (route_id, driver_id, planned_starts_at, planned_ends_at, status, passenger_count)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id`,
+          [
+            routeId,
+            drivers[0].id,
+            plannedStartsAt,
+            plannedEndsAt,
+            'scheduled',
+            0,
+          ],
+        );
+        scheduledTripId = toNumber(inserted.rows[0]?.id);
       }
 
       const gpsResult = await client.query<{ id: number }>(
@@ -614,7 +608,7 @@ export async function ensureSeedData(): Promise<SeedData> {
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             passengerId,
-            'Complaint',
+            'complaint',
             'Test complaint',
             'Подано',
             now,
@@ -641,9 +635,18 @@ export async function ensureSeedData(): Promise<SeedData> {
           cardId,
           cardNumber,
         },
+        passenger2: {
+          id: passenger2Id,
+          login: passenger2Login,
+          password: PASSWORD,
+          cardId: card2Id,
+          cardNumber: card2Number,
+        },
         trips: {
           finishedId: finishedTripId,
           activeId: activeTripId,
+          cancelledId: cancelledTripId,
+          scheduledId: scheduledTripId,
         },
         fineId,
       };

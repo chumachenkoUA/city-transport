@@ -62,6 +62,7 @@ LEFT JOIN public.schedules sch ON sch.route_id = r.id
 WHERE r.is_active = true;
 
 -- 2. Complaint Function
+-- VALIDATION: If route_number/transport_type provided but not found - raise exception
 CREATE OR REPLACE FUNCTION passenger_api.submit_complaint(
     p_type text,
     p_message text,
@@ -81,16 +82,36 @@ BEGIN
     SELECT id INTO v_user_id FROM public.users WHERE login = session_user;
     IF v_user_id IS NULL THEN RAISE EXCEPTION 'User not found'; END IF;
 
+    -- Validate complaint type
+    IF p_type NOT IN ('complaint', 'suggestion') THEN
+        RAISE EXCEPTION 'Invalid type: %. Must be complaint or suggestion', p_type;
+    END IF;
+
+    -- Validate message length
+    IF length(p_message) > 5000 THEN
+        RAISE EXCEPTION 'Message too long (max 5000 characters)';
+    END IF;
+
+    -- Validate route if provided
     IF p_route_number IS NOT NULL AND p_transport_type IS NOT NULL THEN
         SELECT r.id INTO v_route_id
         FROM public.routes r
         JOIN public.transport_types tt ON tt.id = r.transport_type_id
         WHERE r.number = p_route_number AND tt.name = p_transport_type
         LIMIT 1;
+
+        IF v_route_id IS NULL THEN
+            RAISE EXCEPTION 'Route not found: % (%)', p_route_number, p_transport_type;
+        END IF;
     END IF;
 
+    -- Validate vehicle if provided
     IF p_vehicle_number IS NOT NULL THEN
         SELECT id INTO v_vehicle_id FROM public.vehicles WHERE fleet_number = p_vehicle_number LIMIT 1;
+
+        IF v_vehicle_id IS NULL THEN
+            RAISE EXCEPTION 'Vehicle not found: %', p_vehicle_number;
+        END IF;
     END IF;
 
     INSERT INTO public.complaints_suggestions (user_id, type, message, status, created_at, route_id, vehicle_id)
@@ -165,17 +186,41 @@ END;
 $$;
 
 -- 4. Ticket Purchase
+-- SECURITY: Uses FOR UPDATE to prevent race conditions (double-spending)
 CREATE OR REPLACE FUNCTION passenger_api.buy_ticket(p_card_id bigint, p_trip_id bigint, p_price numeric)
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_bal numeric; v_tid bigint; v_uid bigint;
 BEGIN
-    SELECT user_id, balance INTO v_uid, v_bal FROM public.transport_cards WHERE id = p_card_id;
+    -- Validate price
+    IF p_price <= 0 THEN
+        RAISE EXCEPTION 'Price must be positive';
+    END IF;
+
+    -- Validate trip exists
+    IF NOT EXISTS (SELECT 1 FROM public.trips WHERE id = p_trip_id) THEN
+        RAISE EXCEPTION 'Trip not found';
+    END IF;
+
+    -- Lock the card row to prevent concurrent balance modifications
+    SELECT user_id, balance INTO v_uid, v_bal
+    FROM public.transport_cards
+    WHERE id = p_card_id
+    FOR UPDATE;
+
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'Card not found';
+    END IF;
+
     IF (SELECT id FROM public.users WHERE login = session_user) != v_uid THEN
         RAISE EXCEPTION 'Not your card';
     END IF;
-    IF v_bal < p_price THEN RAISE EXCEPTION 'Insufficient balance'; END IF;
+
+    IF v_bal < p_price THEN
+        RAISE EXCEPTION 'Insufficient balance';
+    END IF;
+
     UPDATE public.transport_cards SET balance = balance - p_price WHERE id = p_card_id;
     INSERT INTO public.tickets (card_id, trip_id, price, purchased_at)
     VALUES (p_card_id, p_trip_id, p_price, now()) RETURNING id INTO v_tid;
@@ -184,13 +229,28 @@ END;
 $$;
 
 -- 5. Card Top Up
+-- SECURITY: Only card owner can top up their own card
 CREATE OR REPLACE FUNCTION passenger_api.top_up_card(p_card text, p_amt numeric)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_cid bigint;
 BEGIN
-    SELECT id INTO v_cid FROM public.transport_cards WHERE card_number = p_card;
+    -- Validate amount
+    IF p_amt <= 0 THEN
+        RAISE EXCEPTION 'Amount must be positive';
+    END IF;
+
+    -- Select card only if it belongs to current user
+    SELECT tc.id INTO v_cid
+    FROM public.transport_cards tc
+    JOIN public.users u ON u.id = tc.user_id
+    WHERE tc.card_number = p_card AND u.login = session_user;
+
+    IF v_cid IS NULL THEN
+        RAISE EXCEPTION 'Card not found or not yours';
+    END IF;
+
     UPDATE public.transport_cards SET balance = balance + p_amt WHERE id = v_cid;
     INSERT INTO public.card_top_ups (card_id, amount, topped_up_at) VALUES (v_cid, p_amt, now());
 END;
@@ -248,6 +308,7 @@ END;
 $$;
 
 -- 7. Pay Fine Function
+-- SECURITY: Uses FOR UPDATE to prevent race conditions (double-spending)
 CREATE OR REPLACE FUNCTION passenger_api.pay_fine(p_fine_id bigint, p_card_id bigint)
 RETURNS VOID
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
@@ -263,15 +324,20 @@ BEGIN
     SELECT id INTO v_user_id FROM public.users WHERE login = session_user;
     IF v_user_id IS NULL THEN RAISE EXCEPTION 'User not found'; END IF;
 
+    -- Lock the fine row to prevent concurrent payment attempts
     SELECT user_id, amount, status INTO v_fine_user_id, v_fine_amount, v_fine_status
-    FROM public.fines WHERE id = p_fine_id;
+    FROM public.fines WHERE id = p_fine_id
+    FOR UPDATE;
 
     IF v_fine_user_id IS NULL THEN RAISE EXCEPTION 'Fine not found'; END IF;
     IF v_fine_user_id != v_user_id THEN RAISE EXCEPTION 'Not your fine'; END IF;
     IF v_fine_status = 'Оплачено' THEN RAISE EXCEPTION 'Fine is already paid'; END IF;
+    IF v_fine_status = 'Відмінено' THEN RAISE EXCEPTION 'Fine is cancelled'; END IF;
 
+    -- Lock the card row to prevent concurrent balance modifications
     SELECT user_id, balance INTO v_card_user_id, v_card_balance
-    FROM public.transport_cards WHERE id = p_card_id;
+    FROM public.transport_cards WHERE id = p_card_id
+    FOR UPDATE;
 
     IF v_card_user_id IS NULL THEN RAISE EXCEPTION 'Card not found'; END IF;
     IF v_card_user_id != v_user_id THEN RAISE EXCEPTION 'Not your card'; END IF;
