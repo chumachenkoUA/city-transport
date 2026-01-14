@@ -5,8 +5,8 @@ import {
   check,
   numeric,
   pgTable,
-  text,
   timestamp,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { trips } from './trips';
 import { users } from './users';
@@ -18,10 +18,12 @@ export const fines = pgTable(
     userId: bigint('user_id', { mode: 'number' })
       .notNull()
       .references(() => users.id),
-    status: text('status').notNull(),
+    status: varchar('status', { length: 50 }).notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-    reason: text('reason').notNull(),
-    issuedBy: text('issued_by').notNull().default(sql.raw('current_user')),
+    reason: varchar('reason', { length: 500 }).notNull(),
+    issuedBy: varchar('issued_by', { length: 50 })
+      .notNull()
+      .default(sql.raw('current_user')),
     tripId: bigint('trip_id', { mode: 'number' })
       .notNull()
       .references(() => trips.id),

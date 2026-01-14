@@ -5,8 +5,8 @@ import {
   boolean,
   check,
   pgTable,
-  text,
   unique,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { transportTypes } from './transport-types';
 
@@ -17,8 +17,8 @@ export const routes = pgTable(
     transportTypeId: bigint('transport_type_id', { mode: 'number' })
       .notNull()
       .references(() => transportTypes.id),
-    number: text('number').notNull(),
-    direction: text('direction').notNull(),
+    number: varchar('number', { length: 10 }).notNull(),
+    direction: varchar('direction', { length: 10 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
   },
   (table) => ({

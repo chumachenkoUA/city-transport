@@ -4,19 +4,19 @@ import {
   check,
   numeric,
   pgTable,
-  text,
   timestamp,
+  varchar,
 } from 'drizzle-orm/pg-core';
 
 export const expenses = pgTable(
   'expenses',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    category: text('category').notNull(),
+    category: varchar('category', { length: 100 }).notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-    description: text('description'),
+    description: varchar('description', { length: 500 }),
     occurredAt: timestamp('occurred_at').notNull().defaultNow(),
-    documentRef: text('document_ref'),
+    documentRef: varchar('document_ref', { length: 100 }),
   },
   () => ({
     expensesAmountCheck: check(

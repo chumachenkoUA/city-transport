@@ -12,17 +12,23 @@
 -- ФІНАНСОВІ ТАБЛИЦІ
 -- ============================================================================
 
--- Бюджети: місячні записи доходів/витрат для бухгалтера
+-- Бюджети: місячні записи планових/фактичних доходів та витрат для бухгалтера
 -- Використовується: ct_accountant_role через accountant_api
+-- planned_income/planned_expenses - планові показники на місяць
+-- actual_income/actual_expenses - фактичні показники (розраховуються з incomes/expenses)
 CREATE TABLE "budgets" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"month" date NOT NULL,
-	"income" numeric(14, 2) DEFAULT '0' NOT NULL,
-	"expenses" numeric(14, 2) DEFAULT '0' NOT NULL,
-	"note" text,
+	"planned_income" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"planned_expenses" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"actual_income" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"actual_expenses" numeric(14, 2) DEFAULT '0' NOT NULL,
+	"note" varchar(500),
 	CONSTRAINT "budgets_month_unique" UNIQUE("month"),
-	CONSTRAINT "budgets_income_check" CHECK ("income" >= 0),
-	CONSTRAINT "budgets_expenses_check" CHECK ("expenses" >= 0)
+	CONSTRAINT "budgets_planned_income_check" CHECK ("planned_income" >= 0),
+	CONSTRAINT "budgets_planned_expenses_check" CHECK ("planned_expenses" >= 0),
+	CONSTRAINT "budgets_actual_income_check" CHECK ("actual_income" >= 0),
+	CONSTRAINT "budgets_actual_expenses_check" CHECK ("actual_expenses" >= 0)
 );
 --> statement-breakpoint
 
@@ -49,13 +55,13 @@ CREATE TABLE "card_top_ups" (
 CREATE TABLE "complaints_suggestions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint,
-	"type" text NOT NULL,
-	"message" text NOT NULL,
+	"type" varchar(50) NOT NULL,
+	"message" varchar(2000) NOT NULL,
 	"trip_id" bigint,
 	"route_id" integer,
 	"vehicle_id" bigint,
-	"contact_info" text,
-	"status" text NOT NULL,
+	"contact_info" varchar(200),
+	"status" varchar(50) NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "complaints_suggestions_status_check" CHECK ("status" in ('Подано', 'Розглядається', 'Розглянуто'))
 );
@@ -83,11 +89,11 @@ CREATE TABLE "driver_vehicle_assignments" (
 -- ВАЖЛИВО: login поле = ім'я PostgreSQL ролі водія
 CREATE TABLE "drivers" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"login" text NOT NULL,
-	"email" text NOT NULL,
-	"phone" text NOT NULL,
-	"full_name" text NOT NULL,
-	"driver_license_number" text NOT NULL,
+	"login" varchar(50) NOT NULL,
+	"email" varchar(255) NOT NULL,
+	"phone" varchar(20) NOT NULL,
+	"full_name" varchar(200) NOT NULL,
+	"driver_license_number" varchar(20) NOT NULL,
 	"license_categories" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"passport_data" jsonb NOT NULL,
 	CONSTRAINT "drivers_login_unique" UNIQUE("login"),
@@ -106,12 +112,27 @@ CREATE TABLE "drivers" (
 -- Категорії: паливо, ремонт, зарплата, тощо
 CREATE TABLE "expenses" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"category" text NOT NULL,
+	"category" varchar(100) NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
-	"description" text,
+	"description" varchar(500),
 	"occurred_at" timestamp DEFAULT now() NOT NULL,
-	"document_ref" text,
+	"document_ref" varchar(100),
 	CONSTRAINT "expenses_amount_check" CHECK ("amount" > 0)
+);
+--> statement-breakpoint
+
+-- Доходи: облік всіх надходжень до компанії
+-- Створюється: ct_accountant_role через accountant_api.add_income()
+-- Джерела: government (держбюджет), tickets (квитки), fines (штрафи), other (інше)
+CREATE TABLE "incomes" (
+	"id" bigserial PRIMARY KEY NOT NULL,
+	"source" varchar(50) NOT NULL,
+	"amount" numeric(12, 2) NOT NULL,
+	"description" varchar(500),
+	"document_ref" varchar(100),
+	"received_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "incomes_amount_check" CHECK ("amount" > 0),
+	CONSTRAINT "incomes_source_check" CHECK ("source" in ('government', 'tickets', 'fines', 'other'))
 );
 --> statement-breakpoint
 
@@ -125,8 +146,8 @@ CREATE TABLE "expenses" (
 CREATE TABLE "fine_appeals" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"fine_id" bigint NOT NULL,
-	"message" text NOT NULL,
-	"status" text NOT NULL,
+	"message" varchar(2000) NOT NULL,
+	"status" varchar(50) NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "fine_appeals_fine_id_unique" UNIQUE("fine_id"),
 	CONSTRAINT "fine_appeals_status_check" CHECK ("status" in ('Подано', 'Перевіряється', 'Відхилено', 'Прийнято'))
@@ -141,10 +162,10 @@ CREATE TABLE "fine_appeals" (
 CREATE TABLE "fines" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
-	"status" text NOT NULL,
+	"status" varchar(50) NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
-	"reason" text NOT NULL,
-	"issued_by" text DEFAULT current_user NOT NULL,
+	"reason" varchar(500) NOT NULL,
+	"issued_by" varchar(50) DEFAULT current_user NOT NULL,
 	"trip_id" bigint NOT NULL,
 	"issued_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "fines_amount_check" CHECK ("amount" > 0),
@@ -199,8 +220,8 @@ CREATE TABLE "route_stops" (
 CREATE TABLE "routes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"transport_type_id" bigint NOT NULL,
-	"number" text NOT NULL,
-	"direction" text NOT NULL,
+	"number" varchar(10) NOT NULL,
+	"direction" varchar(10) NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
 	CONSTRAINT "routes_transport_type_number_direction_unique" UNIQUE("transport_type_id","number","direction"),
 	CONSTRAINT "routes_direction_check" CHECK ("direction" in ('forward', 'reverse'))
@@ -232,7 +253,6 @@ CREATE TABLE "salary_payments" (
 -- work_start_time/work_end_time - час роботи маршруту
 -- interval_min - інтервал між рейсами в хвилинах
 -- Дні тижня (monday-sunday) - чи працює маршрут в цей день
--- valid_from/valid_to - період дії розкладу (опціонально)
 CREATE TABLE "schedules" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"route_id" bigint NOT NULL,
@@ -247,11 +267,9 @@ CREATE TABLE "schedules" (
 	"friday" boolean DEFAULT false NOT NULL,
 	"saturday" boolean DEFAULT false NOT NULL,
 	"sunday" boolean DEFAULT false NOT NULL,
-	"valid_from" date,
-	"valid_to" date,
 	CONSTRAINT "schedules_interval_check" CHECK ("interval_min" > 0),
 	CONSTRAINT "schedules_time_check" CHECK ("work_end_time" > "work_start_time"),
-	CONSTRAINT "schedules_route_vehicle_period_unique" UNIQUE("route_id", "vehicle_id", "valid_from")
+	CONSTRAINT "schedules_route_vehicle_unique" UNIQUE("route_id", "vehicle_id")
 );
 --> statement-breakpoint
 
@@ -265,7 +283,7 @@ CREATE TABLE "schedules" (
 -- Індекс gin_trgm_ops для пошуку по назві (guest_api.search_stops_by_name)
 CREATE TABLE "stops" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
+	"name" varchar(200) NOT NULL,
 	"lon" numeric(10, 7) NOT NULL,
 	"lat" numeric(10, 7) NOT NULL,
 	CONSTRAINT "stops_name_lon_lat_unique" UNIQUE("name","lon","lat"),
@@ -297,7 +315,7 @@ CREATE TABLE "transport_cards" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"user_id" bigint NOT NULL,
 	"balance" numeric(12, 2) DEFAULT '0' NOT NULL,
-	"card_number" text NOT NULL,
+	"card_number" varchar(20) NOT NULL,
 	CONSTRAINT "transport_cards_user_id_unique" UNIQUE("user_id"),
 	CONSTRAINT "transport_cards_card_number_unique" UNIQUE("card_number"),
 	CONSTRAINT "transport_cards_balance_check" CHECK ("balance" >= 0)
@@ -312,7 +330,7 @@ CREATE TABLE "transport_cards" (
 -- Довідникова таблиця, заповнюється при ініціалізації
 CREATE TABLE "transport_types" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
+	"name" varchar(50) NOT NULL,
 	CONSTRAINT "transport_types_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
@@ -346,7 +364,7 @@ CREATE TABLE "trips" (
 	"actual_ends_at" timestamp,
 
 	-- Статус рейсу
-	"status" text DEFAULT 'scheduled' NOT NULL,
+	"status" varchar(20) DEFAULT 'scheduled' NOT NULL,
 
 	"passenger_count" integer DEFAULT 0 NOT NULL,
 
@@ -405,10 +423,10 @@ CREATE TABLE "user_gps_logs" (
 -- При реєстрації створюється PostgreSQL роль з GRANT ct_passenger_role
 CREATE TABLE "users" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"login" text NOT NULL,
-	"email" text NOT NULL,
-	"phone" text NOT NULL,
-	"full_name" text NOT NULL,
+	"login" varchar(50) NOT NULL,
+	"email" varchar(255) NOT NULL,
+	"phone" varchar(20) NOT NULL,
+	"full_name" varchar(200) NOT NULL,
 	"registered_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "users_login_unique" UNIQUE("login"),
 	CONSTRAINT "users_email_unique" UNIQUE("email"),
@@ -453,7 +471,7 @@ CREATE TABLE "vehicle_models" (
 -- vehicle_model_id - модель транспорту
 CREATE TABLE "vehicles" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"fleet_number" text NOT NULL,
+	"fleet_number" varchar(20) NOT NULL,
 	"vehicle_model_id" bigint,
 	"route_id" bigint NOT NULL,
 	CONSTRAINT "vehicles_fleet_number_unique" UNIQUE("fleet_number")

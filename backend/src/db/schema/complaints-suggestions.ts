@@ -5,8 +5,8 @@ import {
   check,
   integer,
   pgTable,
-  text,
   timestamp,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { trips } from './trips';
 import { users } from './users';
@@ -18,15 +18,15 @@ export const complaintsSuggestions = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     userId: bigint('user_id', { mode: 'number' }).references(() => users.id),
-    type: text('type').notNull(),
-    message: text('message').notNull(),
+    type: varchar('type', { length: 50 }).notNull(),
+    message: varchar('message', { length: 2000 }).notNull(),
     tripId: bigint('trip_id', { mode: 'number' }).references(() => trips.id),
     routeId: integer('route_id').references(() => routes.id),
     vehicleId: bigint('vehicle_id', { mode: 'number' }).references(
       () => vehicles.id,
     ),
-    contactInfo: text('contact_info'),
-    status: text('status').notNull(),
+    contactInfo: varchar('contact_info', { length: 200 }),
+    status: varchar('status', { length: 50 }).notNull(),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   () => ({

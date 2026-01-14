@@ -3,9 +3,11 @@ import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateBudgetDto } from '../../modules/budgets/dto/create-budget.dto';
 import { CreateExpenseDto } from '../../modules/expenses/dto/create-expense.dto';
+import { CreateIncomeDto } from '../../modules/incomes/dto/create-income.dto';
 import { CreateSalaryPaymentDto } from '../../modules/salary-payments/dto/create-salary-payment.dto';
 import { BudgetQueryDto } from './dto/budget-query.dto';
 import { ExpensesQueryDto } from './dto/expenses-query.dto';
+import { IncomesQueryDto } from './dto/incomes-query.dto';
 import { PeriodDto } from './dto/period.dto';
 import { SalariesQueryDto } from './dto/salaries-query.dto';
 
@@ -23,8 +25,8 @@ export class CtAccountantService {
     const result = (await this.dbService.db.execute(sql`
       select accountant_api.upsert_budget(
         ${payload.month}::date,
-        ${payload.income}::numeric,
-        ${payload.expenses}::numeric,
+        ${payload.plannedIncome}::numeric,
+        ${payload.plannedExpenses}::numeric,
         ${payload.note ?? null}
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
@@ -34,10 +36,62 @@ export class CtAccountantService {
 
   async listBudgets(query: BudgetQueryDto) {
     const result = (await this.dbService.db.execute(sql`
-      select id, month, planned_income, planned_expenses, note
+      select id, month, planned_income, planned_expenses, actual_income, actual_expenses, note
       from accountant_api.v_budgets
       limit ${query.limit ?? 50}
     `)) as unknown as { rows: Record<string, unknown>[] };
+    return result.rows;
+  }
+
+  async createIncome(payload: CreateIncomeDto) {
+    const receivedAt = payload.receivedAt ?? new Date();
+    const result = (await this.dbService.db.execute(sql`
+      select accountant_api.add_income(
+        ${payload.source},
+        ${payload.amount}::numeric,
+        ${payload.description ?? null},
+        ${payload.documentRef ?? null},
+        ${receivedAt}::timestamp
+      ) as "id"
+    `)) as unknown as { rows: Array<{ id: number }> };
+
+    return { id: result.rows[0].id };
+  }
+
+  async getIncomes(query: IncomesQueryDto) {
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+
+    let result;
+    if (query.from && query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_incomes
+        where received_at >= ${query.from}::date
+          and received_at < (${query.to}::date + interval '1 day')
+        order by received_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.from) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_incomes
+        where received_at >= ${query.from}::date
+        order by received_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else if (query.to) {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_incomes
+        where received_at < (${query.to}::date + interval '1 day')
+        order by received_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    } else {
+      result = (await this.dbService.db.execute(sql`
+        select * from accountant_api.v_incomes
+        order by received_at desc
+        limit ${limit} offset ${offset}
+      `)) as unknown as { rows: Record<string, unknown>[] };
+    }
     return result.rows;
   }
 

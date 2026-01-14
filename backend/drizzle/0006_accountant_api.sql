@@ -2,10 +2,37 @@
 -- Accountant API: Financial management
 
 -- 1. FUNCTIONS
+
+-- Функція для додавання доходу
+CREATE OR REPLACE FUNCTION accountant_api.add_income(
+    p_source text,
+    p_amount numeric,
+    p_description text DEFAULT NULL,
+    p_document_ref text DEFAULT NULL,
+    p_received_at timestamp DEFAULT now()
+)
+RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+DECLARE v_id bigint;
+BEGIN
+    -- Валідація джерела
+    IF p_source NOT IN ('government', 'tickets', 'fines', 'other') THEN
+        RAISE EXCEPTION 'Невірне джерело доходу: %. Дозволені: government, tickets, fines, other', p_source;
+    END IF;
+
+    INSERT INTO public.incomes (source, amount, description, document_ref, received_at)
+    VALUES (p_source, p_amount, p_description, p_document_ref, p_received_at)
+    RETURNING id INTO v_id;
+    RETURN v_id;
+END;
+$$;
+
+-- Функція для планування бюджету (планові показники)
 CREATE OR REPLACE FUNCTION accountant_api.upsert_budget(
     p_month date,
-    p_income numeric DEFAULT 0,
-    p_expenses numeric DEFAULT 0,
+    p_planned_income numeric DEFAULT 0,
+    p_planned_expenses numeric DEFAULT 0,
     p_note text DEFAULT NULL
 )
 RETURNS bigint
@@ -13,14 +40,53 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_id bigint;
 BEGIN
-    INSERT INTO public.budgets (month, income, expenses, note)
-    VALUES (p_month, p_income, p_expenses, p_note)
+    INSERT INTO public.budgets (month, planned_income, planned_expenses, note)
+    VALUES (p_month, p_planned_income, p_planned_expenses, p_note)
     ON CONFLICT (month) DO UPDATE SET
-        income = EXCLUDED.income,
-        expenses = EXCLUDED.expenses,
+        planned_income = EXCLUDED.planned_income,
+        planned_expenses = EXCLUDED.planned_expenses,
         note = COALESCE(EXCLUDED.note, budgets.note)
     RETURNING id INTO v_id;
     RETURN v_id;
+END;
+$$;
+
+-- Функція для оновлення фактичних показників бюджету
+CREATE OR REPLACE FUNCTION accountant_api.update_budget_actuals(p_month date)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+DECLARE
+    v_actual_income numeric;
+    v_actual_expenses numeric;
+    v_month_start date;
+    v_month_end date;
+BEGIN
+    v_month_start := date_trunc('month', p_month)::date;
+    v_month_end := (date_trunc('month', p_month) + interval '1 month')::date;
+
+    -- Рахуємо фактичні доходи з таблиці incomes
+    SELECT COALESCE(SUM(amount), 0) INTO v_actual_income
+    FROM public.incomes
+    WHERE received_at >= v_month_start AND received_at < v_month_end;
+
+    -- Рахуємо фактичні витрати з таблиці expenses + salary_payments
+    SELECT COALESCE(SUM(amount), 0) INTO v_actual_expenses
+    FROM public.expenses
+    WHERE occurred_at >= v_month_start AND occurred_at < v_month_end;
+
+    v_actual_expenses := v_actual_expenses + COALESCE((
+        SELECT SUM(total)
+        FROM public.salary_payments
+        WHERE paid_at >= v_month_start AND paid_at < v_month_end
+    ), 0);
+
+    -- Оновлюємо або створюємо запис бюджету
+    INSERT INTO public.budgets (month, planned_income, planned_expenses, actual_income, actual_expenses)
+    VALUES (v_month_start, 0, 0, v_actual_income, v_actual_expenses)
+    ON CONFLICT (month) DO UPDATE SET
+        actual_income = v_actual_income,
+        actual_expenses = v_actual_expenses;
 END;
 $$;
 
@@ -130,11 +196,14 @@ $$;
 
 -- 2. VIEWS
 CREATE OR REPLACE VIEW accountant_api.v_budgets AS
-SELECT id, month, income as planned_income, expenses as planned_expenses, note
+SELECT id, month, planned_income, planned_expenses, actual_income, actual_expenses, note
 FROM public.budgets ORDER BY month DESC;
 
 CREATE OR REPLACE VIEW accountant_api.v_expenses AS
 SELECT * FROM public.expenses ORDER BY occurred_at DESC;
+
+CREATE OR REPLACE VIEW accountant_api.v_incomes AS
+SELECT * FROM public.incomes ORDER BY received_at DESC;
 
 CREATE OR REPLACE VIEW accountant_api.v_salary_history AS
 SELECT sp.id, sp.paid_at,

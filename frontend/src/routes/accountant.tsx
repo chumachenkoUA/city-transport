@@ -23,6 +23,8 @@ import {
   Search,
   Check,
   Sparkles,
+  Banknote,
+  Building2,
 } from 'lucide-react'
 import {
   Pie,
@@ -76,13 +78,16 @@ import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { Progress } from '@/components/ui/progress'
 import {
   createExpense,
+  createIncome,
   createSalary,
   getBudgets,
   getDrivers,
   getExpenses,
   getFinancialReport,
+  getIncomes,
   getSalaries,
   upsertBudget,
+  type IncomeSource,
 } from '@/lib/accountant-api'
 import { cn } from '@/lib/utils'
 
@@ -104,6 +109,21 @@ type SalaryFormState = {
   units: string
   total: string
 }
+
+type IncomeFormState = {
+  source: IncomeSource | ''
+  amount: string
+  description: string
+  documentRef: string
+  receivedAt: string
+}
+
+const INCOME_SOURCES: { value: IncomeSource; label: string }[] = [
+  { value: 'government', label: 'Державний бюджет' },
+  { value: 'tickets', label: 'Продаж квитків' },
+  { value: 'fines', label: 'Штрафи' },
+  { value: 'other', label: 'Інше' },
+]
 
 const EXPENSE_CATEGORIES = [
   'Паливо',
@@ -137,9 +157,17 @@ function AccountantPage() {
   })
 
   const [budgetForm, setBudgetForm] = useState({
-    income: '',
-    expenses: '',
+    plannedIncome: '',
+    plannedExpenses: '',
     note: '',
+  })
+
+  const [incomeForm, setIncomeForm] = useState<IncomeFormState>({
+    source: '',
+    amount: '',
+    description: '',
+    documentRef: '',
+    receivedAt: '',
   })
 
   // Get dates for selected month
@@ -165,10 +193,17 @@ function AccountantPage() {
   }, [selectedMonth])
 
   // Queries
-  useQuery({
+  const budgetsQuery = useQuery({
     queryKey: ['accountant-budgets'],
-    queryFn: () => getBudgets({ limit: 12 }),
+    queryFn: () => getBudgets({ limit: 15 }),
   })
+
+  // Find budget for selected month
+  const selectedBudget = useMemo(() => {
+    if (!budgetsQuery.data) return null
+    const monthStr = `${selectedMonth}-01`
+    return budgetsQuery.data.find(b => b.month === monthStr) ?? null
+  }, [budgetsQuery.data, selectedMonth])
 
   const driversQuery = useQuery({
     queryKey: ['accountant-drivers'],
@@ -178,6 +213,11 @@ function AccountantPage() {
   const expensesQuery = useQuery({
     queryKey: ['accountant-expenses', startDate, endDate],
     queryFn: () => getExpenses({ from: startDate, to: endDate, limit: 500 }),
+  })
+
+  const incomesQuery = useQuery({
+    queryKey: ['accountant-incomes', startDate, endDate],
+    queryFn: () => getIncomes({ from: startDate, to: endDate, limit: 500 }),
   })
 
   const salariesQuery = useQuery({
@@ -228,8 +268,23 @@ function AccountantPage() {
   const budgetMutation = useMutation({
     mutationFn: upsertBudget,
     onSuccess: () => {
-      setBudgetForm({ income: '', expenses: '', note: '' })
+      setBudgetForm({ plannedIncome: '', plannedExpenses: '', note: '' })
       queryClient.invalidateQueries({ queryKey: ['accountant-budgets'] })
+    },
+  })
+
+  const incomeMutation = useMutation({
+    mutationFn: createIncome,
+    onSuccess: () => {
+      setIncomeForm({
+        source: '',
+        amount: '',
+        description: '',
+        documentRef: '',
+        receivedAt: '',
+      })
+      queryClient.invalidateQueries({ queryKey: ['accountant-incomes'] })
+      queryClient.invalidateQueries({ queryKey: ['accountant-report'] })
     },
   })
 
@@ -330,11 +385,13 @@ function AccountantPage() {
   const monthOptions = useMemo(() => {
     const options = []
     const now = new Date()
-    for (let i = 0; i < 12; i++) {
+    // Додаємо 3 майбутні місяці для планування бюджету
+    for (let i = -3; i < 12; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       const label = new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(date)
-      options.push({ value, label })
+      const isFuture = i < 0
+      options.push({ value, label, isFuture })
     }
     return options
   }, [])
@@ -384,14 +441,33 @@ function AccountantPage() {
   }
 
   const handleBudgetSubmit = () => {
-    if (!budgetForm.income && !budgetForm.expenses) return
+    if (!budgetForm.plannedIncome && !budgetForm.plannedExpenses) return
     budgetMutation.mutate({
       month: `${selectedMonth}-01`,
-      income: Number(budgetForm.income) || 0,
-      expenses: Number(budgetForm.expenses) || 0,
+      plannedIncome: Number(budgetForm.plannedIncome) || 0,
+      plannedExpenses: Number(budgetForm.plannedExpenses) || 0,
       note: budgetForm.note.trim() || undefined,
     })
   }
+
+  const handleIncomeSubmit = () => {
+    if (!incomeForm.source || !incomeForm.amount) return
+    incomeMutation.mutate({
+      source: incomeForm.source as IncomeSource,
+      amount: Number(incomeForm.amount),
+      description: incomeForm.description.trim() || undefined,
+      documentRef: incomeForm.documentRef.trim() || undefined,
+      receivedAt: incomeForm.receivedAt
+        ? new Date(incomeForm.receivedAt).toISOString()
+        : undefined,
+    })
+  }
+
+  // Total incomes for current period
+  const totalIncomes = useMemo(() => {
+    if (!incomesQuery.data) return 0
+    return incomesQuery.data.reduce((sum, i) => sum + Number(i.amount), 0)
+  }, [incomesQuery.data])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -432,10 +508,14 @@ function AccountantPage() {
 
           {/* Main Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-12 p-1 bg-white dark:bg-slate-800 shadow-sm rounded-xl">
+            <TabsList className="grid w-full grid-cols-5 h-12 p-1 bg-white dark:bg-slate-800 shadow-sm rounded-xl">
               <TabsTrigger value="analytics" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white">
                 <BarChart3 className="h-4 w-4 mr-2" />
                 Аналітика
+              </TabsTrigger>
+              <TabsTrigger value="incomes" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white">
+                <Banknote className="h-4 w-4 mr-2" />
+                Доходи
               </TabsTrigger>
               <TabsTrigger value="salaries" className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white">
                 <Car className="h-4 w-4 mr-2" />
@@ -724,6 +804,164 @@ function AccountantPage() {
                   </CardContent>
                 </Card>
               </motion.div>
+            </TabsContent>
+
+            {/* ============ INCOMES TAB ============ */}
+            <TabsContent value="incomes" className="space-y-6 mt-6">
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Add Income Form */}
+                <Card className="lg:col-span-1 border-0 shadow-lg">
+                  <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-t-lg">
+                    <CardTitle className="flex items-center gap-2">
+                      <Plus className="h-5 w-5" />
+                      Додати дохід
+                    </CardTitle>
+                    <CardDescription className="text-emerald-100">
+                      Державне фінансування, гранти та інші надходження
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="income-source">Джерело *</Label>
+                      <Select
+                        value={incomeForm.source}
+                        onValueChange={(value) => setIncomeForm((prev) => ({ ...prev, source: value as IncomeSource }))}
+                      >
+                        <SelectTrigger id="income-source">
+                          <SelectValue placeholder="Оберіть джерело" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INCOME_SOURCES.map((src) => (
+                            <SelectItem key={src.value} value={src.value}>{src.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income-amount">Сума *</Label>
+                      <Input
+                        id="income-amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={incomeForm.amount}
+                        onChange={(e) => setIncomeForm((prev) => ({ ...prev, amount: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income-document">Документ</Label>
+                      <Input
+                        id="income-document"
+                        placeholder="Номер документа"
+                        value={incomeForm.documentRef}
+                        onChange={(e) => setIncomeForm((prev) => ({ ...prev, documentRef: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income-date">Дата</Label>
+                      <Input
+                        id="income-date"
+                        type="datetime-local"
+                        value={incomeForm.receivedAt}
+                        onChange={(e) => setIncomeForm((prev) => ({ ...prev, receivedAt: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="income-desc">Опис</Label>
+                      <Textarea
+                        id="income-desc"
+                        placeholder="Деталі надходження..."
+                        value={incomeForm.description}
+                        onChange={(e) => setIncomeForm((prev) => ({ ...prev, description: e.target.value }))}
+                      />
+                    </div>
+
+                    {incomeMutation.error && (
+                      <p className="text-sm text-red-500">Помилка додавання доходу</p>
+                    )}
+
+                    <Button
+                      onClick={handleIncomeSubmit}
+                      disabled={incomeMutation.isPending}
+                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                    >
+                      {incomeMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Додати дохід
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Incomes Table */}
+                <Card className="lg:col-span-2 border-0 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-emerald-500" />
+                      Доходи за місяць
+                    </CardTitle>
+                    <CardDescription>
+                      Всього: <span className="font-semibold text-emerald-600">{formatMoney(totalIncomes)}</span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-xl border max-h-[600px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Джерело</TableHead>
+                            <TableHead className="text-right">Сума</TableHead>
+                            <TableHead>Документ</TableHead>
+                            <TableHead className="text-right">Дата</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {incomesQuery.isLoading && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="h-24 text-center">
+                                <Loader2 className="h-5 w-5 animate-spin inline-block" />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {incomesQuery.data?.map((income) => (
+                            <TableRow key={income.id}>
+                              <TableCell className="font-medium">
+                                <Badge variant="outline" className={cn(
+                                  income.source === 'government' && 'border-blue-300 text-blue-600 bg-blue-50',
+                                  income.source === 'tickets' && 'border-green-300 text-green-600 bg-green-50',
+                                  income.source === 'fines' && 'border-amber-300 text-amber-600 bg-amber-50',
+                                  income.source === 'other' && 'border-slate-300 text-slate-600 bg-slate-50',
+                                )}>
+                                  {INCOME_SOURCES.find(s => s.value === income.source)?.label || income.source}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-emerald-600">
+                                +{formatMoney(income.amount)}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {income.documentRef || '—'}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                {formatDate(income.receivedAt)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {incomesQuery.data?.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                Немає доходів за обраний період
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* ============ SALARIES TAB ============ */}
@@ -1304,7 +1542,36 @@ function AccountantPage() {
                     Встановіть планові показники для {monthOptions.find(o => o.value === selectedMonth)?.label}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
+                  {/* Поточний бюджет */}
+                  {selectedBudget && (
+                    <div className="rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 p-4">
+                      <h4 className="font-medium mb-3">Поточний бюджет на {monthOptions.find(o => o.value === selectedMonth)?.label}</h4>
+                      <div className="grid gap-4 md:grid-cols-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Плановий дохід</p>
+                          <p className="text-lg font-semibold text-emerald-600">{formatMoney(selectedBudget.plannedIncome)}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Планові витрати</p>
+                          <p className="text-lg font-semibold text-red-600">{formatMoney(selectedBudget.plannedExpenses)}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Фактичний дохід</p>
+                          <p className="text-lg font-semibold text-emerald-500">{formatMoney(selectedBudget.actualIncome)}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Фактичні витрати</p>
+                          <p className="text-lg font-semibold text-red-500">{formatMoney(selectedBudget.actualExpenses)}</p>
+                        </div>
+                      </div>
+                      {selectedBudget.note && (
+                        <p className="mt-2 text-sm text-muted-foreground">Примітка: {selectedBudget.note}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Форма створення/оновлення бюджету */}
                   <div className="grid gap-4 md:grid-cols-4">
                     <div className="space-y-2">
                       <Label htmlFor="budget-income">Плановий дохід</Label>
@@ -1313,9 +1580,9 @@ function AccountantPage() {
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="0.00"
-                        value={budgetForm.income}
-                        onChange={(e) => setBudgetForm((prev) => ({ ...prev, income: e.target.value }))}
+                        placeholder={selectedBudget ? String(selectedBudget.plannedIncome) : '0.00'}
+                        value={budgetForm.plannedIncome}
+                        onChange={(e) => setBudgetForm((prev) => ({ ...prev, plannedIncome: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1325,9 +1592,9 @@ function AccountantPage() {
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="0.00"
-                        value={budgetForm.expenses}
-                        onChange={(e) => setBudgetForm((prev) => ({ ...prev, expenses: e.target.value }))}
+                        placeholder={selectedBudget ? String(selectedBudget.plannedExpenses) : '0.00'}
+                        value={budgetForm.plannedExpenses}
+                        onChange={(e) => setBudgetForm((prev) => ({ ...prev, plannedExpenses: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -1346,7 +1613,7 @@ function AccountantPage() {
                         className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
                       >
                         {budgetMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Зберегти
+                        {selectedBudget ? 'Оновити' : 'Створити'}
                       </Button>
                     </div>
                   </div>

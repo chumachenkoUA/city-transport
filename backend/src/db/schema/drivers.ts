@@ -1,13 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import { bigserial, jsonb, pgTable, varchar } from 'drizzle-orm/pg-core';
 
 export const drivers = pgTable('drivers', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
-  login: text('login').notNull().unique(),
-  email: text('email').notNull().unique(),
-  phone: text('phone').notNull().unique(),
-  fullName: text('full_name').notNull(),
-  driverLicenseNumber: text('driver_license_number').notNull().unique(),
+  login: varchar('login', { length: 50 }).notNull().unique(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  phone: varchar('phone', { length: 20 }).notNull().unique(),
+  fullName: varchar('full_name', { length: 200 }).notNull(),
+  driverLicenseNumber: varchar('driver_license_number', { length: 20 })
+    .notNull()
+    .unique(),
   licenseCategories: jsonb('license_categories')
     .notNull()
     .default(sql.raw(`'[]'::jsonb`)),

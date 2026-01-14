@@ -5,8 +5,8 @@ import {
   check,
   integer,
   pgTable,
-  text,
   timestamp,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { drivers } from './drivers';
 import { routes } from './routes';
@@ -31,7 +31,7 @@ export const trips = pgTable(
     actualEndsAt: timestamp('actual_ends_at'),
 
     // Статус рейсу
-    status: text('status').notNull().default('scheduled'),
+    status: varchar('status', { length: 20 }).notNull().default('scheduled'),
 
     passengerCount: integer('passenger_count').notNull().default(0),
   },

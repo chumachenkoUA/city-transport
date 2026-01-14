@@ -77,8 +77,6 @@ export interface DriverSchedule {
     friday: boolean;
     saturday: boolean;
     sunday: boolean;
-    validFrom: string | null;
-    validTo: string | null;
   } | null;
   trips: DriverTrip[];
   stops: DriverTripStop[];

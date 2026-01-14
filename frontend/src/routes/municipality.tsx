@@ -64,7 +64,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  ResponsiveContainer,
 } from 'recharts'
 import { toast } from 'sonner'
 import {
@@ -195,7 +194,7 @@ function MunicipalityPage() {
     enabled: !!selectedRouteId,
   })
 
-  const { data: passengerFlow, isLoading: flowLoading } = useQuery({
+  const { data: _passengerFlow, isLoading: _flowLoading } = useQuery({
     queryKey: ['municipality-passenger-flow', flowQuery],
     queryFn: () =>
       getPassengerFlow({
@@ -1223,7 +1222,7 @@ function MunicipalityPage() {
                         <ChartTooltip
                           content={
                             <ChartTooltipContent
-                              formatter={(value, name, item) => (
+                              formatter={(value, _name, item) => (
                                 <div className="flex flex-col gap-1">
                                   <span className="font-medium">{item.payload.transportType}</span>
                                   <span>{Number(value).toLocaleString()} пасажирів</span>

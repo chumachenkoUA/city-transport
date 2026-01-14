@@ -4,8 +4,8 @@ import {
   bigserial,
   check,
   pgTable,
-  text,
   timestamp,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { fines } from './fines';
 
@@ -17,8 +17,8 @@ export const fineAppeals = pgTable(
       .notNull()
       .unique()
       .references(() => fines.id, { onDelete: 'cascade' }),
-    message: text('message').notNull(),
-    status: text('status').notNull(),
+    message: varchar('message', { length: 2000 }).notNull(),
+    status: varchar('status', { length: 50 }).notNull(),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   () => ({

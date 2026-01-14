@@ -524,8 +524,6 @@ export async function seedDatabase() {
             friday: true,
             saturday: true,
             sunday: true,
-            validFrom: null,
-            validTo: null,
           });
         } else {
           await db.insert(schema.schedules).values({
@@ -1502,13 +1500,59 @@ export async function seedDatabase() {
 
       budgetEntries.push({
         month: monthDate.toISOString().slice(0, 10),
-        income: totalIncome.toFixed(2),
-        expenses: totalExpenses.toFixed(2),
+        plannedIncome: totalIncome.toFixed(2),
+        plannedExpenses: totalExpenses.toFixed(2),
+        actualIncome: (totalIncome * 0.9).toFixed(2), // ~90% виконання плану
+        actualExpenses: totalExpenses.toFixed(2),
         note: budgetNotes[i] || 'Плановий бюджет',
       });
     }
 
     await db.insert(schema.budgets).values(budgetEntries).onConflictDoNothing();
+
+    // === INCOMES (Доходи - державне фінансування) ===
+    console.log('💰 Seeding incomes...');
+
+    const incomeEntries: Array<{
+      source: 'government' | 'tickets' | 'fines' | 'other';
+      amount: string;
+      description: string;
+      documentRef: string;
+      receivedAt: Date;
+    }> = [];
+
+    // Державне фінансування за останні 6 місяців
+    for (let i = 0; i < 6; i++) {
+      const monthDate = new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() - i,
+        randomInt(1, 15),
+      );
+
+      // Державний бюджет - основне фінансування
+      incomeEntries.push({
+        source: 'government',
+        amount: randomInt(150000, 200000).toFixed(2),
+        description: `Державне фінансування за ${new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(monthDate)}`,
+        documentRef: `ДБ-${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-${randomInt(100, 999)}`,
+        receivedAt: monthDate,
+      });
+
+      // Компенсація за пільгові перевезення
+      if (i % 2 === 0) {
+        const compensationDate = new Date(monthDate);
+        compensationDate.setDate(randomInt(16, 28));
+        incomeEntries.push({
+          source: 'government',
+          amount: randomInt(30000, 50000).toFixed(2),
+          description: 'Компенсація за пільгові перевезення',
+          documentRef: `КПП-${compensationDate.getFullYear()}-${randomInt(100, 999)}`,
+          receivedAt: compensationDate,
+        });
+      }
+    }
+
+    await db.insert(schema.incomes).values(incomeEntries).onConflictDoNothing();
 
     console.log('🏁 Seed completed successfully!');
   } catch (e) {

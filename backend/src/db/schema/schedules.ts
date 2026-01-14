@@ -4,7 +4,6 @@ import {
   bigserial,
   boolean,
   check,
-  date,
   integer,
   pgTable,
   time,
@@ -35,10 +34,6 @@ export const schedules = pgTable(
     friday: boolean('friday').default(false).notNull(),
     saturday: boolean('saturday').default(false).notNull(),
     sunday: boolean('sunday').default(false).notNull(),
-
-    // Period of validity
-    validFrom: date('valid_from'),
-    validTo: date('valid_to'),
   },
   (table) => ({
     schedulesIntervalCheck: check(
@@ -49,8 +44,9 @@ export const schedules = pgTable(
       'schedules_time_check',
       sql.raw('"work_end_time" > "work_start_time"'),
     ),
-    schedulesRouteVehiclePeriodUnique: unique(
-      'schedules_route_vehicle_period_unique',
-    ).on(table.routeId, table.vehicleId, table.validFrom),
+    schedulesRouteVehicleUnique: unique('schedules_route_vehicle_unique').on(
+      table.routeId,
+      table.vehicleId,
+    ),
   }),
 );

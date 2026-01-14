@@ -40,8 +40,8 @@ export class BudgetsService {
       .insert(budgets)
       .values({
         month: payload.month,
-        income: payload.income.toString(),
-        expenses: payload.expenses.toString(),
+        plannedIncome: payload.plannedIncome.toString(),
+        plannedExpenses: payload.plannedExpenses.toString(),
         note: payload.note,
       })
       .returning();
@@ -55,11 +55,11 @@ export class BudgetsService {
     if (payload.month !== undefined) {
       updates.month = payload.month;
     }
-    if (payload.income !== undefined) {
-      updates.income = payload.income.toString();
+    if (payload.plannedIncome !== undefined) {
+      updates.plannedIncome = payload.plannedIncome.toString();
     }
-    if (payload.expenses !== undefined) {
-      updates.expenses = payload.expenses.toString();
+    if (payload.plannedExpenses !== undefined) {
+      updates.plannedExpenses = payload.plannedExpenses.toString();
     }
     if (payload.note !== undefined) {
       updates.note = payload.note;

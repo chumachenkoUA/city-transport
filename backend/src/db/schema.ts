@@ -10,6 +10,7 @@ export * from './schema/driver-vehicle-assignments';
 export * from './schema/schedules';
 export * from './schema/trips';
 export * from './schema/budgets';
+export * from './schema/incomes';
 export * from './schema/expenses';
 export * from './schema/salary-payments';
 export * from './schema/transport-cards';

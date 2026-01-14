@@ -138,8 +138,6 @@ export interface RouteSchedule {
   friday: boolean;
   saturday: boolean;
   sunday: boolean;
-  validFrom: string | null;
-  validTo: string | null;
   stopId?: number;
   stopName?: string;
   stopLon?: number;

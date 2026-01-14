@@ -53,7 +53,7 @@ SELECT * FROM public.route_points;
 CREATE OR REPLACE VIEW guest_api.v_schedules AS
 SELECT route_id, work_start_time, work_end_time, interval_min,
        monday, tuesday, wednesday, thursday, friday, saturday, sunday,
-       valid_from, valid_to, vehicle_id
+       vehicle_id
 FROM public.schedules;
 
 -- ============================================================================

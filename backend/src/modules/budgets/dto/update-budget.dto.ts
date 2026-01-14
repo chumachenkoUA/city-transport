@@ -16,13 +16,13 @@ export class UpdateBudgetDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
-  income?: number;
+  plannedIncome?: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @IsOptional()
-  expenses?: number;
+  plannedExpenses?: number;
 
   @IsString()
   @IsOptional()

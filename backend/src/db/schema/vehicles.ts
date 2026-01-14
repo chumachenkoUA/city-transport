@@ -1,10 +1,10 @@
-import { bigint, bigserial, pgTable, text } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, pgTable, varchar } from 'drizzle-orm/pg-core';
 import { routes } from './routes';
 import { vehicleModels } from './vehicle-models';
 
 export const vehicles = pgTable('vehicles', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
-  fleetNumber: text('fleet_number').notNull().unique(),
+  fleetNumber: varchar('fleet_number', { length: 20 }).notNull().unique(),
   vehicleModelId: bigint('vehicle_model_id', { mode: 'number' }).references(
     () => vehicleModels.id,
   ),

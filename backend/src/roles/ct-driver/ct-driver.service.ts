@@ -62,8 +62,6 @@ type ScheduleRow = {
   friday: boolean;
   saturday: boolean;
   sunday: boolean;
-  validFrom: string | null;
-  validTo: string | null;
 };
 
 type ActiveTripRow = {
@@ -719,9 +717,7 @@ export class CtDriverService {
         thursday,
         friday,
         saturday,
-        sunday,
-        valid_from,
-        valid_to
+        sunday
       from guest_api.v_schedules
       where route_id = ${routeId}
       limit 1

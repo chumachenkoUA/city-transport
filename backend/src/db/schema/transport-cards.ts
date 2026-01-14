@@ -5,7 +5,7 @@ import {
   check,
   numeric,
   pgTable,
-  text,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
@@ -20,7 +20,7 @@ export const transportCards = pgTable(
     balance: numeric('balance', { precision: 12, scale: 2 })
       .notNull()
       .default('0'),
-    cardNumber: text('card_number').notNull().unique(),
+    cardNumber: varchar('card_number', { length: 20 }).notNull().unique(),
   },
   () => ({
     transportCardsBalanceCheck: check(

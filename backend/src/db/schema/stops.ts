@@ -1,10 +1,16 @@
-import { bigserial, numeric, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  numeric,
+  pgTable,
+  unique,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
 export const stops = pgTable(
   'stops',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    name: text('name').notNull(),
+    name: varchar('name', { length: 200 }).notNull(),
     lon: numeric('lon', { precision: 10, scale: 7 }).notNull(),
     lat: numeric('lat', { precision: 10, scale: 7 }).notNull(),
   },

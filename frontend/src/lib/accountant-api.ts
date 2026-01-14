@@ -5,6 +5,8 @@ export type BudgetRow = {
   month: string
   plannedIncome: number | string
   plannedExpenses: number | string
+  actualIncome: number | string
+  actualExpenses: number | string
   note?: string | null
 }
 
@@ -16,8 +18,8 @@ export type BudgetQuery = {
 
 export type UpsertBudgetPayload = {
   month: string
-  income: number
-  expenses: number
+  plannedIncome: number
+  plannedExpenses: number
   note?: string
 }
 
@@ -44,6 +46,33 @@ export type CreateExpensePayload = {
   description?: string
   documentRef?: string
   occurredAt?: string
+}
+
+export type IncomeSource = 'government' | 'tickets' | 'fines' | 'other'
+
+export type IncomeRow = {
+  id: number
+  source: IncomeSource
+  amount: number | string
+  description?: string | null
+  documentRef?: string | null
+  receivedAt: string
+}
+
+export type IncomeQuery = {
+  source?: IncomeSource
+  from?: string
+  to?: string
+  limit?: number
+  offset?: number
+}
+
+export type CreateIncomePayload = {
+  source: IncomeSource
+  amount: number
+  description?: string
+  documentRef?: string
+  receivedAt?: string
 }
 
 export type DriverRow = {
@@ -134,4 +163,12 @@ export function getFinancialReport(params?: PeriodQuery) {
 
 export function getIncomeSummary(params?: PeriodQuery) {
   return apiGet<{ income: ReportItem[] }>('/accountant/income', params)
+}
+
+export function createIncome(payload: CreateIncomePayload) {
+  return apiPost<{ id: number }>('/accountant/incomes', payload)
+}
+
+export function getIncomes(params?: IncomeQuery) {
+  return apiGet<IncomeRow[]>('/accountant/incomes', params)
 }

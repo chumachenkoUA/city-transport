@@ -14,12 +14,12 @@ export class CreateBudgetDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  income!: number;
+  plannedIncome!: number;
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  expenses!: number;
+  plannedExpenses!: number;
 
   @IsString()
   @IsOptional()

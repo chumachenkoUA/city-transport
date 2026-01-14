@@ -53,7 +53,6 @@ SELECT s.id, s.route_id, r.number as route_number, r.direction,
        tt.name as transport_type, s.work_start_time, s.work_end_time,
        s.interval_min, s.vehicle_id, v.fleet_number,
        s.monday, s.tuesday, s.wednesday, s.thursday, s.friday, s.saturday, s.sunday,
-       s.valid_from, s.valid_to,
        CASE EXTRACT(DOW FROM CURRENT_DATE)
            WHEN 0 THEN s.sunday
            WHEN 1 THEN s.monday
@@ -273,9 +272,7 @@ CREATE OR REPLACE FUNCTION dispatcher_api.create_schedule(
     p_thursday boolean DEFAULT true,
     p_friday boolean DEFAULT true,
     p_saturday boolean DEFAULT false,
-    p_sunday boolean DEFAULT false,
-    p_valid_from date DEFAULT NULL,
-    p_valid_to date DEFAULT NULL
+    p_sunday boolean DEFAULT false
 )
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
@@ -306,13 +303,11 @@ BEGIN
 
     INSERT INTO public.schedules (
         route_id, vehicle_id, work_start_time, work_end_time, interval_min,
-        monday, tuesday, wednesday, thursday, friday, saturday, sunday,
-        valid_from, valid_to
+        monday, tuesday, wednesday, thursday, friday, saturday, sunday
     )
     VALUES (
         p_route_id, p_vehicle_id, p_start, p_end, p_interval,
-        p_monday, p_tuesday, p_wednesday, p_thursday, p_friday, p_saturday, p_sunday,
-        p_valid_from, p_valid_to
+        p_monday, p_tuesday, p_wednesday, p_thursday, p_friday, p_saturday, p_sunday
     )
     RETURNING id INTO v_id;
     RETURN v_id;
@@ -332,9 +327,7 @@ CREATE OR REPLACE FUNCTION dispatcher_api.update_schedule(
     p_thursday boolean DEFAULT NULL,
     p_friday boolean DEFAULT NULL,
     p_saturday boolean DEFAULT NULL,
-    p_sunday boolean DEFAULT NULL,
-    p_valid_from date DEFAULT NULL,
-    p_valid_to date DEFAULT NULL
+    p_sunday boolean DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
@@ -394,9 +387,7 @@ BEGIN
         thursday = COALESCE(p_thursday, thursday),
         friday = COALESCE(p_friday, friday),
         saturday = COALESCE(p_saturday, saturday),
-        sunday = COALESCE(p_sunday, sunday),
-        valid_from = COALESCE(p_valid_from, valid_from),
-        valid_to = COALESCE(p_valid_to, valid_to)
+        sunday = COALESCE(p_sunday, sunday)
     WHERE id = p_schedule_id;
 END;
 $$;
@@ -549,13 +540,11 @@ GRANT EXECUTE ON FUNCTION dispatcher_api.delete_trip(bigint) TO ct_dispatcher_ro
 -- Schedule functions (LEGACY)
 GRANT EXECUTE ON FUNCTION dispatcher_api.create_schedule(
     bigint, bigint, time, time, integer,
-    boolean, boolean, boolean, boolean, boolean, boolean, boolean,
-    date, date
+    boolean, boolean, boolean, boolean, boolean, boolean, boolean
 ) TO ct_dispatcher_role;
 GRANT EXECUTE ON FUNCTION dispatcher_api.update_schedule(
     bigint, bigint, bigint, time, time, integer,
-    boolean, boolean, boolean, boolean, boolean, boolean, boolean,
-    date, date
+    boolean, boolean, boolean, boolean, boolean, boolean, boolean
 ) TO ct_dispatcher_role;
 GRANT EXECUTE ON FUNCTION dispatcher_api.delete_schedule(bigint) TO ct_dispatcher_role;
 
