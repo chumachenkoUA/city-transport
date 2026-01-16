@@ -23,11 +23,11 @@ END $$;
 -- 2. DISPATCHER VIEWS
 
 -- Список запланованих та активних рейсів
--- vehicle_id береться з driver_vehicle_assignments через driver_id
+-- vehicle_id береться з driver_vehicle_assignments через LATERAL (останнє призначення)
 CREATE OR REPLACE VIEW dispatcher_api.v_trips_list AS
 SELECT t.id, t.route_id, r.number as route_number, r.direction,
        tt.name as transport_type,
-       dva.vehicle_id, v.fleet_number,
+       last_dva.vehicle_id, v.fleet_number,
        t.driver_id, d.full_name as driver_name, d.login as driver_login,
        t.planned_starts_at, t.planned_ends_at,
        t.actual_starts_at, t.actual_ends_at,
@@ -43,8 +43,15 @@ FROM public.trips t
 JOIN public.routes r ON r.id = t.route_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 JOIN public.drivers d ON d.id = t.driver_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 ORDER BY t.planned_starts_at DESC;
 
 -- Legacy: schedules list (для шаблонного створення)
@@ -67,7 +74,7 @@ JOIN public.routes r ON r.id = s.route_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 LEFT JOIN public.vehicles v ON v.id = s.vehicle_id;
 
--- Моніторинг транспорту - тепер шукаємо активний рейс через driver_id
+-- Моніторинг транспорту - шукаємо останнє призначення та активний рейс
 CREATE OR REPLACE VIEW dispatcher_api.v_vehicle_monitoring AS
 SELECT v.id, v.fleet_number, v.route_id, r.number as route_number,
        r.direction, tt.name as transport_type,
@@ -78,8 +85,15 @@ SELECT v.id, v.fleet_number, v.route_id, r.number as route_number,
 FROM public.vehicles v
 JOIN public.routes r ON r.id = v.route_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.vehicle_id = v.id
-LEFT JOIN public.trips t ON t.driver_id = dva.driver_id AND t.status = 'in_progress'
+-- LATERAL: останнє призначення на цей транспорт
+LEFT JOIN LATERAL (
+    SELECT dva.driver_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.vehicle_id = v.id
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.trips t ON t.driver_id = last_dva.driver_id AND t.status = 'in_progress'
 LEFT JOIN public.drivers d ON d.id = t.driver_id;
 
 -- Активні рейси (in_progress)
@@ -90,8 +104,15 @@ SELECT t.id, r.number as route_number, v.fleet_number, d.full_name,
 FROM public.trips t
 JOIN public.routes r ON r.id = t.route_id
 JOIN public.drivers d ON d.id = t.driver_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= t.actual_starts_at
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 WHERE t.status = 'in_progress';
 
 -- Заплановані рейси (scheduled) на сьогодні
@@ -102,8 +123,15 @@ SELECT t.id, r.number as route_number, r.direction,
 FROM public.trips t
 JOIN public.routes r ON r.id = t.route_id
 JOIN public.drivers d ON d.id = t.driver_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= t.planned_starts_at
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 WHERE t.status = 'scheduled'
   AND t.planned_starts_at::date = CURRENT_DATE
 ORDER BY t.planned_starts_at;
@@ -456,8 +484,15 @@ SELECT * FROM (
     FROM public.trips t
     JOIN public.routes r ON r.id = t.route_id
     JOIN public.drivers d ON d.id = t.driver_id
-    LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-    LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+    LEFT JOIN LATERAL (
+        SELECT dva.vehicle_id
+        FROM public.driver_vehicle_assignments dva
+        WHERE dva.driver_id = t.driver_id
+          AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+        ORDER BY dva.assigned_at DESC
+        LIMIT 1
+    ) last_dva ON true
+    LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
     WHERE t.status IN ('scheduled', 'in_progress')
 ) deviations
 WHERE ABS(deviations.delay_minutes) > 5;

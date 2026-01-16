@@ -3,7 +3,6 @@ import {
   bigint,
   bigserial,
   check,
-  integer,
   pgTable,
   timestamp,
   varchar,
@@ -21,7 +20,7 @@ export const complaintsSuggestions = pgTable(
     type: varchar('type', { length: 50 }).notNull(),
     message: varchar('message', { length: 2000 }).notNull(),
     tripId: bigint('trip_id', { mode: 'number' }).references(() => trips.id),
-    routeId: integer('route_id').references(() => routes.id),
+    routeId: bigint('route_id', { mode: 'number' }).references(() => routes.id),
     vehicleId: bigint('vehicle_id', { mode: 'number' }).references(
       () => vehicles.id,
     ),

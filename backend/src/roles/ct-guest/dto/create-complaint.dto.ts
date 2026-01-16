@@ -28,8 +28,4 @@ export class CreateGuestComplaintDto {
   @IsString()
   @IsOptional()
   transportType?: string;
-
-  @IsString()
-  @IsOptional()
-  vehicleNumber?: string;
 }

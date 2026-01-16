@@ -11,7 +11,6 @@ import { CardTopUpsModule } from './modules/card-top-ups/card-top-ups.module';
 import { ComplaintsSuggestionsModule } from './modules/complaints-suggestions/complaints-suggestions.module';
 import { DriverVehicleAssignmentsModule } from './modules/driver-vehicle-assignments/driver-vehicle-assignments.module';
 import { DriversModule } from './modules/drivers/drivers.module';
-import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FineAppealsModule } from './modules/fine-appeals/fine-appeals.module';
 import { FinesModule } from './modules/fines/fines.module';
 import { RoutePointsModule } from './modules/route-points/route-points.module';
@@ -54,7 +53,6 @@ import { CtPassengerModule } from './roles/ct-passenger/ct-passenger.module';
     RoutePointsModule,
     DriverVehicleAssignmentsModule,
     SchedulesModule,
-    ExpensesModule,
     TripsModule,
     SalaryPaymentsModule,
     TransportCardsModule,

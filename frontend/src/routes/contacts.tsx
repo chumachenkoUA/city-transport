@@ -111,7 +111,6 @@ function ContactsPage() {
   const [contactInfoField, setContactInfoField] = useState('')
   const [routeNumber, setRouteNumber] = useState('')
   const [transportType, setTransportType] = useState('')
-  const [vehicleNumber, setVehicleNumber] = useState('')
 
   const { data: transportTypes } = useQuery({
     queryKey: ['transportTypes'],
@@ -126,14 +125,12 @@ function ContactsPage() {
         contactInfo: contactInfoField || undefined,
         routeNumber: routeNumber || undefined,
         transportType: transportType || undefined,
-        vehicleNumber: vehicleNumber || undefined,
       }),
     onSuccess: () => {
       setMessage('')
       setContactInfoField('')
       setRouteNumber('')
       setTransportType('')
-      setVehicleNumber('')
       toast.success('Звернення надіслано', {
         description: 'Дякуємо! Ми розглянемо ваше звернення найближчим часом.',
       })
@@ -313,17 +310,6 @@ function ContactsPage() {
                             onChange={(e) => setRouteNumber(e.target.value)}
                           />
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="vehicleNumber">
-                          Номер транспортного засобу
-                        </Label>
-                        <Input
-                          id="vehicleNumber"
-                          placeholder="Напр. ВС 1234 АА"
-                          value={vehicleNumber}
-                          onChange={(e) => setVehicleNumber(e.target.value)}
-                        />
                       </div>
                     </div>
                   </CardContent>

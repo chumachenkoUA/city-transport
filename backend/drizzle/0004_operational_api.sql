@@ -200,10 +200,10 @@ SELECT id, login, full_name, email, phone, driver_license_number, license_catego
 FROM public.drivers WHERE login = session_user;
 
 -- Усі рейси водія (історія + заплановані)
--- vehicle_id береться з driver_vehicle_assignments
+-- vehicle_id береться з driver_vehicle_assignments через LATERAL (останнє призначення)
 CREATE OR REPLACE VIEW driver_api.v_my_trips WITH (security_barrier = true) AS
 SELECT t.id, t.route_id, r.number AS route_number, r.direction,
-       tt.name AS transport_type, dva.vehicle_id, v.fleet_number,
+       tt.name AS transport_type, last_dva.vehicle_id, v.fleet_number,
        t.planned_starts_at, t.planned_ends_at,
        t.actual_starts_at, t.actual_ends_at,
        t.status, t.passenger_count,
@@ -214,8 +214,16 @@ SELECT t.id, t.route_id, r.number AS route_number, r.direction,
 FROM public.trips t
 JOIN public.drivers d ON d.id = t.driver_id
 JOIN public.routes r ON r.id = t.route_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+-- LATERAL: отримуємо останнє призначення водія на момент рейсу
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE d.login = session_user
 ORDER BY t.planned_starts_at DESC;
@@ -223,13 +231,20 @@ ORDER BY t.planned_starts_at DESC;
 -- Заплановані рейси на сьогодні
 CREATE OR REPLACE VIEW driver_api.v_my_scheduled_trips WITH (security_barrier = true) AS
 SELECT t.id, t.route_id, r.number AS route_number, r.direction,
-       tt.name AS transport_type, dva.vehicle_id, v.fleet_number,
+       tt.name AS transport_type, last_dva.vehicle_id, v.fleet_number,
        t.planned_starts_at, t.planned_ends_at, t.status
 FROM public.trips t
 JOIN public.drivers d ON d.id = t.driver_id
 JOIN public.routes r ON r.id = t.route_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= t.planned_starts_at
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE d.login = session_user
   AND t.status = 'scheduled'
@@ -239,14 +254,21 @@ ORDER BY t.planned_starts_at;
 -- Активний рейс (in_progress)
 CREATE OR REPLACE VIEW driver_api.v_my_active_trip WITH (security_barrier = true) AS
 SELECT t.id, t.route_id, r.number AS route_number, r.direction,
-       tt.name AS transport_type, dva.vehicle_id, v.fleet_number,
+       tt.name AS transport_type, last_dva.vehicle_id, v.fleet_number,
        t.planned_starts_at, t.actual_starts_at, t.passenger_count,
        EXTRACT(EPOCH FROM (t.actual_starts_at - t.planned_starts_at)) / 60 AS start_delay_min
 FROM public.trips t
 JOIN public.drivers d ON d.id = t.driver_id
 JOIN public.routes r ON r.id = t.route_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE d.login = session_user
   AND t.status = 'in_progress'
@@ -261,12 +283,19 @@ SELECT t.id,
        t.actual_ends_at,
        t.passenger_count, t.route_id,
        r.number AS route_number, r.direction, r.transport_type_id,
-       tt.name AS transport_type, dva.vehicle_id, v.fleet_number
+       tt.name AS transport_type, last_dva.vehicle_id, v.fleet_number
 FROM public.trips t
 JOIN public.drivers d ON d.id = t.driver_id
 JOIN public.routes r ON r.id = t.route_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE d.login = session_user
 ORDER BY t.planned_starts_at;
@@ -307,8 +336,15 @@ SELECT
     true AS is_working_today
 FROM public.trips t
 JOIN public.drivers d ON d.id = t.driver_id
-LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+LEFT JOIN LATERAL (
+    SELECT dva.vehicle_id
+    FROM public.driver_vehicle_assignments dva
+    WHERE dva.driver_id = t.driver_id
+      AND dva.assigned_at <= t.planned_starts_at
+    ORDER BY dva.assigned_at DESC
+    LIMIT 1
+) last_dva ON true
+LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
 JOIN public.routes r ON r.id = t.route_id
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE d.login = session_user
@@ -316,23 +352,6 @@ WHERE d.login = session_user
   AND t.status IN ('scheduled', 'in_progress')
 ORDER BY t.planned_starts_at;
 
--- 3. CONTROLLER VIEWS (basic)
--- ============================================================================
--- v_card_details - Інформація про картку для контролера
--- ============================================================================
--- Показує: номер картки, баланс, ПІБ власника, останню поїздку
--- Остання поїздка: дата, маршрут, тип транспорту
-CREATE OR REPLACE VIEW controller_api.v_card_details AS
-SELECT tc.id, tc.card_number, tc.balance, tc.user_id,
-    u.full_name as user_full_name,
-    (SELECT t.purchased_at FROM public.tickets t WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_usage_at,
-    (SELECT r.number FROM public.tickets t JOIN public.trips tr ON tr.id = t.trip_id JOIN public.routes r ON r.id = tr.route_id WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_route_number,
-    (SELECT tt.name FROM public.tickets t JOIN public.trips tr ON tr.id = t.trip_id JOIN public.routes r ON r.id = tr.route_id JOIN public.transport_types tt ON tt.id = r.transport_type_id WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_transport_type
-FROM public.transport_cards tc
-JOIN public.users u ON u.id = tc.user_id;
-
 -- 4. GRANTS
 GRANT SELECT ON ALL TABLES IN SCHEMA driver_api TO ct_driver_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA driver_api TO ct_driver_role;
-GRANT SELECT ON ALL TABLES IN SCHEMA controller_api TO ct_controller_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA controller_api TO ct_controller_role;

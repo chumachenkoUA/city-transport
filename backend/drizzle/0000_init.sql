@@ -9,6 +9,14 @@
 -- ============================================================================
 
 -- ============================================================================
+-- EXTENSIONS
+-- ============================================================================
+-- PostGIS - для геопросторових операцій (ST_DWithin, ST_Distance, ST_AsGeoJSON)
+-- pg_trgm - для повнотекстового пошуку з gin_trgm_ops індексами
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- ============================================================================
 -- ФІНАНСОВІ ТАБЛИЦІ
 -- ============================================================================
 
@@ -58,7 +66,7 @@ CREATE TABLE "complaints_suggestions" (
 	"type" varchar(50) NOT NULL,
 	"message" varchar(2000) NOT NULL,
 	"trip_id" bigint,
-	"route_id" integer,
+	"route_id" bigint,
 	"vehicle_id" bigint,
 	"contact_info" varchar(200),
 	"status" varchar(50) NOT NULL,
@@ -104,36 +112,57 @@ CREATE TABLE "drivers" (
 --> statement-breakpoint
 
 -- ============================================================================
--- ФІНАНСОВІ ОПЕРАЦІЇ
+-- УНІФІКОВАНА ФІНАНСОВА СИСТЕМА (financial_transactions)
 -- ============================================================================
-
--- Витрати: облік всіх витрат компанії
--- Створюється: ct_accountant_role через accountant_api.record_expense()
--- Категорії: паливо, ремонт, зарплата, тощо
-CREATE TABLE "expenses" (
+-- Єдина "книга проводок" для всіх фінансових операцій
+-- Автоматично заповнюється тригерами при:
+-- - Покупці квитка (income: ticket)
+-- - Поповненні картки (income: card_topup)
+-- - Оплаті штрафу (income: fine)
+-- - Виплаті зарплати (expense: salary)
+-- - Записі витрат (expense: other_expense)
+-- Також дозволяє ручні записи (government, other)
+--
+-- ВАЖЛИВО: Має реальні FK зв'язки замість поліморфних ref_table/ref_id
+-- budget_month FK до budgets(month) для аналітики по місяцях
+CREATE TABLE "financial_transactions" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"category" varchar(100) NOT NULL,
+	"tx_type" text NOT NULL,
+	"source" text NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
-	"description" varchar(500),
 	"occurred_at" timestamp DEFAULT now() NOT NULL,
-	"document_ref" varchar(100),
-	CONSTRAINT "expenses_amount_check" CHECK ("amount" > 0)
-);
---> statement-breakpoint
+	"description" text,
+	"created_by" text DEFAULT current_user NOT NULL,
 
--- Доходи: облік всіх надходжень до компанії
--- Створюється: ct_accountant_role через accountant_api.add_income()
--- Джерела: government (держбюджет), tickets (квитки), fines (штрафи), other (інше)
-CREATE TABLE "incomes" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"source" varchar(50) NOT NULL,
-	"amount" numeric(12, 2) NOT NULL,
-	"description" varchar(500),
-	"document_ref" varchar(100),
-	"received_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "incomes_amount_check" CHECK ("amount" > 0),
-	CONSTRAINT "incomes_source_check" CHECK ("source" in ('government', 'tickets', 'fines', 'other'))
+	-- Прямі FK посилання на джерело операції (nullable)
+	"ticket_id" bigint,
+	"fine_id" bigint,
+	"salary_payment_id" bigint,
+
+	-- Контекстні FK для аналітики (nullable)
+	"trip_id" bigint,
+	"route_id" bigint,
+	"driver_id" bigint,
+	"card_id" bigint,
+	"user_id" bigint,
+
+	-- FK до бюджету (auto-populated by trigger)
+	"budget_month" date,
+
+	CONSTRAINT "financial_transactions_tx_type_check" CHECK ("tx_type" in ('income', 'expense')),
+	CONSTRAINT "financial_transactions_source_check" CHECK ("source" in (
+		'ticket', 'fine', 'government', 'other',
+		'salary', 'fuel', 'maintenance', 'other_expense'
+	)),
+	CONSTRAINT "financial_transactions_amount_check" CHECK ("amount" > 0)
 );
+
+CREATE INDEX IF NOT EXISTS idx_ft_occurred ON public.financial_transactions(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_ft_type_source ON public.financial_transactions(tx_type, source);
+CREATE INDEX IF NOT EXISTS idx_ft_budget_month ON public.financial_transactions(budget_month);
+CREATE INDEX IF NOT EXISTS idx_ft_ticket ON public.financial_transactions(ticket_id) WHERE ticket_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ft_fine ON public.financial_transactions(fine_id) WHERE fine_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ft_user ON public.financial_transactions(user_id) WHERE user_id IS NOT NULL;
 --> statement-breakpoint
 
 -- ============================================================================
@@ -168,6 +197,7 @@ CREATE TABLE "fines" (
 	"issued_by" varchar(50) DEFAULT current_user NOT NULL,
 	"trip_id" bigint NOT NULL,
 	"issued_at" timestamp DEFAULT now() NOT NULL,
+	"paid_at" timestamp,
 	CONSTRAINT "fines_amount_check" CHECK ("amount" > 0),
 	CONSTRAINT "fines_status_check" CHECK ("status" in ('Очікує сплати', 'В процесі', 'Оплачено', 'Відмінено', 'Прострочено'))
 );
@@ -237,7 +267,7 @@ CREATE TABLE "routes" (
 -- Може бути прив'язана до водія (driver_id) або до іменованого працівника (employee_name)
 CREATE TABLE "salary_payments" (
 	"id" bigserial PRIMARY KEY NOT NULL,
-	"driver_id" bigint NOT NULL REFERENCES "drivers"("id"),
+	"driver_id" bigint NOT NULL,
 	"rate" numeric(12, 2),
 	"units" integer,
 	"total" numeric(12, 2) NOT NULL,
@@ -457,9 +487,9 @@ CREATE TABLE "vehicle_gps_logs" (
 -- capacity - місткість транспорту (кількість пасажирів)
 -- type_id - зв'язок з типом транспорту (автобус/тролейбус/трамвай)
 CREATE TABLE "vehicle_models" (
-	"id" serial PRIMARY KEY NOT NULL,
+	"id" bigserial PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
-	"type_id" integer NOT NULL,
+	"type_id" bigint NOT NULL,
 	"capacity" integer NOT NULL
 );
 --> statement-breakpoint
@@ -516,7 +546,18 @@ ALTER TABLE "user_gps_logs" ADD CONSTRAINT "user_gps_logs_user_id_users_id_fk" F
 ALTER TABLE "vehicle_gps_logs" ADD CONSTRAINT "vehicle_gps_logs_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicle_models" ADD CONSTRAINT "vehicle_models_type_id_transport_types_id_fk" FOREIGN KEY ("type_id") REFERENCES "public"."transport_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_vehicle_model_id_vehicle_models_id_fk" FOREIGN KEY ("vehicle_model_id") REFERENCES "public"."vehicle_models"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+
+-- financial_transactions FK constraints (all SET NULL on delete to preserve ledger history)
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_ticket_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."tickets"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_fine_id_fk" FOREIGN KEY ("fine_id") REFERENCES "public"."fines"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_salary_payment_id_fk" FOREIGN KEY ("salary_payment_id") REFERENCES "public"."salary_payments"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_trip_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_route_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_driver_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_card_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_budget_month_fk" FOREIGN KEY ("budget_month") REFERENCES "public"."budgets"("month") ON DELETE SET NULL ON UPDATE no action;
 
 -- ============================================================================
 -- UTILITY FUNCTIONS (public schema)

@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CreateBudgetDto } from '../../modules/budgets/dto/create-budget.dto';
-import { CreateExpenseDto } from '../../modules/expenses/dto/create-expense.dto';
-import { CreateIncomeDto } from '../../modules/incomes/dto/create-income.dto';
 import { CreateSalaryPaymentDto } from '../../modules/salary-payments/dto/create-salary-payment.dto';
 import { BudgetQueryDto } from './dto/budget-query.dto';
+import { CreateExpenseDto } from './dto/create-expense.dto';
+import { CreateIncomeDto } from './dto/create-income.dto';
 import { ExpensesQueryDto } from './dto/expenses-query.dto';
 import { IncomesQueryDto } from './dto/incomes-query.dto';
 import { PeriodDto } from './dto/period.dto';
@@ -50,7 +50,6 @@ export class CtAccountantService {
         ${payload.source},
         ${payload.amount}::numeric,
         ${payload.description ?? null},
-        ${payload.documentRef ?? null},
         ${receivedAt}::timestamp
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
@@ -102,7 +101,6 @@ export class CtAccountantService {
         ${payload.category},
         ${payload.amount}::numeric,
         ${payload.description ?? null},
-        ${payload.documentRef ?? null},
         ${occurredAt}::timestamp
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };

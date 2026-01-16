@@ -150,12 +150,12 @@ export async function seedDatabase() {
     // A. Clean Database
     console.log('🧹 Cleaning tables...');
     await db.execute(sql`
-      TRUNCATE TABLE 
+      TRUNCATE TABLE
         vehicle_gps_logs, user_gps_logs, complaints_suggestions, fine_appeals, fines,
         tickets, card_top_ups, transport_cards, driver_vehicle_assignments,
-        salary_payments, expenses, budgets,
-        route_stops, route_points, trips, schedules, 
-        vehicles, vehicle_models, routes, stops, transport_types, 
+        salary_payments, financial_transactions, budgets,
+        route_stops, route_points, trips, schedules,
+        vehicles, vehicle_models, routes, stops, transport_types,
         drivers, users
       RESTART IDENTITY CASCADE
     `);
@@ -1260,21 +1260,24 @@ export async function seedDatabase() {
 
     // L. Finance & Tickets
     console.log('💳 Seeding finance data...');
-    const expensesCategories = ['Паливо', 'Ремонт', 'Мийка', 'Запчастини'];
-    const expensesToInsert: Array<typeof schema.expenses.$inferInsert> = [];
+    const expensesCategories = ['fuel', 'maintenance', 'other_expense'];
+    const expensesToInsert: Array<typeof schema.financialTransactions.$inferInsert> = [];
     const expensesCount = randomInt(20, 30);
 
     for (let i = 0; i < expensesCount; i++) {
+      const category = randomChoice(expensesCategories);
       expensesToInsert.push({
-        category: randomChoice(expensesCategories),
+        txType: 'expense',
+        source: category,
         amount: randomInt(500, 5000).toFixed(2),
-        description: 'Seed expense',
+        description: category + ': Seed expense',
         occurredAt: daysAgo(randomInt(1, 30)),
+        createdBy: 'seed',
       });
     }
 
     if (expensesToInsert.length > 0) {
-      await db.insert(schema.expenses).values(expensesToInsert);
+      await db.insert(schema.financialTransactions).values(expensesToInsert);
     }
 
     const salaryPayments: Array<typeof schema.salaryPayments.$inferInsert> = [];
@@ -1513,13 +1516,7 @@ export async function seedDatabase() {
     // === INCOMES (Доходи - державне фінансування) ===
     console.log('💰 Seeding incomes...');
 
-    const incomeEntries: Array<{
-      source: 'government' | 'tickets' | 'fines' | 'other';
-      amount: string;
-      description: string;
-      documentRef: string;
-      receivedAt: Date;
-    }> = [];
+    const incomeEntries: Array<typeof schema.financialTransactions.$inferInsert> = [];
 
     // Державне фінансування за останні 6 місяців
     for (let i = 0; i < 6; i++) {
@@ -1531,11 +1528,12 @@ export async function seedDatabase() {
 
       // Державний бюджет - основне фінансування
       incomeEntries.push({
+        txType: 'income',
         source: 'government',
         amount: randomInt(150000, 200000).toFixed(2),
         description: `Державне фінансування за ${new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(monthDate)}`,
-        documentRef: `ДБ-${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-${randomInt(100, 999)}`,
-        receivedAt: monthDate,
+        occurredAt: monthDate,
+        createdBy: 'seed',
       });
 
       // Компенсація за пільгові перевезення
@@ -1543,16 +1541,17 @@ export async function seedDatabase() {
         const compensationDate = new Date(monthDate);
         compensationDate.setDate(randomInt(16, 28));
         incomeEntries.push({
+          txType: 'income',
           source: 'government',
           amount: randomInt(30000, 50000).toFixed(2),
           description: 'Компенсація за пільгові перевезення',
-          documentRef: `КПП-${compensationDate.getFullYear()}-${randomInt(100, 999)}`,
-          receivedAt: compensationDate,
+          occurredAt: compensationDate,
+          createdBy: 'seed',
         });
       }
     }
 
-    await db.insert(schema.incomes).values(incomeEntries).onConflictDoNothing();
+    await db.insert(schema.financialTransactions).values(incomeEntries).onConflictDoNothing();
 
     console.log('🏁 Seed completed successfully!');
   } catch (e) {

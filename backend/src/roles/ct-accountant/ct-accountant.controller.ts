@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CreateBudgetDto } from '../../modules/budgets/dto/create-budget.dto';
-import { CreateExpenseDto } from '../../modules/expenses/dto/create-expense.dto';
-import { CreateIncomeDto } from '../../modules/incomes/dto/create-income.dto';
 import { CreateSalaryPaymentDto } from '../../modules/salary-payments/dto/create-salary-payment.dto';
 import { CtAccountantService } from './ct-accountant.service';
 import { BudgetQueryDto } from './dto/budget-query.dto';
+import { CreateExpenseDto } from './dto/create-expense.dto';
+import { CreateIncomeDto } from './dto/create-income.dto';
 import { ExpensesQueryDto } from './dto/expenses-query.dto';
 import { IncomesQueryDto } from './dto/incomes-query.dto';
 import { PeriodDto } from './dto/period.dto';

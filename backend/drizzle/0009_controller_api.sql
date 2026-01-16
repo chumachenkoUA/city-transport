@@ -111,6 +111,7 @@ END;
 $$;
 
 -- 2. Get Active Trips for a Vehicle (через assignments)
+-- ВИПРАВЛЕНО: використовує LATERAL для коректного визначення призначення
 CREATE OR REPLACE FUNCTION controller_api.get_active_trips(
     p_fleet_number text, p_checked_at timestamp DEFAULT now()
 )
@@ -122,16 +123,64 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT t.id, t.planned_starts_at, t.actual_starts_at, r.number, tt.name, d.full_name, t.status
+    SELECT t.id, t.planned_starts_at, t.actual_starts_at, r.number::text, tt.name::text, d.full_name::text, t.status::text
     FROM public.trips t
     JOIN public.drivers d ON d.id = t.driver_id
-    JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-    JOIN public.vehicles v ON v.id = dva.vehicle_id
     JOIN public.routes r ON r.id = t.route_id
     JOIN public.transport_types tt ON tt.id = r.transport_type_id
+    -- LATERAL: отримуємо останнє призначення водія на момент рейсу
+    JOIN LATERAL (
+        SELECT dva.vehicle_id
+        FROM public.driver_vehicle_assignments dva
+        WHERE dva.driver_id = t.driver_id
+          AND dva.assigned_at <= COALESCE(t.actual_starts_at, t.planned_starts_at)
+        ORDER BY dva.assigned_at DESC
+        LIMIT 1
+    ) last_dva ON true
+    JOIN public.vehicles v ON v.id = last_dva.vehicle_id
     WHERE v.fleet_number = p_fleet_number
       AND t.status = 'in_progress'
     ORDER BY t.actual_starts_at DESC;
+END;
+$$;
+
+-- ============================================================================
+-- 2.1 ФУНКЦІЯ ПЕРЕВІРКИ КАРТКИ
+-- ============================================================================
+-- Повертає інформацію про картку: баланс, власник, остання поїздка
+-- Використовується контролером для перевірки пасажира
+CREATE OR REPLACE FUNCTION controller_api.check_card(p_card_number text)
+RETURNS TABLE (
+    card_id bigint,
+    balance numeric,
+    owner_name text,
+    last_trip_id bigint,
+    last_trip_route text,
+    last_trip_at timestamp
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        tc.id,
+        tc.balance,
+        u.full_name::text,
+        last_ticket.trip_id,
+        (r.number || ' (' || r.direction || ')')::text,
+        last_ticket.purchased_at
+    FROM public.transport_cards tc
+    LEFT JOIN public.users u ON u.id = tc.user_id
+    LEFT JOIN LATERAL (
+        SELECT tk.id, tk.trip_id, tk.purchased_at
+        FROM public.tickets tk
+        WHERE tk.card_id = tc.id
+        ORDER BY tk.purchased_at DESC
+        LIMIT 1
+    ) last_ticket ON true
+    LEFT JOIN public.trips t ON t.id = last_ticket.trip_id
+    LEFT JOIN public.routes r ON r.id = t.route_id
+    WHERE tc.card_number = p_card_number;
 END;
 $$;
 
@@ -152,8 +201,24 @@ LEFT JOIN public.routes r ON r.id = v.route_id
 LEFT JOIN public.transport_types tt ON tt.id = r.transport_type_id
 LEFT JOIN public.vehicle_models vm ON vm.id = v.vehicle_model_id;
 
+-- ============================================================================
+-- v_card_details - Інформація про картку для контролера
+-- ============================================================================
+-- Показує: номер картки, баланс, ПІБ власника, останню поїздку
+-- Остання поїздка: дата, маршрут, тип транспорту
+CREATE OR REPLACE VIEW controller_api.v_card_details AS
+SELECT tc.id, tc.card_number, tc.balance, tc.user_id,
+    u.full_name as user_full_name,
+    (SELECT t.purchased_at FROM public.tickets t WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_usage_at,
+    (SELECT r.number FROM public.tickets t JOIN public.trips tr ON tr.id = t.trip_id JOIN public.routes r ON r.id = tr.route_id WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_route_number,
+    (SELECT tt.name FROM public.tickets t JOIN public.trips tr ON tr.id = t.trip_id JOIN public.routes r ON r.id = tr.route_id JOIN public.transport_types tt ON tt.id = r.transport_type_id WHERE t.card_id = tc.id ORDER BY t.purchased_at DESC LIMIT 1) as last_transport_type
+FROM public.transport_cards tc
+JOIN public.users u ON u.id = tc.user_id;
+
 -- 4. GRANTS
 GRANT SELECT ON controller_api.v_routes TO ct_controller_role;
 GRANT SELECT ON controller_api.v_vehicles TO ct_controller_role;
+GRANT SELECT ON controller_api.v_card_details TO ct_controller_role;
 GRANT EXECUTE ON FUNCTION controller_api.get_active_trips(text, timestamp) TO ct_controller_role;
 GRANT EXECUTE ON FUNCTION controller_api.issue_fine(text, numeric, text, text, timestamp, bigint) TO ct_controller_role;
+GRANT EXECUTE ON FUNCTION controller_api.check_card(text) TO ct_controller_role;

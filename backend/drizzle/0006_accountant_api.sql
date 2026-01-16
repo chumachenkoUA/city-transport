@@ -1,14 +1,205 @@
 -- 0006_accountant_api.sql
 -- Accountant API: Financial management
 
--- 1. FUNCTIONS
+-- ============================================================================
+-- 0. ТРИГЕРИ для автоматичного заповнення financial_transactions
+-- ============================================================================
+-- ОНОВЛЕНО: Тригери тепер заповнюють реальні FK колонки замість ref_table/ref_id
+-- Також автоматично заповнюється budget_month для зв'язку з budgets
 
--- Функція для додавання доходу
+-- ============================================================================
+-- 0.0 Тригер для автозаповнення budget_month на financial_transactions
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.trg_ft_set_budget_month()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.budget_month := date_trunc('month', NEW.occurred_at)::date;
+
+    -- Гарантуємо що бюджетний рядок існує
+    INSERT INTO public.budgets(month)
+    VALUES (NEW.budget_month)
+    ON CONFLICT (month) DO NOTHING;
+
+    RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_ft_set_budget_month ON public.financial_transactions;
+CREATE TRIGGER trg_ft_set_budget_month
+BEFORE INSERT OR UPDATE OF occurred_at ON public.financial_transactions
+FOR EACH ROW EXECUTE FUNCTION public.trg_ft_set_budget_month();
+
+-- ============================================================================
+-- 0.1 Тригер для автозаповнення paid_at на fines
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.trg_fines_set_paid_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.status IS DISTINCT FROM NEW.status
+       AND NEW.status = 'Оплачено'
+       AND NEW.paid_at IS NULL THEN
+        NEW.paid_at := now();
+    END IF;
+    RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_fines_set_paid_at ON public.fines;
+CREATE TRIGGER trg_fines_set_paid_at
+BEFORE UPDATE OF status ON public.fines
+FOR EACH ROW EXECUTE FUNCTION public.trg_fines_set_paid_at();
+
+-- ============================================================================
+-- 0.2 Trigger: tickets -> income (при покупці квитка)
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.trg_ticket_to_ft() RETURNS trigger AS $$
+DECLARE
+    v_user_id bigint;
+    v_route_id bigint;
+    v_driver_id bigint;
+BEGIN
+    -- Отримуємо user_id через картку
+    SELECT tc.user_id INTO v_user_id
+    FROM public.transport_cards tc
+    WHERE tc.id = NEW.card_id;
+
+    -- Отримуємо route_id та driver_id через рейс
+    SELECT tr.route_id, tr.driver_id INTO v_route_id, v_driver_id
+    FROM public.trips tr
+    WHERE tr.id = NEW.trip_id;
+
+    INSERT INTO public.financial_transactions(
+        tx_type, source, amount, occurred_at,
+        ticket_id, trip_id, route_id, driver_id, card_id, user_id
+    )
+    VALUES (
+        'income', 'ticket', NEW.price, NEW.purchased_at,
+        NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.card_id, v_user_id
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ticket_income ON public.tickets;
+CREATE TRIGGER trg_ticket_income AFTER INSERT ON public.tickets
+FOR EACH ROW EXECUTE FUNCTION public.trg_ticket_to_ft();
+
+-- ============================================================================
+-- 0.3 Trigger: fines (при оплаті штрафу) -> income
+-- ПРИМІТКА: card_top_ups НЕ створюють income, бо поповнення картки - це аванс,
+-- а не дохід. Реальний дохід виникає при покупці квитка (source='ticket').
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.trg_fine_to_ft() RETURNS trigger AS $$
+DECLARE
+    v_route_id bigint;
+    v_driver_id bigint;
+BEGIN
+    -- Тільки коли статус змінюється на "Оплачено"
+    IF NEW.status = 'Оплачено' AND (OLD IS NULL OR OLD.status <> 'Оплачено') THEN
+        -- Отримуємо route_id та driver_id через рейс
+        SELECT tr.route_id, tr.driver_id INTO v_route_id, v_driver_id
+        FROM public.trips tr
+        WHERE tr.id = NEW.trip_id;
+
+        INSERT INTO public.financial_transactions(
+            tx_type, source, amount, occurred_at,
+            fine_id, trip_id, route_id, driver_id, user_id
+        )
+        VALUES (
+            'income', 'fine', NEW.amount, COALESCE(NEW.paid_at, now()),
+            NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.user_id
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_fine_income ON public.fines;
+CREATE TRIGGER trg_fine_income AFTER INSERT OR UPDATE ON public.fines
+FOR EACH ROW EXECUTE FUNCTION public.trg_fine_to_ft();
+
+-- ============================================================================
+-- 0.4 Trigger: salary_payments -> expense (при виплаті зарплати)
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.trg_salary_to_ft() RETURNS trigger AS $$
+BEGIN
+    INSERT INTO public.financial_transactions(
+        tx_type, source, amount, occurred_at,
+        salary_payment_id, driver_id
+    )
+    VALUES (
+        'expense', 'salary', NEW.total, NEW.paid_at,
+        NEW.id, NEW.driver_id
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_salary_expense ON public.salary_payments;
+CREATE TRIGGER trg_salary_expense AFTER INSERT ON public.salary_payments
+FOR EACH ROW EXECUTE FUNCTION public.trg_salary_to_ft();
+
+-- ============================================================================
+-- 0.5 BACKFILL: Заповнення financial_transactions з існуючих даних
+-- ============================================================================
+-- Backfill виконується з реальними FK колонками
+
+-- Backfill tickets (з контекстними FK)
+INSERT INTO public.financial_transactions(
+    tx_type, source, amount, occurred_at,
+    ticket_id, trip_id, route_id, driver_id, card_id, user_id, created_by
+)
+SELECT
+    'income', 'ticket', t.price, t.purchased_at,
+    t.id, t.trip_id, tr.route_id, tr.driver_id, t.card_id, tc.user_id, 'migration'
+FROM public.tickets t
+JOIN public.trips tr ON tr.id = t.trip_id
+JOIN public.transport_cards tc ON tc.id = t.card_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.financial_transactions ft WHERE ft.ticket_id = t.id
+);
+
+-- ПРИМІТКА: card_top_ups НЕ backfill-яться, бо це аванси, а не доходи
+
+-- Backfill paid fines (з контекстними FK)
+INSERT INTO public.financial_transactions(
+    tx_type, source, amount, occurred_at,
+    fine_id, trip_id, route_id, driver_id, user_id, created_by
+)
+SELECT
+    'income', 'fine', f.amount, COALESCE(f.paid_at, f.issued_at),
+    f.id, f.trip_id, tr.route_id, tr.driver_id, f.user_id, 'migration'
+FROM public.fines f
+JOIN public.trips tr ON tr.id = f.trip_id
+WHERE f.status = 'Оплачено' AND NOT EXISTS (
+    SELECT 1 FROM public.financial_transactions ft WHERE ft.fine_id = f.id
+);
+
+-- Backfill salary_payments (з контекстними FK)
+INSERT INTO public.financial_transactions(
+    tx_type, source, amount, occurred_at,
+    salary_payment_id, driver_id, created_by
+)
+SELECT
+    'expense', 'salary', sp.total, sp.paid_at,
+    sp.id, sp.driver_id, 'migration'
+FROM public.salary_payments sp
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.financial_transactions ft WHERE ft.salary_payment_id = sp.id
+);
+
+-- ============================================================================
+-- 1. FUNCTIONS
+-- ============================================================================
+
+-- Функція для додавання доходу (пише напряму в financial_transactions)
+-- Використовується для ручних записів: держбюджет, інші доходи
 CREATE OR REPLACE FUNCTION accountant_api.add_income(
     p_source text,
     p_amount numeric,
     p_description text DEFAULT NULL,
-    p_document_ref text DEFAULT NULL,
     p_received_at timestamp DEFAULT now()
 )
 RETURNS bigint
@@ -16,13 +207,13 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE v_id bigint;
 BEGIN
-    -- Валідація джерела
-    IF p_source NOT IN ('government', 'tickets', 'fines', 'other') THEN
-        RAISE EXCEPTION 'Невірне джерело доходу: %. Дозволені: government, tickets, fines, other', p_source;
+    -- Валідація джерела (тільки ручні записи - автоматичні йдуть через тригери)
+    IF p_source NOT IN ('government', 'other') THEN
+        RAISE EXCEPTION 'Для ручного доходу дозволені тільки: government, other. Квитки/штрафи записуються автоматично.';
     END IF;
 
-    INSERT INTO public.incomes (source, amount, description, document_ref, received_at)
-    VALUES (p_source, p_amount, p_description, p_document_ref, p_received_at)
+    INSERT INTO public.financial_transactions (tx_type, source, amount, occurred_at, description)
+    VALUES ('income', p_source, p_amount, p_received_at, p_description)
     RETURNING id INTO v_id;
     RETURN v_id;
 END;
@@ -52,58 +243,62 @@ END;
 $$;
 
 -- Функція для оновлення фактичних показників бюджету
+-- ОНОВЛЕНО: тепер використовує budget_month FK (швидше та надійніше)
 CREATE OR REPLACE FUNCTION accountant_api.update_budget_actuals(p_month date)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 DECLARE
-    v_actual_income numeric;
-    v_actual_expenses numeric;
-    v_month_start date;
-    v_month_end date;
+    v_m date := date_trunc('month', p_month)::date;
+    v_income numeric;
+    v_expense numeric;
 BEGIN
-    v_month_start := date_trunc('month', p_month)::date;
-    v_month_end := (date_trunc('month', p_month) + interval '1 month')::date;
+    -- Рахуємо з budget_month FK (швидше та надійніше)
+    SELECT COALESCE(SUM(amount), 0) INTO v_income
+    FROM public.financial_transactions
+    WHERE budget_month = v_m AND tx_type = 'income';
 
-    -- Рахуємо фактичні доходи з таблиці incomes
-    SELECT COALESCE(SUM(amount), 0) INTO v_actual_income
-    FROM public.incomes
-    WHERE received_at >= v_month_start AND received_at < v_month_end;
+    SELECT COALESCE(SUM(amount), 0) INTO v_expense
+    FROM public.financial_transactions
+    WHERE budget_month = v_m AND tx_type = 'expense';
 
-    -- Рахуємо фактичні витрати з таблиці expenses + salary_payments
-    SELECT COALESCE(SUM(amount), 0) INTO v_actual_expenses
-    FROM public.expenses
-    WHERE occurred_at >= v_month_start AND occurred_at < v_month_end;
+    -- Оновлюємо запис бюджету (має вже існувати завдяки тригеру trg_ft_set_budget_month)
+    UPDATE public.budgets
+    SET actual_income = v_income,
+        actual_expenses = v_expense
+    WHERE month = v_m;
 
-    v_actual_expenses := v_actual_expenses + COALESCE((
-        SELECT SUM(total)
-        FROM public.salary_payments
-        WHERE paid_at >= v_month_start AND paid_at < v_month_end
-    ), 0);
-
-    -- Оновлюємо або створюємо запис бюджету
-    INSERT INTO public.budgets (month, planned_income, planned_expenses, actual_income, actual_expenses)
-    VALUES (v_month_start, 0, 0, v_actual_income, v_actual_expenses)
-    ON CONFLICT (month) DO UPDATE SET
-        actual_income = v_actual_income,
-        actual_expenses = v_actual_expenses;
+    -- Якщо запис не існує, створюємо його
+    IF NOT FOUND THEN
+        INSERT INTO public.budgets (month, planned_income, planned_expenses, actual_income, actual_expenses)
+        VALUES (v_m, 0, 0, v_income, v_expense);
+    END IF;
 END;
 $$;
 
+-- Функція для додавання витрат (пише напряму в financial_transactions)
+-- Категорії: fuel, maintenance, other_expense
 CREATE OR REPLACE FUNCTION accountant_api.add_expense(
     p_category text,
     p_amount numeric,
     p_description text DEFAULT NULL,
-    p_document_ref text DEFAULT NULL,
     p_occurred_at timestamp DEFAULT now()
 )
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
-DECLARE v_id bigint;
+DECLARE v_id bigint; v_source text;
 BEGIN
-    INSERT INTO public.expenses (category, amount, description, document_ref, occurred_at)
-    VALUES (p_category, p_amount, p_description, p_document_ref, p_occurred_at)
+    -- Мапінг категорії на source
+    v_source := CASE p_category
+        WHEN 'fuel' THEN 'fuel'
+        WHEN 'maintenance' THEN 'maintenance'
+        ELSE 'other_expense'
+    END;
+
+    INSERT INTO public.financial_transactions (tx_type, source, amount, occurred_at, description)
+    VALUES ('expense', v_source, p_amount, p_occurred_at,
+            COALESCE(p_category || ': ', '') || COALESCE(p_description, ''))
     RETURNING id INTO v_id;
     RETURN v_id;
 END;
@@ -145,27 +340,36 @@ BEGIN
 END;
 $$;
 
+-- ОНОВЛЕНО: тепер рахує з financial_transactions (єдине джерело правди)
 CREATE OR REPLACE FUNCTION accountant_api.get_financial_report(p_start_date date, p_end_date date)
 RETURNS TABLE (category text, amount numeric, type text)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
-BEGIN
-    RETURN QUERY SELECT 'Квитки'::text, COALESCE(SUM(price), 0), 'income'::text
-    FROM public.tickets WHERE purchased_at >= p_start_date AND purchased_at < p_end_date + 1;
-
-    RETURN QUERY SELECT 'Поповнення карток'::text, COALESCE(SUM(ct.amount), 0), 'income_flow'::text
-    FROM public.card_top_ups ct WHERE topped_up_at >= p_start_date AND topped_up_at < p_end_date + 1;
-
-    RETURN QUERY SELECT 'Штрафи'::text, COALESCE(SUM(f.amount), 0), 'income'::text
-    FROM public.fines f WHERE status = 'Оплачено' AND issued_at >= p_start_date AND issued_at < p_end_date + 1;
-
-    RETURN QUERY SELECT e.category, COALESCE(SUM(e.amount), 0), 'expense'::text
-    FROM public.expenses e WHERE e.occurred_at >= p_start_date AND e.occurred_at < p_end_date + 1
-    GROUP BY e.category;
-
-    RETURN QUERY SELECT 'Зарплата'::text, COALESCE(SUM(total), 0), 'expense'::text
-    FROM public.salary_payments WHERE paid_at >= p_start_date AND paid_at < p_end_date + 1;
-END;
+    SELECT
+        CASE source
+            WHEN 'ticket' THEN 'Квитки'
+            WHEN 'fine' THEN 'Штрафи'
+            WHEN 'government' THEN 'Держбюджет'
+            WHEN 'other' THEN 'Інше'
+            WHEN 'salary' THEN 'Зарплата'
+            WHEN 'fuel' THEN 'Паливо'
+            WHEN 'maintenance' THEN 'Обслуговування'
+            WHEN 'other_expense' THEN COALESCE(expense_desc, 'Витрати')
+            ELSE source
+        END AS category,
+        total_amount AS amount,
+        tx_type AS type
+    FROM (
+        SELECT
+            source,
+            tx_type,
+            SUM(amount) AS total_amount,
+            CASE WHEN source = 'other_expense' THEN description ELSE NULL END AS expense_desc
+        FROM public.financial_transactions
+        WHERE occurred_at >= p_start_date AND occurred_at < p_end_date + 1
+        GROUP BY source, tx_type, CASE WHEN source = 'other_expense' THEN description ELSE NULL END
+    ) grouped
+    ORDER BY tx_type, source;
 $$;
 
 CREATE OR REPLACE FUNCTION accountant_api.calculate_driver_salary(p_driver_id bigint, p_month date)
@@ -199,11 +403,29 @@ CREATE OR REPLACE VIEW accountant_api.v_budgets AS
 SELECT id, month, planned_income, planned_expenses, actual_income, actual_expenses, note
 FROM public.budgets ORDER BY month DESC;
 
+-- v_expenses тепер читає з financial_transactions
 CREATE OR REPLACE VIEW accountant_api.v_expenses AS
-SELECT * FROM public.expenses ORDER BY occurred_at DESC;
+SELECT id,
+       CASE source
+           WHEN 'other_expense' THEN split_part(description, ':', 1)
+           ELSE source
+       END as category,
+       amount,
+       CASE
+           WHEN source = 'other_expense' THEN nullif(trim(split_part(description, ':', 2)), '')
+           ELSE description
+       END as description,
+       occurred_at
+FROM public.financial_transactions
+WHERE tx_type = 'expense'
+ORDER BY occurred_at DESC;
 
+-- v_incomes тепер читає з financial_transactions
 CREATE OR REPLACE VIEW accountant_api.v_incomes AS
-SELECT * FROM public.incomes ORDER BY received_at DESC;
+SELECT id, source, amount, description, occurred_at as received_at
+FROM public.financial_transactions
+WHERE tx_type = 'income'
+ORDER BY occurred_at DESC;
 
 CREATE OR REPLACE VIEW accountant_api.v_salary_history AS
 SELECT sp.id, sp.paid_at,
@@ -220,22 +442,55 @@ ORDER BY sp.paid_at DESC;
 CREATE OR REPLACE VIEW accountant_api.v_drivers_list AS
 SELECT id, full_name, driver_license_number FROM public.drivers;
 
+-- v_financial_report тепер читає з financial_transactions (єдине джерело правди)
 CREATE OR REPLACE VIEW accountant_api.v_financial_report AS
-SELECT t.purchased_at::date AS report_date, 'Квитки'::text AS category,
-       COALESCE(SUM(t.price), 0) AS amount, 'income'::text AS type
-FROM public.tickets t GROUP BY t.purchased_at::date
-UNION ALL
-SELECT f.issued_at::date AS report_date, 'Штрафи'::text AS category,
-       COALESCE(SUM(f.amount), 0) AS amount, 'income'::text AS type
-FROM public.fines f WHERE f.status = 'Оплачено' GROUP BY f.issued_at::date
-UNION ALL
-SELECT e.occurred_at::date AS report_date, e.category,
-       COALESCE(SUM(e.amount), 0) AS amount, 'expense'::text AS type
-FROM public.expenses e GROUP BY e.occurred_at::date, e.category
-UNION ALL
-SELECT sp.paid_at::date AS report_date, 'Зарплата'::text AS category,
-       COALESCE(SUM(sp.total), 0) AS amount, 'expense'::text AS type
-FROM public.salary_payments sp GROUP BY sp.paid_at::date;
+SELECT
+    report_date,
+    CASE source
+        WHEN 'ticket' THEN 'Квитки'
+        WHEN 'fine' THEN 'Штрафи'
+        WHEN 'government' THEN 'Держбюджет'
+        WHEN 'other' THEN 'Інші доходи'
+        WHEN 'salary' THEN 'Зарплата'
+        WHEN 'fuel' THEN 'Паливо'
+        WHEN 'maintenance' THEN 'Обслуговування'
+        WHEN 'other_expense' THEN COALESCE(expense_cat, 'Витрати')
+        ELSE source
+    END AS category,
+    total_amount AS amount,
+    tx_type AS type
+FROM (
+    SELECT
+        occurred_at::date AS report_date,
+        source,
+        tx_type,
+        SUM(amount) AS total_amount,
+        CASE WHEN source = 'other_expense' THEN split_part(description, ':', 1) ELSE NULL END AS expense_cat
+    FROM public.financial_transactions
+    GROUP BY occurred_at::date, source, tx_type,
+             CASE WHEN source = 'other_expense' THEN split_part(description, ':', 1) ELSE NULL END
+) grouped;
+
+-- View для financial_transactions (з реальними FK колонками)
+CREATE OR REPLACE VIEW accountant_api.v_financial_transactions AS
+SELECT id, tx_type, source, amount, occurred_at, description, created_by,
+       ticket_id, fine_id, salary_payment_id,
+       trip_id, route_id, driver_id, card_id, user_id,
+       budget_month
+FROM public.financial_transactions
+ORDER BY occurred_at DESC;
+
+-- View для аналітики по джерелах та місяцях
+CREATE OR REPLACE VIEW accountant_api.v_fin_by_source AS
+SELECT
+    budget_month,
+    tx_type,
+    source,
+    SUM(amount) AS total_amount,
+    COUNT(*) AS ops_count
+FROM public.financial_transactions
+GROUP BY budget_month, tx_type, source
+ORDER BY budget_month DESC, tx_type, source;
 
 -- 3. GRANTS
 GRANT SELECT ON ALL TABLES IN SCHEMA accountant_api TO ct_accountant_role;

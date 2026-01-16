@@ -110,7 +110,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT s.id, s.name, s.lon, s.lat,
+    SELECT s.id, s.name::text, s.lon, s.lat,
            ST_Distance(
                ST_SetSRID(ST_MakePoint(p_lon::float8, p_lat::float8), 4326)::geography,
                ST_SetSRID(ST_MakePoint(s.lon::float8, s.lat::float8), 4326)::geography
@@ -130,7 +130,7 @@ CREATE OR REPLACE FUNCTION guest_api.search_stops_by_name(p_query text, p_limit 
 RETURNS TABLE (id bigint, name text, lon numeric, lat numeric)
 LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
-    SELECT s.id, s.name, s.lon, s.lat
+    SELECT s.id, s.name::text, s.lon, s.lat
     FROM stops s
     WHERE s.name ILIKE '%' || p_query || '%'
     ORDER BY CASE WHEN s.name ILIKE p_query || '%' THEN 1 ELSE 2 END, s.name
@@ -427,7 +427,7 @@ CREATE OR REPLACE VIEW guest_api.v_route_stops_ordered AS
 WITH RECURSIVE ordered AS (
   SELECT rs.id, rs.route_id, rs.stop_id, rs.distance_to_next_km,
          rs.prev_route_stop_id, rs.next_route_stop_id,
-         s.name AS stop_name, s.lon, s.lat,
+         s.name::text AS stop_name, s.lon, s.lat,
          1 AS sort_order
   FROM public.route_stops rs
   JOIN public.stops s ON s.id = rs.stop_id
@@ -435,7 +435,7 @@ WITH RECURSIVE ordered AS (
   UNION ALL
   SELECT rs.id, rs.route_id, rs.stop_id, rs.distance_to_next_km,
          rs.prev_route_stop_id, rs.next_route_stop_id,
-         s.name, s.lon, s.lat,
+         s.name::text, s.lon, s.lat,
          o.sort_order + 1
   FROM public.route_stops rs
   JOIN public.stops s ON s.id = rs.stop_id
@@ -536,7 +536,7 @@ BEGIN
   RETURN QUERY
   SELECT
     s.id,
-    s.name,
+    s.name::text,
     s.lon,
     s.lat,
     ST_DistanceSphere(

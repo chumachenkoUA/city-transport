@@ -386,7 +386,7 @@ export class CtGuestService {
         ${payload.contactInfo ?? null},
         ${payload.routeNumber ?? null},
         ${payload.transportType ?? null},
-        ${payload.vehicleNumber ?? null}
+        ${null}
       )
     `);
   }

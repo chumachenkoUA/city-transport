@@ -59,7 +59,6 @@ export interface ComplaintDto {
   contactInfo?: string;
   routeNumber?: string;
   transportType?: string;
-  vehicleNumber?: string;
 }
 
 // API functions

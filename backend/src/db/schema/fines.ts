@@ -28,6 +28,7 @@ export const fines = pgTable(
       .notNull()
       .references(() => trips.id),
     issuedAt: timestamp('issued_at').notNull().defaultNow(),
+    paidAt: timestamp('paid_at'),
   },
   () => ({
     finesAmountCheck: check('fines_amount_check', sql.raw('"amount" > 0')),

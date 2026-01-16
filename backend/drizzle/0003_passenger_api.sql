@@ -265,7 +265,7 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT s.id, s.name, s.lon, s.lat,
+    SELECT s.id, s.name::text, s.lon, s.lat,
            ST_Distance(
                ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)::geography,
                ST_SetSRID(ST_MakePoint(p_lon, p_lat), 4326)::geography
@@ -290,7 +290,7 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT DISTINCT r.id, r.number, tt.name, s1.name, s2.name
+    SELECT DISTINCT r.id, r.number::text, tt.name::text, s1.name::text, s2.name::text
     FROM public.routes r
     JOIN public.transport_types tt ON tt.id = r.transport_type_id
     JOIN public.route_stops rs1 ON rs1.route_id = r.id

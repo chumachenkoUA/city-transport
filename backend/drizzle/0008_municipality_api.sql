@@ -191,6 +191,7 @@ END;
 $$;
 
 -- 4. ANALYTICS FUNCTIONS
+-- ВИПРАВЛЕНО: використовує LATERAL для коректного визначення транспорту на момент рейсу
 CREATE OR REPLACE FUNCTION municipality_api.get_passenger_flow(
     p_start_date date, p_end_date date,
     p_route_number text DEFAULT NULL, p_transport_type text DEFAULT NULL
@@ -200,12 +201,19 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT t.actual_starts_at::date, r.number, tt.name, v.fleet_number, t.passenger_count
+    SELECT t.actual_starts_at::date, r.number::text, tt.name::text, v.fleet_number::text, t.passenger_count
     FROM public.trips t
     JOIN public.routes r ON r.id = t.route_id
     JOIN public.transport_types tt ON tt.id = r.transport_type_id
-    LEFT JOIN public.driver_vehicle_assignments dva ON dva.driver_id = t.driver_id
-    LEFT JOIN public.vehicles v ON v.id = dva.vehicle_id
+    LEFT JOIN LATERAL (
+        SELECT dva.vehicle_id
+        FROM public.driver_vehicle_assignments dva
+        WHERE dva.driver_id = t.driver_id
+          AND dva.assigned_at <= t.actual_starts_at
+        ORDER BY dva.assigned_at DESC
+        LIMIT 1
+    ) last_dva ON true
+    LEFT JOIN public.vehicles v ON v.id = last_dva.vehicle_id
     WHERE t.status = 'completed'
       AND t.actual_starts_at >= p_start_date AND t.actual_starts_at < p_end_date + 1
       AND (p_route_number IS NULL OR r.number = p_route_number)
@@ -223,7 +231,7 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT c.id, c.type, c.message, c.status, c.created_at, r.number, tt.name, v.fleet_number, c.contact_info
+    SELECT c.id, c.type::text, c.message::text, c.status::text, c.created_at, r.number::text, tt.name::text, v.fleet_number::text, c.contact_info::text
     FROM public.complaints_suggestions c
     LEFT JOIN public.routes r ON r.id = c.route_id
     LEFT JOIN public.transport_types tt ON tt.id = r.transport_type_id

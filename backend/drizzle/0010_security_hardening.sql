@@ -28,93 +28,41 @@ BEGIN
     END LOOP;
 END $$;
 
--- 2. AUTH SCHEMA - Registration
-REVOKE ALL ON FUNCTION auth.register_passenger(text, text, text, text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION auth.register_passenger(text, text, text, text, text) TO ct_guest_role;
+-- =============================================================================
+-- 2. SCHEMA-LEVEL GRANTS (замість специфічних сигнатур функцій)
+-- =============================================================================
+-- Використовуємо schema-level grants щоб уникнути розсинхронізації сигнатур.
+-- Якщо сигнатура функції зміниться - права збережуться автоматично.
 
--- 3. GUEST_API - Public data access (guests and all authenticated users)
--- Read functions - available to guests and above
-GRANT EXECUTE ON FUNCTION guest_api.find_nearby_stops(numeric, numeric, numeric, integer)
-    TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role,
-       ct_municipality_role, ct_controller_role, ct_manager_role;
+-- AUTH SCHEMA - Registration (guest може реєструватися)
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO ct_guest_role;
 
-GRANT EXECUTE ON FUNCTION guest_api.search_stops_by_name(text, integer)
-    TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role,
-       ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
-
-GRANT EXECUTE ON FUNCTION guest_api.plan_route(numeric, numeric, numeric, numeric, numeric, integer, integer)
+-- GUEST_API - Public data access
+-- Доступ для всіх ролей (гості + авторизовані)
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA guest_api
     TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role,
        ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
 
-GRANT EXECUTE ON FUNCTION guest_api.plan_route_pgrouting(bigint[], bigint[], integer, integer)
-    TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role,
-       ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
+-- PASSENGER_API - Authenticated passenger functions
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA passenger_api TO ct_passenger_role;
 
--- Complaint submission - guests and passengers
-GRANT EXECUTE ON FUNCTION guest_api.submit_complaint(text, text, text, text, text, text)
-    TO ct_guest_role, ct_passenger_role;
+-- DRIVER_API - Driver operational functions
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA driver_api TO ct_driver_role;
 
--- 4. PASSENGER_API - Authenticated passenger functions
-GRANT EXECUTE ON FUNCTION passenger_api.submit_complaint(text, text, text, text, text) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.submit_fine_appeal(bigint, text) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.buy_ticket(bigint, bigint, numeric) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.top_up_card(text, numeric) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.find_stops_nearby(numeric, numeric, integer) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.find_routes_between(numeric, numeric, numeric, numeric, integer) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.pay_fine(bigint, bigint) TO ct_passenger_role;
-GRANT EXECUTE ON FUNCTION passenger_api.log_my_gps(numeric, numeric, timestamp) TO ct_passenger_role;
+-- DISPATCHER_API - Schedule and assignment management
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA dispatcher_api TO ct_dispatcher_role;
 
--- 5. DRIVER_API - Driver operational functions
-GRANT EXECUTE ON FUNCTION driver_api.cleanup_stale_trips(bigint) TO ct_driver_role;
-GRANT EXECUTE ON FUNCTION driver_api.start_trip(text, timestamp, text) TO ct_driver_role;
-GRANT EXECUTE ON FUNCTION driver_api.finish_trip(timestamp) TO ct_driver_role;
-GRANT EXECUTE ON FUNCTION driver_api.update_passengers(bigint, integer) TO ct_driver_role;
-GRANT EXECUTE ON FUNCTION driver_api.log_vehicle_gps(numeric, numeric, timestamp) TO ct_driver_role;
+-- CONTROLLER_API - Fine issuance and validation
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA controller_api TO ct_controller_role;
 
--- 6. DISPATCHER_API - Schedule and assignment management
-GRANT EXECUTE ON FUNCTION dispatcher_api.create_schedule(
-    bigint, bigint, time, time, integer,
-    boolean, boolean, boolean, boolean, boolean, boolean, boolean,
-    date, date
-) TO ct_dispatcher_role;
+-- MANAGER_API - Staff and fleet management
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA manager_api TO ct_manager_role;
 
-GRANT EXECUTE ON FUNCTION dispatcher_api.update_schedule(
-    bigint, bigint, bigint, time, time, integer,
-    boolean, boolean, boolean, boolean, boolean, boolean, boolean,
-    date, date
-) TO ct_dispatcher_role;
+-- MUNICIPALITY_API - Route and analytics management
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA municipality_api TO ct_municipality_role;
 
-GRANT EXECUTE ON FUNCTION dispatcher_api.delete_schedule(bigint) TO ct_dispatcher_role;
-GRANT EXECUTE ON FUNCTION dispatcher_api.assign_driver_v2(bigint, text) TO ct_dispatcher_role;
-GRANT EXECUTE ON FUNCTION dispatcher_api.calculate_delay(bigint) TO ct_dispatcher_role;
-
--- 7. CONTROLLER_API - Fine issuance and validation
-GRANT EXECUTE ON FUNCTION controller_api.issue_fine(text, numeric, text, text, timestamp, bigint) TO ct_controller_role;
-GRANT EXECUTE ON FUNCTION controller_api.get_active_trips(text, timestamp) TO ct_controller_role;
-
--- 8. MANAGER_API - Staff and fleet management
-GRANT EXECUTE ON FUNCTION manager_api.hire_driver(text, text, text, text, text, text, jsonb, jsonb) TO ct_manager_role;
-GRANT EXECUTE ON FUNCTION manager_api.add_vehicle(text, bigint, text) TO ct_manager_role;
-GRANT EXECUTE ON FUNCTION manager_api.add_vehicle_v2(text, bigint, bigint, text) TO ct_manager_role;
-GRANT EXECUTE ON FUNCTION manager_api.create_staff_user(text, text, text, text, text, text) TO ct_manager_role;
-GRANT EXECUTE ON FUNCTION manager_api.remove_staff_user(text) TO ct_manager_role;
-
--- 9. MUNICIPALITY_API - Route and analytics management
-GRANT EXECUTE ON FUNCTION municipality_api.create_stop(text, numeric, numeric) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.update_stop(bigint, text, numeric, numeric) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.create_route_full(text, integer, text, jsonb, jsonb) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.recalculate_route_stop_distances(bigint) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.get_passenger_flow(date, date, text, text) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.get_complaints(date, date, text, text, text) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.set_route_active(bigint, boolean) TO ct_municipality_role;
-GRANT EXECUTE ON FUNCTION municipality_api.update_complaint_status(bigint, text) TO ct_municipality_role;
-
--- 10. ACCOUNTANT_API - Financial management
-GRANT EXECUTE ON FUNCTION accountant_api.upsert_budget(date, numeric, numeric, text) TO ct_accountant_role;
-GRANT EXECUTE ON FUNCTION accountant_api.add_expense(text, numeric, text, text, timestamp) TO ct_accountant_role;
-GRANT EXECUTE ON FUNCTION accountant_api.pay_salary(bigint, numeric, integer, numeric) TO ct_accountant_role;
-GRANT EXECUTE ON FUNCTION accountant_api.get_financial_report(date, date) TO ct_accountant_role;
-GRANT EXECUTE ON FUNCTION accountant_api.calculate_driver_salary(bigint, date) TO ct_accountant_role;
+-- ACCOUNTANT_API - Financial management
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA accountant_api TO ct_accountant_role;
 
 -- =============================================================================
 -- VIEWS SECURITY
