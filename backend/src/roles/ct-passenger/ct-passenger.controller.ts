@@ -4,6 +4,7 @@ import { CreateAppealDto } from './dto/create-appeal.dto';
 import { CreatePassengerComplaintDto } from './dto/create-complaint.dto';
 import { TopUpDto } from './dto/top-up.dto';
 import { RouteLookupDto } from '../ct-guest/dto/route-lookup.dto';
+import { RouteScheduleDto } from '../ct-guest/dto/route-schedule.dto';
 import { RoutesBetweenDto } from '../ct-guest/dto/routes-between.dto';
 import { StopsNearDto } from '../ct-guest/dto/stops-near.dto';
 import { BuyTicketDto } from './dto/buy-ticket.dto';
@@ -58,7 +59,7 @@ export class CtPassengerController {
   }
 
   @Get('routes/schedule')
-  getSchedule(@Query() query: RouteLookupDto) {
+  getSchedule(@Query() query: RouteScheduleDto) {
     return this.ctPassengerService.getSchedule(query);
   }
 
@@ -78,6 +79,11 @@ export class CtPassengerController {
     @Body() payload: TopUpDto,
   ) {
     return this.ctPassengerService.topUpCard(cardNumber, payload);
+  }
+
+  @Get('card/top-ups')
+  getMyTopUps(@Query('limit') limit?: string) {
+    return this.ctPassengerService.getMyTopUps(limit ? Number(limit) : 3);
   }
 
   @Post('tickets/buy')

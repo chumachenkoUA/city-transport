@@ -1,57 +1,552 @@
 # 5 МОДЕЛЬ ПРОГРАМНОГО ДОДАТКУ
 
-Гості, пасажири, водії, контролери, диспетчери, менеджери, бухгалтери та представники муніципалітету користуються окремими інтерфейсами відповідно до своєї ролі в системі управління міським транспортом. Рівень представлення підсистеми «гість» побудований у вигляді односторінкового веб-застосунку (SPA) на базі React. Гість взаємодіє з системою через загальнодоступні інтерфейси. Послідовність переходів по сторінках додатку для гостя відображена на рисунку 5.1.
+Гості, пасажири, водії, контролери, диспетчери, менеджери, бухгалтери та представники муніципалітету користуються окремими інтерфейсами відповідно до своєї ролі в системі управління міським транспортом. Рівень представлення побудований у вигляді односторінкового веб-застосунку (SPA) на базі React з використанням TanStack Router для маршрутизації.
 
-```
-MERMAID ДЛЯ РИСУНКУ 5.1:
+## 5.1 Ієрархія сторінок для незареєстрованого користувача
 
-flowchart TD
-    HOME["Головна сторінка<br/>index.tsx"]
+Гість взаємодіє з системою через загальнодоступні інтерфейси. Послідовність переходів по сторінках додатку для гостя відображена на рисунку 5.1.
 
-    LOGIN["Авторизація<br/>login.tsx"]
-    REGISTER["Реєстрація<br/>register.tsx"]
-    CONTACTS["Контакти та підтримка<br/>contacts.tsx"]
-    MAP["Карта маршрутів<br/>map.tsx"]
+```mermaid
+flowchart TB
+    subgraph Public["Публічна зона"]
+        HOME["Головна сторінка<br/>/"]
+    end
 
-    BROWSE["Перегляд маршрутів"]
-    PLAN["Планування поїздки"]
-    NEARBY["Зупинки поблизу"]
-    COMPLAINT["Подача скарги"]
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+        REGISTER["Реєстрація<br/>/register"]
+    end
 
+    subgraph Features["Функціональність"]
+        MAP["Карта маршрутів<br/>/map"]
+        CONTACTS["Контакти<br/>/contacts"]
+    end
+
+    subgraph MapModes["Режими карти"]
+        BROWSE["Перегляд маршрутів"]
+        PLAN["Планування поїздки"]
+        NEARBY["Зупинки поблизу (GPS)"]
+    end
+
+    subgraph ContactFeatures["Функції контактів"]
+        FAQ["FAQ"]
+        COMPLAINT["Подача скарги"]
+    end
+
+    HOME --> MAP
+    HOME --> CONTACTS
     HOME --> LOGIN
     HOME --> REGISTER
-    HOME --> CONTACTS
-    HOME --> MAP
 
-    LOGIN --> HOME
     LOGIN <--> REGISTER
-
-    CONTACTS --> COMPLAINT
+    LOGIN -->|"успішний вхід"| DASHBOARD["Особистий кабінет<br/>(за роллю)"]
 
     MAP --> BROWSE
     MAP --> PLAN
     MAP --> NEARBY
 
-    PLAN --> LOGIN
-
-    style HOME fill:#e1f5fe
-    style LOGIN fill:#fff3e0
-    style REGISTER fill:#fff3e0
-    style MAP fill:#e8f5e9
-    style CONTACTS fill:#fce4ec
+    CONTACTS --> FAQ
+    CONTACTS --> COMPLAINT
 ```
 
 **Рисунок 5.1 – Ієрархія сторінок додатку для незареєстрованого користувача**
 
-Гість починає роботу з головної сторінки, де відображається загальна інформація про систему міського транспорту міста: статистика маршрутів, зупинок та транспортних засобів. Використовуючи інтерактивну карту, він може переглядати маршрути, планувати поїздки з використанням GPS-геолокації для пошуку найближчих зупинок. З будь-якої сторінки доступна навігація до форми реєстрації або сторінки входу. На сторінці контактів гість може подати скаргу або пропозицію без реєстрації.
+Гість починає роботу з головної сторінки, де відображається загальна інформація про систему міського транспорту: статистика маршрутів (150+), зупинок (2500+), транспортних засобів (500+) та показник надійності системи (99.5%). Використовуючи інтерактивну карту на базі MapLibre GL, користувач може переглядати маршрути, планувати поїздки з використанням GPS-геолокації для пошуку найближчих зупинок. На сторінці контактів гість може переглянути розділ FAQ та подати скаргу або пропозицію без реєстрації.
 
-Ієрархія сторінок для пасажира, водія, контролера, диспетчера, менеджера, бухгалтера та представника муніципалітету наведена в додатку Д.
+## 5.2 Ієрархія сторінок для пасажира
 
-Модель рівня прикладного компоненту — на цьому рівні знаходяться класи, що відповідають за обробку вхідних запитів та координацію бізнес-процесів. Для гостя ключовими є контролер CtGuestController та сервіс CtGuestService. Діаграма класів моделей даних наведена на рисунку 5.2.
+Після успішної авторизації пасажир отримує доступ до особистого кабінету з розширеним функціоналом. Ієрархія сторінок для пасажира відображена на рисунку 5.2.
 
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Passenger["Кабінет пасажира /passenger"]
+        DASHBOARD["Особистий кабінет"]
+
+        subgraph Profile["Профіль"]
+            INFO["Інформація про користувача"]
+            CARD["Транспортна картка"]
+        end
+
+        subgraph CardActions["Дії з карткою"]
+            BALANCE["Перегляд балансу"]
+            TOPUP["Поповнення картки"]
+        end
+
+        subgraph Trips["Поїздки"]
+            HISTORY["Історія поїздок"]
+        end
+
+        subgraph Fines["Штрафи"]
+            FINELIST["Список штрафів"]
+            FINEDETAIL["Деталі штрафу"]
+            PAYFINE["Оплата штрафу"]
+            APPEAL["Подання апеляції"]
+        end
+    end
+
+    LOGIN -->|"ct_passenger_role"| DASHBOARD
+
+    DASHBOARD --> INFO
+    DASHBOARD --> CARD
+
+    CARD --> BALANCE
+    CARD --> TOPUP
+
+    DASHBOARD --> HISTORY
+
+    DASHBOARD --> FINELIST
+    FINELIST --> FINEDETAIL
+    FINEDETAIL --> PAYFINE
+    FINEDETAIL --> APPEAL
 ```
-MERMAID ДЛЯ РИСУНКУ 5.2:
 
+**Рисунок 5.2 – Ієрархія сторінок додатку для пасажира**
+
+Пасажир має доступ до особистого профілю, де відображається інформація про користувача та транспортну картку з поточним балансом. Система дозволяє поповнювати картку, переглядати історію поїздок, а також керувати штрафами — переглядати їх статус, здійснювати оплату або подавати апеляцію.
+
+## 5.3 Ієрархія сторінок для водія
+
+Водій має доступ до спеціалізованого інтерфейсу для управління рейсами та відстеження GPS-позиції. Ієрархія сторінок для водія відображена на рисунку 5.3.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Driver["Кабінет водія /driver"]
+        subgraph TabOverview["Вкладка: Огляд"]
+            PROFILE["Профіль водія"]
+            ACTIVE["Активний рейс"]
+            STATS["Статистика"]
+        end
+
+        subgraph TabSchedule["Вкладка: Розклад"]
+            DATEPICKER["Вибір дати"]
+            SCHEDULED["Заплановані рейси"]
+        end
+
+        subgraph TabControl["Вкладка: Управління"]
+            ROUTESELECT["Вибір маршруту"]
+            STARTTRIP["Початок рейсу"]
+            PASSENGERS["Кількість пасажирів"]
+            FINISHTRIP["Завершення рейсу"]
+        end
+
+        subgraph TabMap["Вкладка: Карта маршруту"]
+            ROUTEMAP["Карта з маршрутом"]
+            STOPS["Зупинки маршруту"]
+            GPSTRACK["GPS-трекінг"]
+        end
+    end
+
+    LOGIN -->|"ct_driver_role"| TabOverview
+
+    TabOverview --> TabSchedule
+    TabSchedule --> TabControl
+    TabControl --> TabMap
+
+    STARTTRIP --> PASSENGERS
+    PASSENGERS --> FINISHTRIP
+
+    STARTTRIP -.->|"автоматично"| GPSTRACK
+```
+
+**Рисунок 5.3 – Ієрархія сторінок додатку для водія**
+
+Інтерфейс водія організований у вигляді вкладок. На вкладці «Огляд» відображається профіль водія з категоріями прав та інформацією про активний рейс. «Розклад» дозволяє переглядати заплановані рейси на обрану дату. «Управління» забезпечує повний цикл роботи з рейсом: вибір маршруту, початок рейсу, введення кількості пасажирів та завершення. Під час активного рейсу система автоматично веде GPS-трекінг позиції транспортного засобу.
+
+## 5.4 Ієрархія сторінок для контролера
+
+Контролер має спеціалізований інтерфейс для перевірки квитків та виписування штрафів. Ієрархія сторінок для контролера відображена на рисунку 5.4.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Controller["Кабінет контролера /controller"]
+        subgraph Step1["Крок 1: Вибір транспорту"]
+            ROUTEFILTER["Фільтр за маршрутом"]
+            FLEETSELECT["Вибір бортового номера"]
+            ACTIVETRIPS["Активні рейси"]
+        end
+
+        subgraph Step2["Крок 2: Перевірка картки"]
+            CARDNUMBER["Введення номера картки"]
+            CARDINFO["Інформація про картку"]
+            PASSENGERINFO["Дані пасажира"]
+            LASTUSAGE["Остання валідація"]
+        end
+
+        subgraph Step3["Крок 3: Виписування штрафу"]
+            FINEAMOUNT["Сума штрафу"]
+            FINEREASON["Причина штрафу"]
+            CONTEXT["Контекст (рейс, водій)"]
+            SUBMIT["Виписати штраф"]
+        end
+    end
+
+    LOGIN -->|"ct_controller_role"| Step1
+
+    ROUTEFILTER --> FLEETSELECT
+    FLEETSELECT --> ACTIVETRIPS
+
+    Step1 -->|"транспорт обрано"| Step2
+
+    CARDNUMBER --> CARDINFO
+    CARDINFO --> PASSENGERINFO
+
+    Step2 -->|"порушення виявлено"| Step3
+
+    FINEAMOUNT --> FINEREASON
+    FINEREASON --> CONTEXT
+    CONTEXT --> SUBMIT
+```
+
+**Рисунок 5.4 – Ієрархія сторінок додатку для контролера**
+
+Інтерфейс контролера побудований як покроковий процес. На першому кроці контролер обирає транспортний засіб за бортовим номером та переглядає активні рейси. Другий крок — перевірка транспортної картки пасажира: введення номера картки, перегляд балансу та дати останньої валідації. У разі виявлення порушення, на третьому кроці контролер вводить суму штрафу та причину, після чого система автоматично прив'язує штраф до конкретного рейсу та водія.
+
+## 5.5 Ієрархія сторінок для диспетчера
+
+Диспетчер має найбільш розгалужений інтерфейс для оперативного управління рухом транспорту. Ієрархія сторінок для диспетчера відображена на рисунку 5.5.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Dispatcher["Кабінет диспетчера /dispatcher"]
+        subgraph TabDashboard["Вкладка: Огляд"]
+            OVERVIEW["Панель керування"]
+            ACTIVESTATS["Активні рейси/водії/транспорт"]
+        end
+
+        subgraph TabTrips["Вкладка: Рейси"]
+            TRIPLIST["Список рейсів"]
+            TRIPFILTER["Фільтри (статус, дата, маршрут)"]
+            CREATETRIP["Створення рейсу"]
+            GENERATETRIPS["Генерація рейсів"]
+            CANCELTRIP["Скасування рейсу"]
+        end
+
+        subgraph TabSchedules["Вкладка: Розклади"]
+            SCHEDULELIST["Список розкладів"]
+            CREATESCHEDULE["Створення розкладу"]
+            EDITSCHEDULE["Редагування розкладу"]
+            DELETESCHEDULE["Видалення розкладу"]
+        end
+
+        subgraph TabAssignments["Вкладка: Призначення"]
+            ASSIGNLIST["Список призначень"]
+            ASSIGNDRIVER["Призначити водія"]
+            DRIVERLIST["Список водіїв"]
+            VEHICLELIST["Список транспорту"]
+        end
+
+        subgraph TabMonitoring["Вкладка: Моніторинг"]
+            FLEETMONITOR["Моніторинг транспорту"]
+            REALTIMEMAP["Карта в реальному часі"]
+            TRIPSTATUS["Статус рейсів"]
+        end
+
+        subgraph TabDeviations["Вкладка: Відхилення"]
+            DEVIATIONLIST["Список відхилень"]
+            ALERTS["Сповіщення"]
+        end
+    end
+
+    LOGIN -->|"ct_dispatcher_role"| TabDashboard
+
+    TabDashboard --> TabTrips
+    TabDashboard --> TabSchedules
+    TabDashboard --> TabAssignments
+    TabDashboard --> TabMonitoring
+    TabDashboard --> TabDeviations
+
+    TRIPLIST --> CREATETRIP
+    TRIPLIST --> GENERATETRIPS
+    TRIPLIST --> CANCELTRIP
+
+    SCHEDULELIST --> CREATESCHEDULE
+    SCHEDULELIST --> EDITSCHEDULE
+    SCHEDULELIST --> DELETESCHEDULE
+
+    ASSIGNLIST --> ASSIGNDRIVER
+    ASSIGNDRIVER --> DRIVERLIST
+    ASSIGNDRIVER --> VEHICLELIST
+```
+
+**Рисунок 5.5 – Ієрархія сторінок додатку для диспетчера**
+
+Диспетчер координує роботу всього транспортного парку через шість функціональних вкладок. «Огляд» надає загальну статистику активних рейсів, водіїв та транспорту. «Рейси» дозволяє створювати окремі рейси або генерувати їх автоматично на основі розкладу. «Розклади» забезпечує управління графіками руху. «Призначення» відповідає за закріплення водіїв за транспортними засобами. «Моніторинг» відображає позиції транспорту в реальному часі на карті. «Відхилення» фіксує порушення графіку руху.
+
+## 5.6 Ієрархія сторінок для менеджера
+
+Менеджер відповідає за кадрове забезпечення та управління транспортним парком. Ієрархія сторінок для менеджера відображена на рисунку 5.6.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Manager["Кабінет менеджера /manager"]
+        subgraph TabDrivers["Вкладка: Водії"]
+            DRIVERLIST["Список водіїв"]
+            HIREDRIVER["Найм водія"]
+            DRIVERFORM["Форма водія:<br/>логін, пошта, телефон,<br/>ПІБ, посвідчення, паспорт"]
+        end
+
+        subgraph TabVehicles["Вкладка: Транспорт"]
+            VEHICLELIST["Список транспорту"]
+            ADDVEHICLE["Додавання транспорту"]
+            VEHICLEFORM["Форма транспорту:<br/>бортовий номер, тип,<br/>модель, маршрут"]
+        end
+
+        subgraph TabStaff["Вкладка: Персонал"]
+            STAFFLIST["Список персоналу"]
+            CREATESTAFF["Створення облікового запису"]
+            STAFFFORM["Форма персоналу:<br/>логін, пошта, роль"]
+            ROLES["Ролі: диспетчер, контролер,<br/>бухгалтер, муніципалітет, менеджер"]
+        end
+    end
+
+    LOGIN -->|"ct_manager_role"| TabDrivers
+
+    TabDrivers --> TabVehicles
+    TabDrivers --> TabStaff
+
+    DRIVERLIST --> HIREDRIVER
+    HIREDRIVER --> DRIVERFORM
+
+    VEHICLELIST --> ADDVEHICLE
+    ADDVEHICLE --> VEHICLEFORM
+
+    STAFFLIST --> CREATESTAFF
+    CREATESTAFF --> STAFFFORM
+    STAFFFORM --> ROLES
+```
+
+**Рисунок 5.6 – Ієрархія сторінок додатку для менеджера**
+
+Менеджер працює з трьома основними напрямками. Вкладка «Водії» дозволяє переглядати список водіїв та наймати нових із заповненням детальної форми (логін, пошта, телефон, ПІБ, номер посвідчення, категорії прав, паспортні дані). Вкладка «Транспорт» забезпечує додавання нових транспортних засобів із вибором типу транспорту, моделі та призначеного маршруту. Вкладка «Персонал» дозволяє створювати облікові записи для співробітників різних ролей: диспетчер, контролер, бухгалтер, представник муніципалітету та менеджер.
+
+## 5.7 Ієрархія сторінок для бухгалтера
+
+Бухгалтер відповідає за фінансовий облік та звітність підприємства. Ієрархія сторінок для бухгалтера відображена на рисунку 5.7.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Accountant["Кабінет бухгалтера /accountant"]
+        subgraph TabAnalytics["Вкладка: Аналітика"]
+            DASHBOARD["Фінансова панель"]
+            METRICS["Ключові показники"]
+            TRENDS["Тренди доходів/витрат"]
+            BUDGET["Виконання бюджету"]
+        end
+
+        subgraph TabIncomes["Вкладка: Доходи"]
+            INCOMELIST["Список доходів"]
+            CREATEINCOME["Створення запису доходу"]
+            INCOMEFORM["Форма: джерело, сума,<br/>опис, документ"]
+            SOURCES["Джерела: бюджет, квитки,<br/>штрафи, інше"]
+        end
+
+        subgraph TabSalaries["Вкладка: Зарплати"]
+            SALARYLIST["Список виплат"]
+            CREATESALARY["Створення виплати"]
+            SALARYFORM["Форма: водій, ставка,<br/>одиниці, сума"]
+        end
+
+        subgraph TabExpenses["Вкладка: Витрати"]
+            EXPENSELIST["Список витрат"]
+            CREATEEXPENSE["Створення запису витрати"]
+            EXPENSEFORM["Форма: категорія, сума,<br/>опис, документ"]
+            CATEGORIES["Категорії: пальне, ремонт,<br/>запчастини, страховка"]
+        end
+
+        subgraph TabReport["Вкладка: Звіт"]
+            REPORTVIEW["Фінансовий звіт"]
+            PERIODSELECT["Вибір періоду"]
+            COMPARISON["Порівняння план/факт"]
+        end
+    end
+
+    LOGIN -->|"ct_accountant_role"| TabAnalytics
+
+    TabAnalytics --> TabIncomes
+    TabAnalytics --> TabSalaries
+    TabAnalytics --> TabExpenses
+    TabAnalytics --> TabReport
+
+    INCOMELIST --> CREATEINCOME
+    CREATEINCOME --> INCOMEFORM
+    INCOMEFORM --> SOURCES
+
+    SALARYLIST --> CREATESALARY
+    CREATESALARY --> SALARYFORM
+
+    EXPENSELIST --> CREATEEXPENSE
+    CREATEEXPENSE --> EXPENSEFORM
+    EXPENSEFORM --> CATEGORIES
+
+    REPORTVIEW --> PERIODSELECT
+    REPORTVIEW --> COMPARISON
+```
+
+**Рисунок 5.7 – Ієрархія сторінок додатку для бухгалтера**
+
+Бухгалтер має доступ до п'яти функціональних вкладок. «Аналітика» відображає фінансову панель з ключовими показниками, трендами та виконанням бюджету. «Доходи» дозволяє вносити записи про надходження з різних джерел: державний бюджет, продаж квитків, штрафи та інші. «Зарплати» забезпечує облік виплат водіям. «Витрати» фіксує витрати за категоріями: пальне, ремонт, запчастини, мийка, страховка, комунальні послуги. «Звіт» генерує комплексний фінансовий звіт за обраний період із порівнянням планових та фактичних показників.
+
+## 5.8 Ієрархія сторінок для представника муніципалітету
+
+Представник муніципалітету відповідає за планування маршрутної мережі та аналіз пасажиропотоку. Ієрархія сторінок для представника муніципалітету відображена на рисунку 5.8.
+
+```mermaid
+flowchart TB
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+    end
+
+    subgraph Municipality["Кабінет муніципалітету /municipality"]
+        subgraph TabStops["Вкладка: Зупинки"]
+            STOPLIST["Список зупинок"]
+            CREATESTOP["Створення зупинки"]
+            EDITSTOP["Редагування зупинки"]
+            STOPFORM["Форма: назва, координати"]
+        end
+
+        subgraph TabDesigner["Вкладка: Проектування"]
+            ROUTEDESIGNER["Конструктор маршрутів"]
+            ROUTECONFIG["Номер, тип, напрямок"]
+            ADDSTOPS["Додавання зупинок"]
+            ADDGEOMETRY["Геометрія маршруту"]
+        end
+
+        subgraph TabRoutes["Вкладка: Маршрути"]
+            ROUTELIST["Список маршрутів"]
+            ROUTEDETAIL["Деталі маршруту"]
+            ROUTEMAP["Візуалізація на карті"]
+            TOGGLEACTIVE["Активація/деактивація"]
+        end
+
+        subgraph TabAnalytics["Вкладка: Аналітика"]
+            FLOWANALYSIS["Аналіз пасажиропотоку"]
+            CHARTS["Графіки (стовпчасті, лінійні)"]
+            TOPROUTES["Топ маршрутів"]
+            TRENDS["Тренди пасажиропотоку"]
+            DATEFILTER["Фільтр за датою"]
+        end
+
+        subgraph TabComplaints["Вкладка: Скарги"]
+            COMPLAINTLIST["Список скарг"]
+            COMPLAINTCARD["Картка скарги"]
+            STATUSUPDATE["Оновлення статусу"]
+        end
+    end
+
+    LOGIN -->|"ct_municipality_role"| TabStops
+
+    TabStops --> TabDesigner
+    TabStops --> TabRoutes
+    TabStops --> TabAnalytics
+    TabStops --> TabComplaints
+
+    STOPLIST --> CREATESTOP
+    STOPLIST --> EDITSTOP
+    CREATESTOP --> STOPFORM
+
+    ROUTEDESIGNER --> ROUTECONFIG
+    ROUTECONFIG --> ADDSTOPS
+    ADDSTOPS --> ADDGEOMETRY
+
+    ROUTELIST --> ROUTEDETAIL
+    ROUTEDETAIL --> ROUTEMAP
+    ROUTEDETAIL --> TOGGLEACTIVE
+
+    FLOWANALYSIS --> CHARTS
+    FLOWANALYSIS --> TOPROUTES
+    FLOWANALYSIS --> TRENDS
+    FLOWANALYSIS --> DATEFILTER
+
+    COMPLAINTLIST --> COMPLAINTCARD
+    COMPLAINTCARD --> STATUSUPDATE
+```
+
+**Рисунок 5.8 – Ієрархія сторінок додатку для представника муніципалітету**
+
+Представник муніципалітету має широкі повноваження з планування транспортної інфраструктури. Вкладка «Зупинки» дозволяє створювати та редагувати зупинки з вказівкою координат. «Проектування» — конструктор маршрутів, де задається номер маршруту, тип транспорту, напрямок руху, послідовність зупинок та геометрія шляху. «Маршрути» відображає існуючі маршрути з візуалізацією на карті та можливістю активації/деактивації. «Аналітика» надає інструменти для аналізу пасажиропотоку: графіки, топ маршрутів за завантаженістю, тренди за обраний період. «Скарги» дозволяє переглядати звернення громадян та оновлювати їх статус обробки.
+
+## 5.9 Загальна схема навігації системи
+
+Загальна схема навігації системи з урахуванням всіх ролей та переходів між сторінками наведена на рисунку 5.9.
+
+```mermaid
+flowchart TB
+    subgraph Public["Публічна зона"]
+        HOME["Головна<br/>/"]
+        MAP["Карта<br/>/map"]
+        CONTACTS["Контакти<br/>/contacts"]
+    end
+
+    subgraph Auth["Автентифікація"]
+        LOGIN["Вхід<br/>/login"]
+        REGISTER["Реєстрація<br/>/register"]
+    end
+
+    subgraph Roles["Особисті кабінети за ролями"]
+        PASSENGER["Пасажир<br/>/passenger"]
+        DRIVER["Водій<br/>/driver"]
+        CONTROLLER["Контролер<br/>/controller"]
+        DISPATCHER["Диспетчер<br/>/dispatcher"]
+        MANAGER["Менеджер<br/>/manager"]
+        ACCOUNTANT["Бухгалтер<br/>/accountant"]
+        MUNICIPALITY["Муніципалітет<br/>/municipality"]
+    end
+
+    HOME <--> MAP
+    HOME <--> CONTACTS
+    HOME --> LOGIN
+    HOME --> REGISTER
+
+    LOGIN <--> REGISTER
+
+    LOGIN -->|"ct_passenger_role"| PASSENGER
+    LOGIN -->|"ct_driver_role"| DRIVER
+    LOGIN -->|"ct_controller_role"| CONTROLLER
+    LOGIN -->|"ct_dispatcher_role"| DISPATCHER
+    LOGIN -->|"ct_manager_role"| MANAGER
+    LOGIN -->|"ct_accountant_role"| ACCOUNTANT
+    LOGIN -->|"ct_municipality_role"| MUNICIPALITY
+
+    PASSENGER --> HOME
+    DRIVER --> HOME
+    CONTROLLER --> HOME
+    DISPATCHER --> HOME
+    MANAGER --> HOME
+    ACCOUNTANT --> HOME
+    MUNICIPALITY --> HOME
+```
+
+**Рисунок 5.9 – Загальна схема навігації системи**
+
+## 5.10 Модель прикладного компоненту
+
+На рівні прикладного компоненту знаходяться класи, що відповідають за обробку вхідних запитів та координацію бізнес-процесів. Діаграма класів моделей даних наведена на рисунку 5.10.
+
+```mermaid
 classDiagram
     class TransportType {
         +id: Long
@@ -107,35 +602,6 @@ classDiagram
         +passportData: JSON
     }
 
-    class DriverVehicleAssignment {
-        +id: Long
-        +driverId: Long
-        +vehicleId: Long
-        +assignedAt: Timestamp
-    }
-
-    class Schedule {
-        +id: Long
-        +routeId: Long
-        +vehicleId: Long
-        +workStartTime: Time
-        +workEndTime: Time
-        +intervalMin: Integer
-        +monday-sunday: Boolean
-    }
-
-    class Trip {
-        +id: Long
-        +routeId: Long
-        +driverId: Long
-        +plannedStartsAt: Timestamp
-        +plannedEndsAt: Timestamp
-        +actualStartsAt: Timestamp
-        +actualEndsAt: Timestamp
-        +status: String
-        +passengerCount: Integer
-    }
-
     class User {
         +id: Long
         +login: String
@@ -152,12 +618,14 @@ classDiagram
         +cardNumber: String
     }
 
-    class Ticket {
+    class Trip {
         +id: Long
-        +tripId: Long
-        +cardId: Long
-        +price: Decimal
-        +purchasedAt: Timestamp
+        +routeId: Long
+        +driverId: Long
+        +plannedStartsAt: Timestamp
+        +actualStartsAt: Timestamp
+        +status: String
+        +passengerCount: Integer
     }
 
     class Fine {
@@ -168,78 +636,37 @@ classDiagram
         +reason: String
         +issuedBy: String
         +tripId: Long
-        +issuedAt: Timestamp
-    }
-
-    class FineAppeal {
-        +id: Long
-        +fineId: Long
-        +message: String
-        +status: String
-        +createdAt: Timestamp
-    }
-
-    class ComplaintSuggestion {
-        +id: Long
-        +userId: Long
-        +type: String
-        +message: String
-        +status: String
-        +createdAt: Timestamp
     }
 
     class Budget {
         +id: Long
         +month: Date
         +plannedIncome: Decimal
-        +plannedExpenses: Decimal
         +actualIncome: Decimal
-        +actualExpenses: Decimal
     }
 
     class Income {
         +id: Long
         +source: String
         +amount: Decimal
-        +description: String
-        +receivedAt: Timestamp
     }
 
     class Expense {
         +id: Long
         +category: String
         +amount: Decimal
-        +description: String
-        +occurredAt: Timestamp
-    }
-
-    class SalaryPayment {
-        +id: Long
-        +driverId: Long
-        +rate: Decimal
-        +units: Integer
-        +total: Decimal
-        +paidAt: Timestamp
-    }
-
-    class VehicleGpsLog {
-        +id: Long
-        +vehicleId: Long
-        +lon: Decimal
-        +lat: Decimal
-        +recordedAt: Timestamp
     }
 ```
 
-**Рисунок 5.2 – Діаграма моделей даних інформаційної системи з атрибутами**
+**Рисунок 5.10 – Діаграма моделей даних інформаційної системи з атрибутами**
 
-Атрибути кожного класу відповідають полям відповідних реляційних таблиць та результатам виконання збережених процедур. Класи VehicleGpsLog та UserGpsLog пов'язані з відповідними логами GPS-трекінгу серверної частини СУБД. Класи конфігурації сесії (SessionService, RequestContextService, DbService) не мають відображення у фізичних таблицях БД і призначені для реалізації безпечного перемикання підключень до бази даних залежно від ролі користувача в поточній сесії.
+Атрибути кожного класу відповідають полям відповідних реляційних таблиць та результатам виконання збережених процедур PostgreSQL. Класи VehicleGpsLog та UserGpsLog пов'язані з відповідними логами GPS-трекінгу серверної частини СУБД. Класи конфігурації сесії (SessionService, DbService) не мають відображення у фізичних таблицях БД і призначені для реалізації безпечного перемикання підключень до бази даних залежно від ролі користувача в поточній сесії.
 
-На рисунку 5.3 наведені ті ж самі модельні класи, але із зазначенням ключових зв'язків між ними:
+## 5.11 Діаграма зв'язків моделей даних
 
-```
-MERMAID ДЛЯ РИСУНКУ 5.3:
+На рисунку 5.11 наведені модельні класи із зазначенням ключових зв'язків між ними.
 
+```mermaid
 flowchart LR
     TransportType --> Route
     TransportType --> VehicleModel
@@ -276,158 +703,96 @@ flowchart LR
     Fine --> FineAppeal
 ```
 
-**Рисунок 5.3 – Діаграма моделей даних інформаційної системи зі зв'язками**
+**Рисунок 5.11 – Діаграма моделей даних інформаційної системи зі зв'язками**
 
 Реалізація цих зв'язків відображає специфіку функціонування предметної області «Міський транспорт» та організовує коректний обмін даними між ключовими об'єктами системи. Кожна асоціація в моделі, як-от ідентифікація водія та конкретного транспортного засобу в межах одного призначення, або прив'язка квитка до конкретного рейсу та транспортної картки, є критично важливою для забезпечення логічної цілісності бізнес-процесів.
 
-Класи-сервіси виступають центральною ланкою прикладного шару застосунку, де зосереджена основна бізнес-поведінка системи. Вони виконують роль координаторів: приймають запити від контролерів, перевіряють права доступу та делегують виконання складних операцій базі даних. Головною особливістю цього шару є інкапсуляція механізмів виклику збережених процедур і функцій PostgreSQL. Такий підхід дозволяє перенести важкі обчислення та перевірки обмежень (наприклад, контроль унікальності призначень водіїв або розрахунок часу прибуття транспорту) безпосередньо на бік сервера бази даних.
+## 5.12 Сервісний рівень застосунку
 
-Крім того, сервіси забезпечують атомарність операцій за допомогою управління транзакціями на рівні бази даних. Це гарантує, що при виконанні комплексних дій — наприклад, при одночасному створенні рейсу, призначенні водія та оновленні розкладу — дані залишаться в узгодженому стані навіть у разі виникнення помилок. Структурна організація цих компонентів та їхня взаємодія з базою даних наведена на діаграмі класів сервісного рівня (рис. 5.4):
+Класи-сервіси виступають центральною ланкою прикладного шару застосунку, де зосереджена основна бізнес-поведінка системи. Вони виконують роль координаторів: приймають запити від контролерів, перевіряють права доступу та делегують виконання складних операцій базі даних. Головною особливістю цього шару є інкапсуляція механізмів виклику збережених процедур і функцій PostgreSQL. Такий підхід дозволяє перенести важкі обчислення та перевірки обмежень безпосередньо на бік сервера бази даних.
 
-```
-MERMAID ДЛЯ РИСУНКУ 5.4:
+Сервіси забезпечують атомарність операцій за допомогою управління транзакціями на рівні бази даних. Це гарантує, що при виконанні комплексних дій — наприклад, при одночасному створенні рейсу, призначенні водія та оновленні розкладу — дані залишаться в узгодженому стані навіть у разі виникнення помилок. Структурна організація сервісів наведена на рисунку 5.12.
 
+```mermaid
 classDiagram
-    class CommonService {
-        <<Session Management>>
-        + createSession(login, password, roles): Token
-        + getSession(token): Session
-        + deleteSession(token): void
-    }
-
     class CtGuestService {
-        <<Public / Guest>>
-        + listTransportTypes(): List
-        + listRoutes(transportTypeId): List
-        + getStopsNear(lon, lat, radius): List
-        + getRoutesByStop(stopId): List
-        + getRouteStops(routeId): List
-        + getRouteGeometry(routeId): GeoJSON
-        + getSchedule(routeId, stopId): Schedule
-        + planRoute(from, to): RoutePlan
-        + searchStops(query): List
-        + submitComplaint(data): void
+        <<Public>>
+        + listTransportTypes()
+        + listRoutes()
+        + getStopsNear()
+        + getRouteStops()
+        + submitComplaint()
     }
 
     class CtPassengerService {
         <<Profile & Cards>>
-        + getMyProfile(): Profile
-        + getMyCard(): Card
-        + topUpCard(cardNumber, amount): void
-        + buyTicket(tripId, cardId): void
-        --Trips & Fines--
-        + getMyTrips(): List
-        + getMyFines(): List
-        + getFineDetails(fineId): Fine
-        + payFine(fineId): void
-        + createAppeal(fineId, message): void
+        + getMyProfile()
+        + getMyCard()
+        + topUpCard()
+        + getMyFines()
+        + payFine()
+        + createAppeal()
     }
 
     class CtDriverService {
-        <<Profile & Schedule>>
-        + getProfile(): Profile
-        + getScheduleByLogin(date): Schedule
-        + getScheduledTrips(): List
-        --Trip Management--
-        + getActiveTrip(): Trip
-        + startTrip(tripId): void
-        + finishTrip(tripId): void
-        + setPassengerCount(tripId, count): void
-        + logGps(lon, lat, speed): void
+        <<Trip Management>>
+        + getProfile()
+        + getSchedule()
+        + getActiveTrip()
+        + startTrip()
+        + finishTrip()
+        + logGps()
     }
 
     class CtControllerService {
-        <<Card Verification>>
-        + checkCard(cardNumber): CardDetails
-        + getActiveTrips(fleetNumber): List
-        --Fine Issuance--
-        + issueFine(userId, tripId, amount, reason): Long
-        + getRoutes(): List
-        + getVehicles(routeId): List
+        <<Verification>>
+        + checkCard()
+        + getActiveTrips()
+        + issueFine()
     }
 
     class CtDispatcherService {
-        <<Schedule Management>>
-        + listSchedules(): List
-        + createSchedule(data): Long
-        + updateSchedule(id, data): void
-        + deleteSchedule(id): void
-        --Trip Management--
-        + listTrips(status): List
-        + createTrip(data): Long
-        + generateDailyTrips(data): Integer
-        + cancelTrip(id): void
-        --Monitoring--
-        + listActiveTrips(): List
-        + listDeviations(): List
-        + monitorVehicle(fleetNumber): Status
-        + getDashboard(): Dashboard
-        --Assignments--
-        + listDrivers(): List
-        + listVehicles(): List
-        + assignDriver(driverId, vehicleId): void
+        <<Operations>>
+        + listSchedules()
+        + createSchedule()
+        + listTrips()
+        + generateDailyTrips()
+        + monitorVehicle()
     }
 
     class CtManagerService {
-        <<Driver Management>>
-        + listDrivers(): List
-        + hireDriver(data): void
-        --Vehicle Management--
-        + listVehicles(): List
-        + addVehicle(data): void
-        + listModels(): List
-        --Staff Management--
-        + listStaffRoles(): List
-        + createStaffUser(data): void
-        + removeStaffUser(login): void
+        <<HR & Fleet>>
+        + hireDriver()
+        + addVehicle()
+        + createStaffUser()
     }
 
     class CtAccountantService {
-        <<Budget Management>>
-        + listBudgets(year): List
-        + upsertBudget(data): void
-        --Income & Expenses--
-        + createIncome(data): void
-        + getIncomes(from, to): List
-        + createExpense(data): void
-        + getExpenses(from, to): List
-        --Payroll--
-        + getDrivers(): List
-        + createSalary(data): void
-        + getSalaries(from, to): List
-        + getReport(from, to): Report
+        <<Finance>>
+        + createIncome()
+        + createExpense()
+        + createSalary()
+        + getReport()
     }
 
     class CtMunicipalityService {
-        <<Route Management>>
-        + listRoutes(): List
-        + createRoute(data): Long
-        + setRouteActive(routeId, isActive): void
-        --Stop Management--
-        + listStops(): List
-        + createStop(data): Long
-        + updateStop(id, data): void
-        --Analytics--
-        + getPassengerFlow(query): FlowData
-        + getTopRoutes(query): List
-        + getPassengerTrend(query): List
-        --Complaints--
-        + getComplaints(query): List
-        + updateComplaintStatus(id, status): void
+        <<Planning>>
+        + createRoute()
+        + createStop()
+        + getPassengerFlow()
+        + updateComplaintStatus()
     }
 ```
 
-**Рисунок 5.4 – Діаграма сервісів інформаційної системи**
+**Рисунок 5.12 – Діаграма сервісів інформаційної системи**
 
-Класи контролерів в архітектурному патерні виступають фундаментальними компонентами прикладного рівня, що виконують роль інтелектуального посередника між інтерфейсом користувача та логікою обробки даних. Основна функція контролерів полягає в перехопленні вхідних HTTP-запитів, валідації параметрів та координації подальшої взаємодії з сервісним шаром.
+## 5.13 Контролери REST API
 
-В архітектурі розробленої системи використовується REST API підхід до побудови контролерів на базі NestJS framework. Всі контролери працюють виключно з JSON-форматом даних, що споживається клієнтським SPA-застосунком на React. Такий підхід дозволяє реалізувати динамічне оновлення інтерфейсу без повного перезавантаження сторінок (наприклад, під час відстеження GPS-позиції транспорту або оновлення статусу рейсу в реальному часі).
+Класи контролерів виступають фундаментальними компонентами прикладного рівня, що виконують роль посередника між інтерфейсом користувача та логікою обробки даних. Основна функція контролерів полягає в перехопленні вхідних HTTP-запитів, валідації параметрів та координації подальшої взаємодії з сервісним шаром.
 
-Така декомпозиція прикладного рівня дозволяє системі бути гнучкою та масштабованою, забезпечуючи високу швидкість відгуку інтерфейсу. Детальна структура розподілу методів, маршрутів (URL-mapping) та взаємозв'язків між контролерами різних підсистем представлена на діаграмі класів (рис. 5.5):
+В архітектурі системи використовується REST API підхід до побудови контролерів на базі NestJS framework. Всі контролери працюють виключно з JSON-форматом даних, що споживається клієнтським SPA-застосунком на React. Такий підхід дозволяє реалізувати динамічне оновлення інтерфейсу без повного перезавантаження сторінок. Структура контролерів наведена на рисунку 5.13.
 
-```
-MERMAID ДЛЯ РИСУНКУ 5.5:
-
+```mermaid
 classDiagram
     class AuthController {
         <<@Controller /auth>>
@@ -440,15 +805,7 @@ classDiagram
         + GET /transport-types
         + GET /routes
         + GET /stops/near
-        + GET /stops/:stopId/routes
-        + GET /routes/stops
-        + GET /routes/points
-        + GET /routes/geometry
-        + GET /routes/geometries
-        + GET /stops/geometries
         + GET /routes/schedule
-        + GET /routes/plan
-        + GET /stops/search
         + POST /complaints
     }
 
@@ -456,14 +813,10 @@ classDiagram
         <<@Controller /passenger>>
         + GET /profile
         + GET /card
-        + POST /cards/:cardNumber/top-up
-        + POST /tickets/buy
-        + GET /trips
+        + POST /cards/top-up
         + GET /fines
-        + GET /fines/:fineId
-        + POST /fines/:fineId/pay
-        + POST /fines/:fineId/appeals
-        + POST /complaints
+        + POST /fines/pay
+        + POST /fines/appeals
     }
 
     class CtDriverController {
@@ -471,95 +824,58 @@ classDiagram
         + GET /me
         + GET /schedule
         + GET /active-trip
-        + GET /scheduled-trips
-        + GET /routes/stops
-        + GET /routes/points
         + POST /trips/start
         + POST /trips/finish
-        + POST /trips/passengers
         + POST /trips/gps
     }
 
     class CtControllerController {
         <<@Controller /controller>>
-        + GET /routes
         + GET /vehicles
-        + GET /vehicles/:fleetNumber/trips
-        + GET /cards/:cardNumber/check
+        + GET /cards/check
         + POST /fines
     }
 
     class CtDispatcherController {
         <<@Controller /dispatcher>>
-        + GET /dashboard
-        + GET /routes
         + GET /schedules
         + POST /schedules
-        + GET /schedules/:id
-        + PATCH /schedules/:id
-        + DELETE /schedules/:id
-        + GET /vehicles
-        + GET /drivers
-        + GET /assignments
-        + POST /assignments
         + GET /trips
-        + POST /trips
         + POST /trips/generate
-        + PATCH /trips/:id/cancel
-        + DELETE /trips/:id
-        + GET /active-trips
-        + GET /deviations
-        + GET /vehicles/:fleetNumber/monitoring
+        + GET /monitoring
     }
 
     class CtManagerController {
         <<@Controller /manager>>
         + GET /drivers
-        + GET /vehicles
-        + GET /routes
-        + GET /transport-types
-        + GET /models
         + POST /drivers
+        + GET /vehicles
         + POST /vehicles
-        + GET /staff-roles
         + POST /staff
-        + DELETE /staff/:login
     }
 
     class CtAccountantController {
         <<@Controller /accountant>>
         + GET /budgets
-        + POST /budgets
-        + POST /expenses
-        + GET /expenses
         + POST /incomes
-        + GET /incomes
-        + GET /drivers
+        + POST /expenses
         + POST /salaries
-        + GET /salaries
         + GET /report
     }
 
     class CtMunicipalityController {
         <<@Controller /municipality>>
-        + GET /transport-types
         + GET /stops
         + POST /stops
-        + PATCH /stops/:id
         + GET /routes
         + POST /routes
-        + PATCH /routes/:routeId/active
-        + GET /routes/:routeId/stops
-        + GET /routes/:routeId/points
         + GET /passenger-flow
-        + GET /passenger-flow/detailed
-        + GET /passenger-flow/top-routes
-        + GET /passenger-flow/trend
         + GET /complaints
-        + PATCH /complaints/:id/status
     }
 ```
 
-**Рисунок 5.5 – Діаграма контролерів інформаційної системи**
+**Рисунок 5.13 – Діаграма контролерів інформаційної системи**
 
 Сервіси та контролери в розробленій інформаційній системі не мають прямого наслідування, оскільки виконують різні функціональні ролі. Їх ідентифікація та підключення до контексту виконання здійснюється за допомогою декораторів NestJS: @Controller для контролерів та @Injectable для сервісів. Взаємодія між ними базується на принципі впровадження залежностей (Dependency Injection), що забезпечується фреймворком NestJS.
+
+Ієрархії сторінок для всіх ролей наведені в додатку Д.

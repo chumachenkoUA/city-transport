@@ -52,14 +52,17 @@ JOIN public.fines f ON f.id = fa.fine_id
 JOIN public.users u ON u.id = f.user_id
 WHERE u.login = session_user;
 
-CREATE OR REPLACE VIEW passenger_api.v_transport_at_stops AS
-SELECT rs.stop_id, r.id as route_id, r.number as route_number,
-       tt.name as transport_type, sch.interval_min as approximate_interval
-FROM public.route_stops rs
-JOIN public.routes r ON r.id = rs.route_id
-JOIN public.transport_types tt ON tt.id = r.transport_type_id
-LEFT JOIN public.schedules sch ON sch.route_id = r.id
-WHERE r.is_active = true;
+-- Історія поповнень картки
+CREATE OR REPLACE VIEW passenger_api.v_my_top_ups WITH (security_barrier = true) AS
+SELECT ctu.id, ctu.amount, ctu.topped_up_at
+FROM public.card_top_ups ctu
+JOIN public.transport_cards tc ON tc.id = ctu.card_id
+JOIN public.users u ON u.id = tc.user_id
+WHERE u.login = session_user
+ORDER BY ctu.topped_up_at DESC;
+
+-- NOTE: v_transport_at_stops removed - use guest_api views (v_route_stops, v_routes, v_schedules) instead
+-- Guest service provides better implementation with nextArrivalMin calculation
 
 -- 2. Complaint Function
 -- VALIDATION: If route_number/transport_type provided but not found - raise exception
@@ -257,28 +260,8 @@ END;
 $$;
 
 -- 6. Search Functions
-CREATE OR REPLACE FUNCTION passenger_api.find_stops_nearby(
-    p_lon numeric, p_lat numeric, p_radius_m integer DEFAULT 1000
-)
-RETURNS TABLE (id bigint, name text, lon numeric, lat numeric, distance_m double precision)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT s.id, s.name::text, s.lon, s.lat,
-           ST_Distance(
-               ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)::geography,
-               ST_SetSRID(ST_MakePoint(p_lon, p_lat), 4326)::geography
-           ) AS distance_m
-    FROM public.stops s
-    WHERE ST_DWithin(
-        ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)::geography,
-        ST_SetSRID(ST_MakePoint(p_lon, p_lat), 4326)::geography,
-        p_radius_m
-    )
-    ORDER BY distance_m;
-END;
-$$;
+-- NOTE: find_stops_nearby() removed - use guest_api.find_nearby_stops() instead
+-- Passenger role has access to guest_api functions
 
 CREATE OR REPLACE FUNCTION passenger_api.find_routes_between(
     p_start_lon numeric, p_start_lat numeric,

@@ -56,15 +56,9 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_fines_set_paid_at();
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.trg_ticket_to_ft() RETURNS trigger AS $$
 DECLARE
-    v_user_id bigint;
     v_route_id bigint;
     v_driver_id bigint;
 BEGIN
-    -- Отримуємо user_id через картку
-    SELECT tc.user_id INTO v_user_id
-    FROM public.transport_cards tc
-    WHERE tc.id = NEW.card_id;
-
     -- Отримуємо route_id та driver_id через рейс
     SELECT tr.route_id, tr.driver_id INTO v_route_id, v_driver_id
     FROM public.trips tr
@@ -72,11 +66,11 @@ BEGIN
 
     INSERT INTO public.financial_transactions(
         tx_type, source, amount, occurred_at,
-        ticket_id, trip_id, route_id, driver_id, card_id, user_id
+        ticket_id, trip_id, route_id, driver_id, card_id
     )
     VALUES (
         'income', 'ticket', NEW.price, NEW.purchased_at,
-        NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.card_id, v_user_id
+        NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.card_id
     );
     RETURN NEW;
 END;
@@ -95,6 +89,7 @@ CREATE OR REPLACE FUNCTION public.trg_fine_to_ft() RETURNS trigger AS $$
 DECLARE
     v_route_id bigint;
     v_driver_id bigint;
+    v_card_id bigint;
 BEGIN
     -- Тільки коли статус змінюється на "Оплачено"
     IF NEW.status = 'Оплачено' AND (OLD IS NULL OR OLD.status <> 'Оплачено') THEN
@@ -103,13 +98,18 @@ BEGIN
         FROM public.trips tr
         WHERE tr.id = NEW.trip_id;
 
+        -- Отримуємо card_id через user_id (кожен користувач має картку)
+        SELECT tc.id INTO v_card_id
+        FROM public.transport_cards tc
+        WHERE tc.user_id = NEW.user_id;
+
         INSERT INTO public.financial_transactions(
             tx_type, source, amount, occurred_at,
-            fine_id, trip_id, route_id, driver_id, user_id
+            fine_id, trip_id, route_id, driver_id, card_id
         )
         VALUES (
             'income', 'fine', NEW.amount, COALESCE(NEW.paid_at, now()),
-            NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.user_id
+            NEW.id, NEW.trip_id, v_route_id, v_driver_id, v_card_id
         );
     END IF;
     RETURN NEW;
@@ -149,14 +149,13 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_salary_to_ft();
 -- Backfill tickets (з контекстними FK)
 INSERT INTO public.financial_transactions(
     tx_type, source, amount, occurred_at,
-    ticket_id, trip_id, route_id, driver_id, card_id, user_id, created_by
+    ticket_id, trip_id, route_id, driver_id, card_id, created_by
 )
 SELECT
     'income', 'ticket', t.price, t.purchased_at,
-    t.id, t.trip_id, tr.route_id, tr.driver_id, t.card_id, tc.user_id, 'migration'
+    t.id, t.trip_id, tr.route_id, tr.driver_id, t.card_id, 'migration'
 FROM public.tickets t
 JOIN public.trips tr ON tr.id = t.trip_id
-JOIN public.transport_cards tc ON tc.id = t.card_id
 WHERE NOT EXISTS (
     SELECT 1 FROM public.financial_transactions ft WHERE ft.ticket_id = t.id
 );
@@ -166,13 +165,14 @@ WHERE NOT EXISTS (
 -- Backfill paid fines (з контекстними FK)
 INSERT INTO public.financial_transactions(
     tx_type, source, amount, occurred_at,
-    fine_id, trip_id, route_id, driver_id, user_id, created_by
+    fine_id, trip_id, route_id, driver_id, card_id, created_by
 )
 SELECT
     'income', 'fine', f.amount, COALESCE(f.paid_at, f.issued_at),
-    f.id, f.trip_id, tr.route_id, tr.driver_id, f.user_id, 'migration'
+    f.id, f.trip_id, tr.route_id, tr.driver_id, tc.id, 'migration'
 FROM public.fines f
 JOIN public.trips tr ON tr.id = f.trip_id
+JOIN public.transport_cards tc ON tc.user_id = f.user_id
 WHERE f.status = 'Оплачено' AND NOT EXISTS (
     SELECT 1 FROM public.financial_transactions ft WHERE ft.fine_id = f.id
 );
@@ -472,13 +472,16 @@ FROM (
 ) grouped;
 
 -- View для financial_transactions (з реальними FK колонками)
+-- user_id отримується через card_id -> transport_cards.user_id
 CREATE OR REPLACE VIEW accountant_api.v_financial_transactions AS
-SELECT id, tx_type, source, amount, occurred_at, description, created_by,
-       ticket_id, fine_id, salary_payment_id,
-       trip_id, route_id, driver_id, card_id, user_id,
-       budget_month
-FROM public.financial_transactions
-ORDER BY occurred_at DESC;
+SELECT ft.id, ft.tx_type, ft.source, ft.amount, ft.occurred_at, ft.description, ft.created_by,
+       ft.ticket_id, ft.fine_id, ft.salary_payment_id,
+       ft.trip_id, ft.route_id, ft.driver_id, ft.card_id,
+       tc.user_id,  -- денормалізація через JOIN
+       ft.budget_month
+FROM public.financial_transactions ft
+LEFT JOIN public.transport_cards tc ON tc.id = ft.card_id
+ORDER BY ft.occurred_at DESC;
 
 -- View для аналітики по джерелах та місяцях
 CREATE OR REPLACE VIEW accountant_api.v_fin_by_source AS

@@ -7,8 +7,18 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ct_migrator') THEN
-    CREATE ROLE ct_migrator LOGIN PASSWORD 'password' CREATEROLE; 
+    CREATE ROLE ct_migrator LOGIN PASSWORD 'password' CREATEROLE;
     -- CREATEROLE is granted so ct_migrator can create/manage user roles (drivers, passengers) via API functions.
+  END IF;
+END $$;
+
+-- 1b. Create the Guest Login Role
+-- This role is used for unauthenticated API requests (connection pool for guests).
+-- It inherits permissions from ct_guest_role (created below).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ct_guest') THEN
+    CREATE ROLE ct_guest LOGIN PASSWORD 'guest_secure_password_change_in_prod';
   END IF;
 END $$;
 
@@ -36,6 +46,9 @@ BEGIN
     -- Crucial: Give ct_migrator the right to grant these roles to others
     EXECUTE format('GRANT %I TO ct_migrator WITH ADMIN OPTION', role_name);
   END LOOP;
+
+  -- Grant ct_guest_role to ct_guest login (for guest API access)
+  GRANT ct_guest_role TO ct_guest;
 END $$;
 
 -- 3. Database Ownership & Extensions
@@ -80,6 +93,7 @@ BEGIN
   
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO
     ct_migrator,
+    ct_guest,
     ct_guest_role,
     ct_passenger_role,
     ct_driver_role,

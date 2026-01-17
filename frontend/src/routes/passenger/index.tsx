@@ -12,19 +12,26 @@ import {
   User,
   Mail,
   Phone,
-  CalendarDays
+  CalendarDays,
+  MessageSquarePlus,
+  MessageSquare,
+  Lightbulb,
+  Send,
 } from 'lucide-react'
 import {
   getMyProfile,
   getMyCard,
+  getMyTopUps,
   getMyTrips,
   getMyFines,
   payFine,
   topUpCard,
   createAppeal,
+  createPassengerComplaint,
   type Fine,
   type PassengerCard,
 } from '@/lib/passenger-api'
+import { getTransportTypes } from '@/lib/guest-api'
 import {
   Card,
   CardContent,
@@ -64,6 +71,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export const Route = createFileRoute('/passenger/')({
   component: PassengerDashboard,
@@ -78,6 +92,11 @@ function PassengerDashboard() {
   const { data: card, isLoading: isLoadingCard } = useQuery({
     queryKey: ['passenger-card'],
     queryFn: getMyCard,
+  })
+
+  const { data: topUps } = useQuery({
+    queryKey: ['passenger-top-ups'],
+    queryFn: () => getMyTopUps(3),
   })
 
   const { data: trips, isLoading: isLoadingTrips } = useQuery({
@@ -167,18 +186,42 @@ function PassengerDashboard() {
                 <Button variant="outline">Отримати картку</Button>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Номер картки</p>
-                  <p className="text-2xl font-mono font-bold tracking-wider">{card.cardNumber}</p>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Номер картки</p>
+                    <p className="text-2xl font-mono font-bold tracking-wider">{card.cardNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Баланс</p>
+                    <p className="text-4xl font-bold text-primary">{card.balance} <span className="text-lg font-normal text-muted-foreground">грн</span></p>
+                  </div>
+                  <div className="w-full sm:w-auto">
+                     <TopUpDialog card={card} />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Баланс</p>
-                  <p className="text-4xl font-bold text-primary">{card.balance} <span className="text-lg font-normal text-muted-foreground">грн</span></p>
-                </div>
-                <div className="w-full sm:w-auto">
-                   <TopUpDialog card={card} />
-                </div>
+                {/* Історія останніх поповнень */}
+                {topUps && topUps.length > 0 && (
+                  <div className="pt-4 border-t border-border/50">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Останні поповнення</p>
+                    <div className="space-y-2">
+                      {topUps.map((topUp) => (
+                        <div key={topUp.id} className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">
+                            {new Date(topUp.toppedUpAt).toLocaleDateString('uk-UA', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                          <span className="font-medium text-green-600">+{topUp.amount} грн</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -199,7 +242,12 @@ function PassengerDashboard() {
              </div>
              <Separator />
              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Активних штрафів</span>
+                <span className="text-muted-foreground">Всього штрафів</span>
+                <span className="font-bold text-lg">{fines?.length || 0}</span>
+             </div>
+             <Separator />
+             <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Очікують сплати</span>
                 <span className="font-bold text-lg text-destructive">
                   {fines?.filter(f => f.status === 'Очікує сплати').length || 0}
                 </span>
@@ -286,6 +334,22 @@ function PassengerDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Complaint/Suggestion Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquarePlus className="h-5 w-5 text-blue-500" />
+            Скарга або пропозиція
+          </CardTitle>
+          <CardDescription>
+            Маєте зауваження щодо роботи транспорту? Напишіть нам!
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ComplaintForm />
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -455,6 +519,7 @@ function TopUpDialog({ card }: { card: PassengerCard }) {
       topUpCard(cardNumber, value),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['passenger-card'] })
+      queryClient.invalidateQueries({ queryKey: ['passenger-top-ups'] })
       setAmount('')
       setOpen(false)
     },
@@ -504,5 +569,136 @@ function TopUpDialog({ card }: { card: PassengerCard }) {
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ComplaintForm() {
+  const [type, setType] = useState<'complaint' | 'suggestion'>('complaint')
+  const [message, setMessage] = useState('')
+  const [routeNumber, setRouteNumber] = useState('')
+  const [transportType, setTransportType] = useState('')
+
+  const { data: transportTypes } = useQuery({
+    queryKey: ['transportTypes'],
+    queryFn: getTransportTypes,
+  })
+
+  const mutation = useMutation({
+    mutationFn: () => createPassengerComplaint({
+      type,
+      message,
+      routeNumber: routeNumber || undefined,
+      transportType: transportType || undefined,
+    }),
+    onSuccess: () => {
+      setMessage('')
+      setRouteNumber('')
+      setTransportType('')
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (message.trim()) {
+      mutation.mutate()
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Type selection */}
+      <div className="space-y-2">
+        <Label>Тип звернення</Label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={type === 'complaint' ? 'default' : 'outline'}
+            onClick={() => setType('complaint')}
+            className="flex-1"
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Скарга
+          </Button>
+          <Button
+            type="button"
+            variant={type === 'suggestion' ? 'default' : 'outline'}
+            onClick={() => setType('suggestion')}
+            className="flex-1"
+          >
+            <Lightbulb className="mr-2 h-4 w-4" />
+            Пропозиція
+          </Button>
+        </div>
+      </div>
+
+      {/* Message */}
+      <div className="space-y-2">
+        <Label htmlFor="complaint-message">
+          Текст звернення <span className="text-destructive">*</span>
+        </Label>
+        <Textarea
+          id="complaint-message"
+          placeholder={type === 'complaint'
+            ? 'Опишіть вашу проблему детально...'
+            : 'Поділіться вашою ідеєю...'}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className="min-h-[120px]"
+          required
+        />
+      </div>
+
+      {/* Optional fields */}
+      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+        <p className="text-sm font-medium text-muted-foreground">
+          Додаткова інформація (опційно)
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="transportType">Тип транспорту</Label>
+            <Select value={transportType} onValueChange={setTransportType}>
+              <SelectTrigger id="transportType">
+                <SelectValue placeholder="Оберіть тип" />
+              </SelectTrigger>
+              <SelectContent>
+                {transportTypes?.map((t) => (
+                  <SelectItem key={t.id} value={t.name}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="routeNumber">Номер маршруту</Label>
+            <Input
+              id="routeNumber"
+              placeholder="Напр. 3А"
+              value={routeNumber}
+              onChange={(e) => setRouteNumber(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={!message.trim() || mutation.isPending}
+      >
+        {mutation.isPending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : mutation.isSuccess ? (
+          <CheckCircle2 className="mr-2 h-4 w-4" />
+        ) : (
+          <Send className="mr-2 h-4 w-4" />
+        )}
+        {mutation.isPending
+          ? 'Надсилання...'
+          : mutation.isSuccess
+            ? 'Надіслано!'
+            : 'Надіслати звернення'}
+      </Button>
+    </form>
   )
 }

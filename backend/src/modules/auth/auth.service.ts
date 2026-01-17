@@ -7,7 +7,6 @@ import { ConfigService } from '@nestjs/config';
 import { sql } from 'drizzle-orm';
 import { Client } from 'pg';
 import { DbService } from '../../db/db.service';
-import { users } from '../../db/schema';
 import { SessionService } from '../../common/session/session.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -20,39 +19,45 @@ export class AuthService {
     private readonly sessionService: SessionService,
   ) {}
 
-  private readonly userSelect = {
-    id: users.id,
-    login: users.login,
-    email: users.email,
-    phone: users.phone,
-    fullName: users.fullName,
-    registeredAt: users.registeredAt,
-  };
-
   async register(payload: RegisterDto) {
+    type RegisterResult = {
+      id: number;
+      login: string;
+      email: string;
+      phone: string;
+      full_name: string;
+      registered_at: Date;
+    };
+
     try {
-      await this.dbService.db.execute(sql`
-        SELECT auth.register_passenger(
+      const result = (await this.dbService.db.execute(sql`
+        SELECT * FROM auth.register_passenger(
           ${payload.login},
           ${payload.password},
           ${payload.email},
           ${payload.phone},
           ${payload.fullName}
         )
-      `);
+      `)) as unknown as { rows: RegisterResult[] };
+
+      const row = result.rows[0];
+      if (!row) {
+        throw new ConflictException('Registration failed');
+      }
+
+      return {
+        id: row.id,
+        login: row.login,
+        email: row.email,
+        phone: row.phone,
+        fullName: row.full_name,
+        registeredAt: row.registered_at,
+      };
     } catch (error) {
       throw new ConflictException(
         (error as Error).message || 'Registration failed',
       );
     }
-
-    const [created] = await this.dbService.db
-      .select(this.userSelect)
-      .from(users)
-      .where(sql`${users.login} = ${payload.login}`)
-      .limit(1);
-
-    return created ?? null;
   }
 
   async login(payload: LoginDto) {

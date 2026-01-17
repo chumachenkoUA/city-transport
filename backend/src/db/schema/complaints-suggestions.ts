@@ -29,6 +29,10 @@ export const complaintsSuggestions = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   () => ({
+    complaintsSuggestionsTypeCheck: check(
+      'complaints_suggestions_type_check',
+      sql.raw(`"type" in ('complaint', 'suggestion')`),
+    ),
     complaintsSuggestionsStatusCheck: check(
       'complaints_suggestions_status_check',
       sql.raw(`"status" in ('Подано', 'Розглядається', 'Розглянуто')`),

@@ -15,6 +15,8 @@ import * as schema from './schema';
 export class DbService implements OnApplicationShutdown, OnModuleInit {
   private readonly baseDb: NodePgDatabase<typeof schema>;
   private readonly basePool: Pool;
+  private readonly guestDb: NodePgDatabase<typeof schema>;
+  private readonly guestPool: Pool;
   private readonly baseConfig: {
     host: string;
     port: number;
@@ -48,14 +50,26 @@ export class DbService implements OnApplicationShutdown, OnModuleInit {
     this.userPoolIdleMs =
       Number.isFinite(poolIdle) && poolIdle > 0 ? poolIdle : 30000;
 
+    // Base pool for migrations (superuser/ct_migrator)
     this.basePool = new Pool({ connectionString });
     this.baseDb = drizzle(this.basePool, { schema });
+
+    // Guest pool for unauthenticated requests (ct_guest)
+    const guestConnectionString = this.config.get<string>('DATABASE_URL_GUEST');
+    if (guestConnectionString) {
+      this.guestPool = new Pool({ connectionString: guestConnectionString });
+      this.guestDb = drizzle(this.guestPool, { schema });
+    } else {
+      // Fallback to base pool if DATABASE_URL_GUEST is not set
+      this.guestPool = this.basePool;
+      this.guestDb = this.baseDb;
+    }
   }
 
   get db(): NodePgDatabase<typeof schema> {
     const session = this.contextService.get();
     if (!session?.login || !session.password) {
-      return this.baseDb;
+      return this.guestDb; // Use guest pool for unauthenticated requests
     }
 
     const cached = this.userPools.get(session.login);
@@ -103,6 +117,10 @@ export class DbService implements OnApplicationShutdown, OnModuleInit {
 
   async onApplicationShutdown(): Promise<void> {
     await this.basePool.end();
+    // Close guest pool only if it's separate from base pool
+    if (this.guestPool !== this.basePool) {
+      await this.guestPool.end();
+    }
     for (const entry of this.userPools.values()) {
       await entry.pool.end();
     }

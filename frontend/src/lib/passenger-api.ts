@@ -48,10 +48,11 @@ export interface TopUpDto {
 }
 
 export interface CreatePassengerComplaintDto {
-  description: string;
-  routeId?: number;
-  stopId?: number;
-  vehicleId?: number;
+  type: 'complaint' | 'suggestion';
+  message: string;
+  routeNumber?: string;
+  transportType?: string;
+  vehicleNumber?: string;
 }
 
 // API functions
@@ -62,6 +63,16 @@ export function getMyProfile() {
 
 export function getMyCard() {
   return apiGet<PassengerCard | null>('/passenger/card');
+}
+
+export interface TopUpHistory {
+  id: number;
+  amount: string;
+  toppedUpAt: string;
+}
+
+export function getMyTopUps(limit: number = 3) {
+  return apiGet<TopUpHistory[]>(`/passenger/card/top-ups?limit=${limit}`);
 }
 
 export function topUpCard(cardNumber: string, amount: number) {

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { CtGuestService } from '../ct-guest/ct-guest.service';
 import { RouteLookupDto } from '../ct-guest/dto/route-lookup.dto';
+import { RouteScheduleDto } from '../ct-guest/dto/route-schedule.dto';
 import { RoutesBetweenDto } from '../ct-guest/dto/routes-between.dto';
 import { StopsNearDto } from '../ct-guest/dto/stops-near.dto';
 import { CreateAppealDto } from './dto/create-appeal.dto';
@@ -36,6 +37,12 @@ type MyFineRow = {
   issued_at: string;
 };
 
+type MyTopUpRow = {
+  id: number;
+  amount: string;
+  topped_up_at: string;
+};
+
 type StopNearRow = {
   id: number;
   name: string;
@@ -52,13 +59,7 @@ type RouteBetweenRow = {
   end_stop_name: string;
 };
 
-type TransportAtStopRow = {
-  stop_id: number;
-  route_id: number;
-  route_number: string;
-  transport_type: string;
-  approximate_interval: number | null;
-};
+// TransportAtStopRow removed - using guest service instead
 
 @Injectable()
 export class CtPassengerService {
@@ -74,23 +75,23 @@ export class CtPassengerService {
   }
 
   async getStopsNear(payload: StopsNearDto) {
+    // Use guest_api function (available to all roles including passenger)
     const result = (await this.dbService.db.execute(sql`
       select id, name, lon, lat, distance_m
-      from passenger_api.find_stops_nearby(${payload.lon}, ${payload.lat}, ${payload.radius ?? 1000})
-      limit ${payload.limit ?? 10}
+      from guest_api.find_nearby_stops(
+        ${payload.lon},
+        ${payload.lat},
+        ${payload.radius ?? 1000},
+        ${payload.limit ?? 10}
+      )
     `)) as unknown as { rows: StopNearRow[] };
 
     return result.rows;
   }
 
-  async getRoutesByStop(stopId: number) {
-    const result = (await this.dbService.db.execute(sql`
-      select stop_id, route_id, route_number, transport_type, approximate_interval
-      from passenger_api.v_transport_at_stops
-      where stop_id = ${stopId}
-    `)) as unknown as { rows: TransportAtStopRow[] };
-
-    return result.rows;
+  getRoutesByStop(stopId: number) {
+    // Use guest service (provides better implementation with nextArrivalMin)
+    return this.guestService.getRoutesByStop(stopId);
   }
 
   getRouteStops(query: RouteLookupDto) {
@@ -113,7 +114,7 @@ export class CtPassengerService {
     return this.guestService.planRoute(payload);
   }
 
-  getSchedule(query: RouteLookupDto) {
+  getSchedule(query: RouteScheduleDto) {
     return this.guestService.getSchedule(query);
   }
 
@@ -182,6 +183,20 @@ export class CtPassengerService {
     await this.dbService.db.execute(sql`
       select passenger_api.top_up_card(${cardNumber}::text, ${payload.amount}::numeric)
     `);
+  }
+
+  async getMyTopUps(limit: number = 3) {
+    const result = (await this.dbService.db.execute(sql`
+      select id, amount, topped_up_at
+      from passenger_api.v_my_top_ups
+      limit ${limit}
+    `)) as unknown as { rows: MyTopUpRow[] };
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      amount: row.amount,
+      toppedUpAt: row.topped_up_at,
+    }));
   }
 
   async buyTicket(payload: BuyTicketDto) {

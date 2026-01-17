@@ -125,25 +125,40 @@ CREATE OR REPLACE FUNCTION auth.register_passenger(
     p_phone TEXT,
     p_full_name TEXT
 )
-RETURNS BIGINT
+RETURNS TABLE (
+    id BIGINT,
+    login TEXT,
+    email TEXT,
+    phone TEXT,
+    full_name TEXT,
+    registered_at TIMESTAMP
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
-DECLARE
-    new_user_id BIGINT;
 BEGIN
-    IF EXISTS (SELECT 1 FROM users WHERE login = p_login) THEN RAISE EXCEPTION 'Login exists'; END IF;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = p_login) THEN RAISE EXCEPTION 'Role exists'; END IF;
+    IF EXISTS (SELECT 1 FROM users u WHERE u.login = p_login) THEN
+        RAISE EXCEPTION 'Login already exists';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = p_login) THEN
+        RAISE EXCEPTION 'Role already exists';
+    END IF;
 
     EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', p_login, p_password);
     EXECUTE format('GRANT ct_passenger_role TO %I', p_login);
 
+    RETURN QUERY
     INSERT INTO users (login, email, phone, full_name, registered_at)
     VALUES (p_login, p_email, p_phone, p_full_name, NOW())
-    RETURNING id INTO new_user_id;
+    RETURNING
+        users.id,
+        users.login::TEXT,
+        users.email::TEXT,
+        users.phone::TEXT,
+        users.full_name::TEXT,
+        users.registered_at;
 
-    RETURN new_user_id;
 EXCEPTION WHEN others THEN
     EXECUTE format('DROP ROLE IF EXISTS %I', p_login);
     RAISE;

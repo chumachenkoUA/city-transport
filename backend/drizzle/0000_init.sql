@@ -71,6 +71,7 @@ CREATE TABLE "complaints_suggestions" (
 	"contact_info" varchar(200),
 	"status" varchar(50) NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "complaints_suggestions_type_check" CHECK ("type" in ('complaint', 'suggestion')),
 	CONSTRAINT "complaints_suggestions_status_check" CHECK ("status" in ('Подано', 'Розглядається', 'Розглянуто'))
 );
 --> statement-breakpoint
@@ -117,7 +118,6 @@ CREATE TABLE "drivers" (
 -- Єдина "книга проводок" для всіх фінансових операцій
 -- Автоматично заповнюється тригерами при:
 -- - Покупці квитка (income: ticket)
--- - Поповненні картки (income: card_topup)
 -- - Оплаті штрафу (income: fine)
 -- - Виплаті зарплати (expense: salary)
 -- - Записі витрат (expense: other_expense)
@@ -144,7 +144,6 @@ CREATE TABLE "financial_transactions" (
 	"route_id" bigint,
 	"driver_id" bigint,
 	"card_id" bigint,
-	"user_id" bigint,
 
 	-- FK до бюджету (auto-populated by trigger)
 	"budget_month" date,
@@ -162,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_ft_type_source ON public.financial_transactions(t
 CREATE INDEX IF NOT EXISTS idx_ft_budget_month ON public.financial_transactions(budget_month);
 CREATE INDEX IF NOT EXISTS idx_ft_ticket ON public.financial_transactions(ticket_id) WHERE ticket_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ft_fine ON public.financial_transactions(fine_id) WHERE fine_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_ft_user ON public.financial_transactions(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ft_card ON public.financial_transactions(card_id) WHERE card_id IS NOT NULL;
 --> statement-breakpoint
 
 -- ============================================================================
@@ -490,7 +489,8 @@ CREATE TABLE "vehicle_models" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"type_id" bigint NOT NULL,
-	"capacity" integer NOT NULL
+	"capacity" integer NOT NULL,
+	CONSTRAINT "vehicle_models_capacity_check" CHECK ("capacity" > 0)
 );
 --> statement-breakpoint
 
@@ -556,7 +556,6 @@ ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_trip_id_fk" FOREIGN KEY 
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_route_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_driver_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_card_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_budget_month_fk" FOREIGN KEY ("budget_month") REFERENCES "public"."budgets"("month") ON DELETE SET NULL ON UPDATE no action;
 
 -- ============================================================================

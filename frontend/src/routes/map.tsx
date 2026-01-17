@@ -822,19 +822,16 @@ function MapPage() {
                                     </span>
                                   </div>
 
-                                  {/* Show first few departures */}
+                                  {/* Show all departures */}
                                   {sidebarSchedule.departures?.length > 0 && (
                                     <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                      <div className="text-xs text-gray-500 mb-1">Відправлення:</div>
-                                      <div className="flex flex-wrap gap-1">
-                                        {sidebarSchedule.departures.slice(0, 8).map((time, idx) => (
+                                      <div className="text-xs text-gray-500 mb-1">Відправлення з початкової зупинки:</div>
+                                      <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                                        {sidebarSchedule.departures.map((time, idx) => (
                                           <span key={idx} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">
                                             {time}
                                           </span>
                                         ))}
-                                        {sidebarSchedule.departures.length > 8 && (
-                                          <span className="text-xs text-gray-400">+{sidebarSchedule.departures.length - 8}</span>
-                                        )}
                                       </div>
                                     </div>
                                   )}

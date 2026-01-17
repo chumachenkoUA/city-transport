@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { apiPost } from '@/lib/api'
+import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,7 +27,9 @@ function RegisterPage() {
   const mutation = useMutation({
     mutationFn: (data: typeof formData) => apiPost('/auth/register', data),
     onSuccess: () => {
-      alert('Реєстрація успішна! Тепер ви можете увійти.')
+      toast.success('Реєстрація успішна!', {
+        description: 'Тепер ви можете увійти в систему',
+      })
       navigate({ to: '/login' })
     },
     onError: (err: any) => {

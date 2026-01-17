@@ -17,7 +17,6 @@ import { salaryPayments } from './salary-payments';
 import { tickets } from './tickets';
 import { transportCards } from './transport-cards';
 import { trips } from './trips';
-import { users } from './users';
 
 export const financialTransactions = pgTable(
   'financial_transactions',
@@ -59,9 +58,6 @@ export const financialTransactions = pgTable(
       () => transportCards.id,
       { onDelete: 'set null' },
     ),
-    userId: bigint('user_id', { mode: 'number' }).references(() => users.id, {
-      onDelete: 'set null',
-    }),
 
     // FK до бюджету (auto-populated by trigger)
     budgetMonth: date('budget_month').references(() => budgets.month, {

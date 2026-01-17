@@ -514,43 +514,7 @@ END;
 $$;
 
 -- ============================================================================
--- 10. NEAREST STOP FUNCTION - Пошук найближчої зупинки
--- ============================================================================
--- Замінює findNearestStop() та findNearestPointIndex() з TypeScript сервісів
-
-CREATE OR REPLACE FUNCTION guest_api.find_nearest_stop_to_point(
-  p_lon numeric,
-  p_lat numeric,
-  p_limit integer DEFAULT 1
-)
-RETURNS TABLE (
-  id bigint,
-  name text,
-  lon numeric,
-  lat numeric,
-  distance_meters numeric
-)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, pg_catalog
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    s.id,
-    s.name::text,
-    s.lon,
-    s.lat,
-    ST_DistanceSphere(
-      ST_MakePoint(p_lon::float, p_lat::float),
-      ST_MakePoint(s.lon::float, s.lat::float)
-    )::numeric AS distance_meters
-  FROM public.stops s
-  ORDER BY distance_meters
-  LIMIT p_limit;
-END;
-$$;
-
--- ============================================================================
--- 11. GRANT - Надання прав доступу
+-- 10. GRANT - Надання прав доступу
 -- ============================================================================
 -- SELECT на VIEW: читання публічної інформації
 -- EXECUTE на функції: виклик функцій пошуку та подання скарг
@@ -564,4 +528,3 @@ GRANT EXECUTE ON FUNCTION guest_api.plan_route(numeric, numeric, numeric, numeri
 GRANT EXECUTE ON FUNCTION guest_api.plan_route_pgrouting(bigint[], bigint[], integer, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_controller_role, ct_municipality_role, ct_manager_role, ct_accountant_role;
 GRANT EXECUTE ON FUNCTION guest_api.submit_complaint(text, text, text, text, text, text) TO ct_guest_role, ct_passenger_role;
 GRANT EXECUTE ON FUNCTION guest_api.get_route_stops_with_timing(bigint) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;
-GRANT EXECUTE ON FUNCTION guest_api.find_nearest_stop_to_point(numeric, numeric, integer) TO ct_guest_role, ct_passenger_role, ct_driver_role, ct_dispatcher_role, ct_municipality_role, ct_controller_role, ct_manager_role;
