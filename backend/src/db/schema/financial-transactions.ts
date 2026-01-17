@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { budgets } from './budgets';
 import { drivers } from './drivers';
@@ -29,18 +30,16 @@ export const financialTransactions = pgTable(
     description: text('description'),
     createdBy: text('created_by').notNull().default(sql`current_user`),
 
-    // Прямі FK посилання на джерело операції
-    ticketId: bigint('ticket_id', { mode: 'number' }).references(
-      () => tickets.id,
-      { onDelete: 'set null' },
-    ),
-    fineId: bigint('fine_id', { mode: 'number' }).references(() => fines.id, {
-      onDelete: 'set null',
-    }),
-    salaryPaymentId: bigint('salary_payment_id', { mode: 'number' }).references(
-      () => salaryPayments.id,
-      { onDelete: 'set null' },
-    ),
+    // Прямі FK посилання на джерело операції (UNIQUE = one-to-one)
+    ticketId: bigint('ticket_id', { mode: 'number' })
+      .unique()
+      .references(() => tickets.id, { onDelete: 'set null' }),
+    fineId: bigint('fine_id', { mode: 'number' })
+      .unique()
+      .references(() => fines.id, { onDelete: 'set null' }),
+    salaryPaymentId: bigint('salary_payment_id', { mode: 'number' })
+      .unique()
+      .references(() => salaryPayments.id, { onDelete: 'set null' }),
 
     // Контекстні FK для аналітики
     tripId: bigint('trip_id', { mode: 'number' }).references(() => trips.id, {

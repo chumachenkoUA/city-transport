@@ -134,12 +134,12 @@ CREATE TABLE "financial_transactions" (
 	"description" text,
 	"created_by" text DEFAULT current_user NOT NULL,
 
-	-- Прямі FK посилання на джерело операції (nullable)
+	-- Прямі FK посилання на джерело операції (nullable, UNIQUE = one-to-one)
 	"ticket_id" bigint,
 	"fine_id" bigint,
 	"salary_payment_id" bigint,
 
-	-- Контекстні FK для аналітики (nullable)
+	-- Контекстні FK для аналітики (nullable, NOT UNIQUE = one-to-many)
 	"trip_id" bigint,
 	"route_id" bigint,
 	"driver_id" bigint,
@@ -148,6 +148,9 @@ CREATE TABLE "financial_transactions" (
 	-- FK до бюджету (auto-populated by trigger)
 	"budget_month" date,
 
+	CONSTRAINT "financial_transactions_ticket_id_unique" UNIQUE("ticket_id"),
+	CONSTRAINT "financial_transactions_fine_id_unique" UNIQUE("fine_id"),
+	CONSTRAINT "financial_transactions_salary_payment_id_unique" UNIQUE("salary_payment_id"),
 	CONSTRAINT "financial_transactions_tx_type_check" CHECK ("tx_type" in ('income', 'expense')),
 	CONSTRAINT "financial_transactions_source_check" CHECK ("source" in (
 		'ticket', 'fine', 'government', 'other',

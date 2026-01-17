@@ -76,11 +76,11 @@
 
 • Зв'язок між **financial_transactions** та **budgets**. Кожна фінансова транзакція автоматично прив'язується до місячного бюджету. Один бюджет може мати багато транзакцій. Зв'язок реалізований через природний ключ (budget_month -> month). Отже, між сутностями financial_transactions та budgets існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.budget_month -> budgets.month (FK на UNIQUE поле).
 
-• Зв'язок між **financial_transactions** та **tickets**. Транзакція доходу може бути пов'язана з купівлею квитка. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та tickets існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.ticket_id -> tickets.id.
+• Зв'язок між **financial_transactions** та **tickets**. Транзакція доходу відповідає покупці одного квитка. Один квиток має рівно одну транзакцію. Зв'язок необов'язковий для financial_transactions (не всі транзакції — квитки). Отже, між сутностями financial_transactions та tickets існує зв'язок **one-to-one**. Для формалізації використано financial_transactions.ticket_id -> tickets.id (з UNIQUE constraint на ticket_id).
 
-• Зв'язок між **financial_transactions** та **fines**. Транзакція доходу може бути пов'язана з оплатою штрафу. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та fines існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.fine_id -> fines.id.
+• Зв'язок між **financial_transactions** та **fines**. Транзакція доходу відповідає оплаті одного штрафу. Один штраф має рівно одну транзакцію (при оплаті). Зв'язок необов'язковий для financial_transactions. Отже, між сутностями financial_transactions та fines існує зв'язок **one-to-one**. Для формалізації використано financial_transactions.fine_id -> fines.id (з UNIQUE constraint на fine_id).
 
-• Зв'язок між **financial_transactions** та **salary_payments**. Транзакція витрат може бути пов'язана з виплатою зарплати. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та salary_payments існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.salary_payment_id -> salary_payments.id.
+• Зв'язок між **financial_transactions** та **salary_payments**. Транзакція витрат відповідає одній виплаті зарплати. Одна виплата має рівно одну транзакцію. Зв'язок необов'язковий для financial_transactions. Отже, між сутностями financial_transactions та salary_payments існує зв'язок **one-to-one**. Для формалізації використано financial_transactions.salary_payment_id -> salary_payments.id (з UNIQUE constraint на salary_payment_id).
 
 • Зв'язок між **financial_transactions** та **trips**. Транзакція може бути пов'язана з рейсом для аналітики. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та trips існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.trip_id -> trips.id.
 
@@ -106,8 +106,8 @@
 
 | Тип зв'язку | Кількість |
 |-------------|-----------|
-| one-to-one | 4 |
-| one-to-many | 27 |
+| one-to-one | 7 |
+| one-to-many | 24 |
 | many-to-many | 2 |
 | self-reference | 2 |
 | **Всього** | **35** |
