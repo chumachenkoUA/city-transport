@@ -55,22 +55,14 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_fines_set_paid_at();
 -- 0.2 Trigger: tickets -> income (при покупці квитка)
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.trg_ticket_to_ft() RETURNS trigger AS $$
-DECLARE
-    v_route_id bigint;
-    v_driver_id bigint;
 BEGIN
-    -- Отримуємо route_id та driver_id через рейс
-    SELECT tr.route_id, tr.driver_id INTO v_route_id, v_driver_id
-    FROM public.trips tr
-    WHERE tr.id = NEW.trip_id;
-
     INSERT INTO public.financial_transactions(
         tx_type, source, amount, occurred_at,
-        ticket_id, trip_id, route_id, driver_id, card_id
+        ticket_id, trip_id, card_id
     )
     VALUES (
         'income', 'ticket', NEW.price, NEW.purchased_at,
-        NEW.id, NEW.trip_id, v_route_id, v_driver_id, NEW.card_id
+        NEW.id, NEW.trip_id, NEW.card_id
     );
     RETURN NEW;
 END;
@@ -87,17 +79,10 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_ticket_to_ft();
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.trg_fine_to_ft() RETURNS trigger AS $$
 DECLARE
-    v_route_id bigint;
-    v_driver_id bigint;
     v_card_id bigint;
 BEGIN
     -- Тільки коли статус змінюється на "Оплачено"
     IF NEW.status = 'Оплачено' AND (OLD IS NULL OR OLD.status <> 'Оплачено') THEN
-        -- Отримуємо route_id та driver_id через рейс
-        SELECT tr.route_id, tr.driver_id INTO v_route_id, v_driver_id
-        FROM public.trips tr
-        WHERE tr.id = NEW.trip_id;
-
         -- Отримуємо card_id через user_id (кожен користувач має картку)
         SELECT tc.id INTO v_card_id
         FROM public.transport_cards tc
@@ -105,11 +90,11 @@ BEGIN
 
         INSERT INTO public.financial_transactions(
             tx_type, source, amount, occurred_at,
-            fine_id, trip_id, route_id, driver_id, card_id
+            fine_id, trip_id, card_id
         )
         VALUES (
             'income', 'fine', NEW.amount, COALESCE(NEW.paid_at, now()),
-            NEW.id, NEW.trip_id, v_route_id, v_driver_id, v_card_id
+            NEW.id, NEW.trip_id, v_card_id
         );
     END IF;
     RETURN NEW;
@@ -122,16 +107,17 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_fine_to_ft();
 
 -- ============================================================================
 -- 0.4 Trigger: salary_payments -> expense (при виплаті зарплати)
+-- driver_id отримується через salary_payment_id -> salary_payments.driver_id
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.trg_salary_to_ft() RETURNS trigger AS $$
 BEGIN
     INSERT INTO public.financial_transactions(
         tx_type, source, amount, occurred_at,
-        salary_payment_id, driver_id
+        salary_payment_id
     )
     VALUES (
         'expense', 'salary', NEW.total, NEW.paid_at,
-        NEW.id, NEW.driver_id
+        NEW.id
     );
     RETURN NEW;
 END;
@@ -146,45 +132,45 @@ FOR EACH ROW EXECUTE FUNCTION public.trg_salary_to_ft();
 -- ============================================================================
 -- Backfill виконується з реальними FK колонками
 
--- Backfill tickets (з контекстними FK)
+-- Backfill tickets
+-- route_id та driver_id отримуються через trip_id -> trips
 INSERT INTO public.financial_transactions(
     tx_type, source, amount, occurred_at,
-    ticket_id, trip_id, route_id, driver_id, card_id, created_by
+    ticket_id, trip_id, card_id, created_by
 )
 SELECT
     'income', 'ticket', t.price, t.purchased_at,
-    t.id, t.trip_id, tr.route_id, tr.driver_id, t.card_id, 'migration'
+    t.id, t.trip_id, t.card_id, 'migration'
 FROM public.tickets t
-JOIN public.trips tr ON tr.id = t.trip_id
 WHERE NOT EXISTS (
     SELECT 1 FROM public.financial_transactions ft WHERE ft.ticket_id = t.id
 );
 
 -- ПРИМІТКА: card_top_ups НЕ backfill-яться, бо це аванси, а не доходи
 
--- Backfill paid fines (з контекстними FK)
+-- Backfill paid fines
 INSERT INTO public.financial_transactions(
     tx_type, source, amount, occurred_at,
-    fine_id, trip_id, route_id, driver_id, card_id, created_by
+    fine_id, trip_id, card_id, created_by
 )
 SELECT
     'income', 'fine', f.amount, COALESCE(f.paid_at, f.issued_at),
-    f.id, f.trip_id, tr.route_id, tr.driver_id, tc.id, 'migration'
+    f.id, f.trip_id, tc.id, 'migration'
 FROM public.fines f
-JOIN public.trips tr ON tr.id = f.trip_id
 JOIN public.transport_cards tc ON tc.user_id = f.user_id
 WHERE f.status = 'Оплачено' AND NOT EXISTS (
     SELECT 1 FROM public.financial_transactions ft WHERE ft.fine_id = f.id
 );
 
--- Backfill salary_payments (з контекстними FK)
+-- Backfill salary_payments
+-- driver_id отримується через salary_payment_id -> salary_payments.driver_id
 INSERT INTO public.financial_transactions(
     tx_type, source, amount, occurred_at,
-    salary_payment_id, driver_id, created_by
+    salary_payment_id, created_by
 )
 SELECT
     'expense', 'salary', sp.total, sp.paid_at,
-    sp.id, sp.driver_id, 'migration'
+    sp.id, 'migration'
 FROM public.salary_payments sp
 WHERE NOT EXISTS (
     SELECT 1 FROM public.financial_transactions ft WHERE ft.salary_payment_id = sp.id
@@ -471,16 +457,23 @@ FROM (
              CASE WHEN source = 'other_expense' THEN split_part(description, ':', 1) ELSE NULL END
 ) grouped;
 
--- View для financial_transactions (з реальними FK колонками)
+-- View для financial_transactions (з денормалізацією через JOIN)
+-- route_id, driver_id отримуються через trip_id -> trips
 -- user_id отримується через card_id -> transport_cards.user_id
+-- Для зарплат driver_id отримується через salary_payment_id -> salary_payments
 CREATE OR REPLACE VIEW accountant_api.v_financial_transactions AS
 SELECT ft.id, ft.tx_type, ft.source, ft.amount, ft.occurred_at, ft.description, ft.created_by,
        ft.ticket_id, ft.fine_id, ft.salary_payment_id,
-       ft.trip_id, ft.route_id, ft.driver_id, ft.card_id,
-       tc.user_id,  -- денормалізація через JOIN
+       ft.trip_id, ft.card_id,
+       -- Денормалізація через JOIN:
+       COALESCE(tr.route_id, NULL) AS route_id,
+       COALESCE(tr.driver_id, sp.driver_id) AS driver_id,
+       tc.user_id,
        ft.budget_month
 FROM public.financial_transactions ft
+LEFT JOIN public.trips tr ON tr.id = ft.trip_id
 LEFT JOIN public.transport_cards tc ON tc.id = ft.card_id
+LEFT JOIN public.salary_payments sp ON sp.id = ft.salary_payment_id
 ORDER BY ft.occurred_at DESC;
 
 -- View для аналітики по джерелах та місяцях

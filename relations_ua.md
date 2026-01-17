@@ -88,13 +88,11 @@
 
 • Зв'язок між **financial_transactions** та **budgets**. Кожна фінансова транзакція автоматично прив'язується до місячного бюджету (через тригер). Один бюджет може мати багато транзакцій. Зв'язок реалізований через природний ключ (budget_month -> month). Отже, між сутностями financial_transactions та budgets існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.budget_month -> budgets.month (FK на UNIQUE поле).
 
-• Зв'язок між **financial_transactions** та **trips**. Транзакція може бути пов'язана з рейсом для аналітики. Один рейс може мати багато транзакцій (багато квитків, штрафів). Зв'язок необов'язковий. Отже, між сутностями financial_transactions та trips існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.trip_id -> trips.id.
-
-• Зв'язок між **financial_transactions** та **routes**. Транзакція може бути пов'язана з маршрутом для аналітики. Один маршрут має багато рейсів, отже багато транзакцій. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та routes існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.route_id -> routes.id.
-
-• Зв'язок між **financial_transactions** та **drivers**. Транзакція може бути пов'язана з водієм для аналітики. Один водій має багато зарплат та рейсів з квитками. Зв'язок необов'язковий. Отже, між сутностями financial_transactions та drivers існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.driver_id -> drivers.id.
+• Зв'язок між **financial_transactions** та **trips**. Транзакція може бути пов'язана з рейсом для аналітики. Один рейс може мати багато транзакцій (багато квитків, штрафів). Через trip_id можна отримати route_id та driver_id (trip_id -> trips.route_id, trips.driver_id). Зв'язок необов'язковий. Отже, між сутностями financial_transactions та trips існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.trip_id -> trips.id.
 
 • Зв'язок між **financial_transactions** та **transport_cards**. Транзакція може бути пов'язана з карткою для аналітики. Одна картка може мати багато куплених квитків. Через картку можна отримати користувача (card_id -> transport_cards.user_id). Зв'язок необов'язковий. Отже, між сутностями financial_transactions та transport_cards існує зв'язок **one-to-many**. Для формалізації використано financial_transactions.card_id -> transport_cards.id.
+
+**Примітка:** route_id та driver_id видалено з таблиці financial_transactions для нормалізації. Вони отримуються через JOIN: trip_id -> trips.route_id/driver_id (для квитків/штрафів) або salary_payment_id -> salary_payments.driver_id (для зарплат). View accountant_api.v_financial_transactions надає ці поля через денормалізацію.
 
 ---
 
@@ -113,7 +111,7 @@
 | Тип зв'язку | Кількість |
 |-------------|-----------|
 | one-to-one | 7 |
-| one-to-many | 24 |
+| one-to-many | 22 |
 | many-to-many | 2 |
 | self-reference | 2 |
-| **Всього** | **35** |
+| **Всього** | **33** |

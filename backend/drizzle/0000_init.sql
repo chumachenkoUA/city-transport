@@ -140,9 +140,8 @@ CREATE TABLE "financial_transactions" (
 	"salary_payment_id" bigint,
 
 	-- Контекстні FK для аналітики (nullable, NOT UNIQUE = one-to-many)
+	-- route_id та driver_id видалено - отримуються через trip_id -> trips
 	"trip_id" bigint,
-	"route_id" bigint,
-	"driver_id" bigint,
 	"card_id" bigint,
 
 	-- FK до бюджету (auto-populated by trigger)
@@ -556,8 +555,6 @@ ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_ticket_id_fk" FOREIGN KE
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_fine_id_fk" FOREIGN KEY ("fine_id") REFERENCES "public"."fines"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_salary_payment_id_fk" FOREIGN KEY ("salary_payment_id") REFERENCES "public"."salary_payments"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_trip_id_fk" FOREIGN KEY ("trip_id") REFERENCES "public"."trips"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_route_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_driver_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_card_id_fk" FOREIGN KEY ("card_id") REFERENCES "public"."transport_cards"("id") ON DELETE SET NULL ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ADD CONSTRAINT "ft_budget_month_fk" FOREIGN KEY ("budget_month") REFERENCES "public"."budgets"("month") ON DELETE SET NULL ON UPDATE no action;
 

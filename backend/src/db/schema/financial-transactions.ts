@@ -11,9 +11,7 @@ import {
   unique,
 } from 'drizzle-orm/pg-core';
 import { budgets } from './budgets';
-import { drivers } from './drivers';
 import { fines } from './fines';
-import { routes } from './routes';
 import { salaryPayments } from './salary-payments';
 import { tickets } from './tickets';
 import { transportCards } from './transport-cards';
@@ -42,17 +40,10 @@ export const financialTransactions = pgTable(
       .references(() => salaryPayments.id, { onDelete: 'set null' }),
 
     // Контекстні FK для аналітики
+    // route_id та driver_id видалено - отримуються через trip_id -> trips
     tripId: bigint('trip_id', { mode: 'number' }).references(() => trips.id, {
       onDelete: 'set null',
     }),
-    routeId: bigint('route_id', { mode: 'number' }).references(
-      () => routes.id,
-      { onDelete: 'set null' },
-    ),
-    driverId: bigint('driver_id', { mode: 'number' }).references(
-      () => drivers.id,
-      { onDelete: 'set null' },
-    ),
     cardId: bigint('card_id', { mode: 'number' }).references(
       () => transportCards.id,
       { onDelete: 'set null' },
