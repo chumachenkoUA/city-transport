@@ -222,6 +222,8 @@ export interface RouteOption {
     lat: number;
     waitTimeMin: number;
   }>;
+  walkingTimeMin?: number;
+  walkingDistanceM?: number;
 }
 
 export interface StopSearchResult {

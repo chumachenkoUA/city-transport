@@ -435,38 +435,40 @@ function DriverPage() {
             {/* Profile and Active Trip */}
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Profile Card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    <CardTitle>Профіль водія</CardTitle>
-                  </div>
-                  <CardDescription>Особиста інформація</CardDescription>
+              <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2.5 text-lg">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <User className="h-5 w-5 text-primary" />
+                    </div>
+                    Профіль водія
+                  </CardTitle>
+                  <CardDescription className="mt-1">Особиста інформація</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-0">
                   {profileLoading ? (
                     <TableSkeleton rows={5} cols={1} />
                   ) : profile ? (
                     <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">ПІБ:</span>
-                        <span className="font-medium">{profile.fullName}</span>
+                      <div className="flex justify-between items-center py-3 border-b">
+                        <span className="text-sm text-muted-foreground">ПІБ</span>
+                        <span className="font-semibold">{profile.fullName}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Логін:</span>
-                        <span className="font-medium">{profile.login}</span>
+                      <div className="flex justify-between items-center py-3 border-b">
+                        <span className="text-sm text-muted-foreground">Логін</span>
+                        <span className="font-medium text-sm">{profile.login}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Телефон:</span>
-                        <span className="font-medium">{profile.phone}</span>
+                      <div className="flex justify-between items-center py-3 border-b">
+                        <span className="text-sm text-muted-foreground">Телефон</span>
+                        <span className="font-medium text-sm">{profile.phone}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Email:</span>
-                        <span className="font-medium">{profile.email}</span>
+                      <div className="flex justify-between items-center py-3 border-b">
+                        <span className="text-sm text-muted-foreground">Email</span>
+                        <span className="font-medium text-sm">{profile.email}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Ліцензія:</span>
-                        <span className="font-medium">{profile.driverLicenseNumber}</span>
+                      <div className="flex justify-between items-center py-3">
+                        <span className="text-sm text-muted-foreground">Ліцензія</span>
+                        <Badge variant="outline" className="font-mono">{profile.driverLicenseNumber}</Badge>
                       </div>
                     </>
                   ) : (
@@ -476,49 +478,65 @@ function DriverPage() {
               </Card>
 
               {/* Active Trip Card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Navigation className="h-5 w-5" />
-                    <CardTitle>Активний рейс</CardTitle>
-                  </div>
-                  <CardDescription>Поточна зміна</CardDescription>
+              <Card className={`shadow-sm hover:shadow-md transition-shadow duration-300 ${activeTrip ? 'border-success/30 bg-gradient-to-br from-success/5 to-transparent' : ''}`}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2.5 text-lg">
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${activeTrip ? 'bg-success/15' : 'bg-muted'}`}>
+                      <Navigation className={`h-5 w-5 ${activeTrip ? 'text-success' : 'text-muted-foreground'}`} />
+                    </div>
+                    Активний рейс
+                    {activeTrip && (
+                      <Badge variant="success" className="ml-auto">Виконується</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="mt-1">Поточна зміна</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {activeTripLoading ? (
                     <TableSkeleton rows={3} cols={1} />
                   ) : activeTrip ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">Маршрут {activeTrip.routeNumber}</Badge>
+                        <Badge className="text-base px-3 py-1">Маршрут {activeTrip.routeNumber}</Badge>
                         <Badge variant="outline">{directionLabels[activeTrip.direction]}</Badge>
                         <span className="text-sm text-muted-foreground">
                           {activeTrip.transportType}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Транспорт:</span>
-                        <span className="font-medium">{activeTrip.fleetNumber}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Запланований початок:</span>
-                        <span className="font-medium">{formatDateTime(activeTrip.plannedStartsAt)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Фактичний початок:</span>
-                        <span className="font-medium">{formatDateTime(activeTrip.actualStartsAt)}</span>
-                      </div>
-                      {activeTrip.startDelayMin != null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Затримка:</span>
-                          <Badge variant={activeTrip.startDelayMin > 5 ? 'warning' : 'success'}>
-                            {activeTrip.startDelayMin > 0 ? '+' : ''}{Math.round(activeTrip.startDelayMin)} хв
-                          </Badge>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Транспорт</p>
+                          <p className="font-semibold">{activeTrip.fleetNumber}</p>
                         </div>
-                      )}
+                        <div className="p-3 rounded-lg bg-muted/50">
+                          <p className="text-xs text-muted-foreground mb-1">Затримка</p>
+                          <p className="font-semibold">
+                            {activeTrip.startDelayMin != null ? (
+                              <span className={activeTrip.startDelayMin > 5 ? 'text-warning' : 'text-success'}>
+                                {activeTrip.startDelayMin > 0 ? '+' : ''}{Math.round(activeTrip.startDelayMin)} хв
+                              </span>
+                            ) : (
+                              <span className="text-success">Вчасно</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Плановий початок:</span>
+                          <span className="font-medium">{formatDateTime(activeTrip.plannedStartsAt)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Фактичний початок:</span>
+                          <span className="font-medium">{formatDateTime(activeTrip.actualStartsAt)}</span>
+                        </div>
+                      </div>
+
                       {currentLocation && (
                         <div className="flex items-center gap-2 p-3 bg-success/10 rounded-lg border border-success/20">
-                          <MapPin className="h-4 w-4 text-success" />
+                          <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
                           <span className="text-sm text-success font-medium">
                             GPS: {currentLocation.lat.toFixed(5)}, {currentLocation.lon.toFixed(5)}
                           </span>
@@ -526,11 +544,13 @@ function DriverPage() {
                       )}
                     </div>
                   ) : (
-                    <EmptyState
-                      icon={Navigation}
-                      title="Активного рейсу немає"
-                      description="Розпочніть рейс у розділі 'Управління'"
-                    />
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+                        <Navigation className="h-7 w-7 text-muted-foreground" />
+                      </div>
+                      <p className="font-medium text-muted-foreground">Активного рейсу немає</p>
+                      <p className="text-sm text-muted-foreground/70 mt-1">Розпочніть рейс у розділі "Управління"</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -539,22 +559,23 @@ function DriverPage() {
 
           {/* Schedule Tab */}
           <TabsContent value="schedule" className="space-y-6">
-            <Card>
-              <CardHeader>
+            <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+              <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <CardTitle>Робочий графік</CardTitle>
-                    <CardDescription>Перегляд призначених рейсів</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="date"
-                      value={scheduleDate}
-                      onChange={(e) => setScheduleDate(e.target.value)}
-                      className="w-[170px]"
-                    />
-                  </div>
+                  <CardTitle className="flex items-center gap-2.5 text-lg">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+                      <Calendar className="h-5 w-5 text-blue-500" />
+                    </div>
+                    Робочий графік
+                  </CardTitle>
+                  <Input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="w-[170px]"
+                  />
                 </div>
+                <CardDescription className="mt-1">Перегляд призначених рейсів</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {scheduleLoading ? (
@@ -562,11 +583,11 @@ function DriverPage() {
                 ) : schedule ? (
                   <>
                     <div className="flex flex-wrap items-center gap-3">
-                      <Badge variant={schedule.assigned ? 'success' : 'outline'}>
+                      <Badge variant={schedule.assigned ? 'success' : 'outline'} className="text-sm">
                         {schedule.assigned ? 'Призначено' : 'Без призначень'}
                       </Badge>
                       {schedule.route && (
-                        <Badge variant="outline">Маршрут {schedule.route.number}</Badge>
+                        <Badge variant="secondary" className="text-sm">Маршрут {schedule.route.number}</Badge>
                       )}
                       {schedule.transportType?.name && (
                         <span className="text-sm text-muted-foreground">
@@ -574,115 +595,136 @@ function DriverPage() {
                         </span>
                       )}
                       {schedule.vehicle?.fleetNumber && (
-                        <span className="text-sm text-muted-foreground">
-                          Транспорт: {schedule.vehicle.fleetNumber}
-                        </span>
+                        <Badge variant="outline" className="font-mono">
+                          {schedule.vehicle.fleetNumber}
+                        </Badge>
                       )}
                     </div>
 
                     {schedule.schedule && (
-                      <div className="grid gap-3 md:grid-cols-3 text-sm">
-                        <div>
-                          <span className="font-medium">Початок зміни:</span>{' '}
-                          {formatTime(schedule.schedule.workStartTime)}
+                      <div className="grid gap-3 md:grid-cols-2 max-w-md">
+                        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                          <p className="text-xs text-muted-foreground mb-1">Початок зміни</p>
+                          <p className="font-semibold text-green-600 dark:text-green-400">
+                            {formatTime(schedule.schedule.workStartTime)}
+                          </p>
                         </div>
-                        <div>
-                          <span className="font-medium">Кінець зміни:</span>{' '}
-                          {formatTime(schedule.schedule.workEndTime)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Інтервал:</span> {schedule.schedule.intervalMin} хв
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <p className="text-xs text-muted-foreground mb-1">Кінець зміни</p>
+                          <p className="font-semibold text-red-600 dark:text-red-400">
+                            {formatTime(schedule.schedule.workEndTime)}
+                          </p>
                         </div>
                       </div>
                     )}
 
                     {schedule.trips.length > 0 ? (
-                      <div className="rounded-md border">
+                      <div className="rounded-lg border">
                         <Table>
-                          <TableHeader>
+                          <TableHeader className="bg-muted/50">
                             <TableRow>
-                              <TableHead>План початок</TableHead>
-                              <TableHead>Факт початок</TableHead>
-                              <TableHead>План кінець</TableHead>
-                              <TableHead>Факт кінець</TableHead>
-                              <TableHead>Маршрут</TableHead>
-                              <TableHead>Транспорт</TableHead>
-                              <TableHead>Пасажири</TableHead>
+                              <TableHead className="font-semibold">План початок</TableHead>
+                              <TableHead className="font-semibold">Факт початок</TableHead>
+                              <TableHead className="font-semibold">План кінець</TableHead>
+                              <TableHead className="font-semibold">Факт кінець</TableHead>
+                              <TableHead className="font-semibold">Маршрут</TableHead>
+                              <TableHead className="font-semibold">Транспорт</TableHead>
+                              <TableHead className="font-semibold">Пасажири</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {schedule.trips.map((trip) => (
                               <TableRow
                                 key={trip.id}
-                                className={resolvedTripId === trip.id ? 'bg-muted/40' : undefined}
+                                className={`hover:bg-muted/30 transition-colors ${resolvedTripId === trip.id ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
                               >
-                                <TableCell>{formatDateTime(trip.plannedStartAt)}</TableCell>
-                                <TableCell>{formatDateTime(trip.startsAt)}</TableCell>
-                                <TableCell>{formatDateTime(trip.plannedEndsAt)}</TableCell>
-                                <TableCell>
-                                  {trip.endsAt ? formatDateTime(trip.endsAt) : '—'}
+                                <TableCell className="text-sm">{formatDateTime(trip.plannedStartAt)}</TableCell>
+                                <TableCell className="text-sm">{formatDateTime(trip.startsAt)}</TableCell>
+                                <TableCell className="text-sm">{formatDateTime(trip.plannedEndsAt)}</TableCell>
+                                <TableCell className="text-sm">
+                                  {trip.endsAt ? formatDateTime(trip.endsAt) : <span className="text-muted-foreground">—</span>}
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline">{trip.route.number}</Badge>
-                                    <Badge variant="secondary">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge variant="outline" className="font-mono">{trip.route.number}</Badge>
+                                    <Badge variant="secondary" className="text-xs">
                                       {directionLabels[trip.route.direction]}
                                     </Badge>
                                   </div>
                                 </TableCell>
-                                <TableCell>{trip.vehicle.fleetNumber}</TableCell>
-                                <TableCell>{trip.passengerCount ?? 0}</TableCell>
+                                <TableCell>
+                                  <span className="font-mono text-sm">{trip.vehicle.fleetNumber}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-medium">{trip.passengerCount ?? 0}</span>
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
                         </Table>
                       </div>
                     ) : (
-                      <EmptyState
-                        icon={Calendar}
-                        title="Рейсів не знайдено"
-                        description="На обрану дату немає призначених рейсів"
-                      />
+                      <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+                          <Calendar className="h-7 w-7 text-muted-foreground" />
+                        </div>
+                        <p className="font-medium text-muted-foreground">Рейсів не знайдено</p>
+                        <p className="text-sm text-muted-foreground/70 mt-1">На обрану дату немає призначених рейсів</p>
+                      </div>
                     )}
 
                     {/* Trip Stops */}
                     {selectedTrip && (
-                      <Card className="mt-6">
-                        <CardHeader>
-                          <CardTitle>Зупинки рейсу</CardTitle>
+                      <Card className="mt-6 shadow-sm border-primary/20">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="flex items-center gap-2.5 text-base">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                              <MapPin className="h-4 w-4 text-primary" />
+                            </div>
+                            Зупинки рейсу
+                          </CardTitle>
                           <CardDescription>Інтервали між зупинками</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-2 text-sm">
-                              <Badge variant="outline">Маршрут {selectedTrip.route.number}</Badge>
-                              <Badge variant="secondary">
+                              <Badge className="text-sm">Маршрут {selectedTrip.route.number}</Badge>
+                              <Badge variant="outline">
                                 {directionLabels[selectedTrip.route.direction]}
                               </Badge>
                               <span className="text-muted-foreground">
                                 {selectedTrip.transportType.name}
                               </span>
                             </div>
-                            <div className="rounded-md border max-h-[320px] overflow-auto">
+                            <div className="rounded-lg border max-h-[320px] overflow-auto">
                               <Table>
-                                <TableHeader>
+                                <TableHeader className="bg-muted/50 sticky top-0">
                                   <TableRow>
-                                    <TableHead>Зупинка</TableHead>
-                                    <TableHead>Координати</TableHead>
-                                    <TableHead>Інтервал до наступної</TableHead>
+                                    <TableHead className="font-semibold">Зупинка</TableHead>
+                                    <TableHead className="font-semibold">Координати</TableHead>
+                                    <TableHead className="font-semibold">До наступної</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {selectedTrip.stops.map((stop) => (
-                                    <TableRow key={stop.id}>
-                                      <TableCell>{stop.name}</TableCell>
+                                  {selectedTrip.stops.map((stop, index) => (
+                                    <TableRow key={stop.id} className="hover:bg-muted/30 transition-colors">
                                       <TableCell>
+                                        <div className="flex items-center gap-2">
+                                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                                            {index + 1}
+                                          </span>
+                                          <span className="font-medium">{stop.name}</span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-sm text-muted-foreground font-mono">
                                         {formatCoord(stop.lat)}, {formatCoord(stop.lon)}
                                       </TableCell>
                                       <TableCell>
-                                        {stop.minutesToNextStop != null
-                                          ? `${stop.minutesToNextStop} хв`
-                                          : '—'}
+                                        {stop.minutesToNextStop != null ? (
+                                          <Badge variant="outline">{stop.minutesToNextStop} хв</Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground text-sm">Кінцева</span>
+                                        )}
                                       </TableCell>
                                     </TableRow>
                                   ))}
@@ -716,42 +758,45 @@ function DriverPage() {
 
             {/* Active Trip Card */}
             {activeTrip && (
-              <Card className="border-success/50 bg-success/5">
-                <CardHeader>
+              <Card className="border-success/40 bg-gradient-to-br from-success/5 to-transparent shadow-sm hover:shadow-md transition-shadow duration-300">
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-success">Активний рейс</CardTitle>
-                      <CardDescription>Рейс в процесі виконання</CardDescription>
-                    </div>
-                    <Badge variant="success">Виконується</Badge>
+                    <CardTitle className="flex items-center gap-2.5 text-lg">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/15">
+                        <Navigation className="h-5 w-5 text-success" />
+                      </div>
+                      <span className="text-success">Активний рейс</span>
+                    </CardTitle>
+                    <Badge variant="success" className="animate-pulse">Виконується</Badge>
                   </div>
+                  <CardDescription className="mt-1">Рейс в процесі виконання</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Маршрут</p>
-                      <p className="font-medium">{activeTrip.routeNumber} • {directionLabels[activeTrip.direction]}</p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground mb-1">Маршрут</p>
+                      <p className="font-semibold">{activeTrip.routeNumber} • {directionLabels[activeTrip.direction]}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Транспорт</p>
-                      <p className="font-medium">{activeTrip.fleetNumber}</p>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground mb-1">Транспорт</p>
+                      <p className="font-semibold font-mono">{activeTrip.fleetNumber}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Початок</p>
-                      <p className="font-medium">{formatDateTime(activeTrip.actualStartsAt)}</p>
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground mb-1">Початок</p>
+                      <p className="font-semibold">{formatDateTime(activeTrip.actualStartsAt)}</p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Затримка</p>
-                      <p className="font-medium">
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <p className="text-xs text-muted-foreground mb-1">Затримка</p>
+                      <p className={`font-semibold ${activeTrip.startDelayMin && activeTrip.startDelayMin > 5 ? 'text-warning' : 'text-success'}`}>
                         {activeTrip.startDelayMin != null
                           ? `${activeTrip.startDelayMin > 0 ? '+' : ''}${Math.round(activeTrip.startDelayMin)} хв`
-                          : '—'}
+                          : 'Вчасно'}
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
                     <div className="flex-1 space-y-2">
-                      <Label htmlFor="finish-time">Час завершення (опційно)</Label>
+                      <Label htmlFor="finish-time" className="text-sm">Час завершення (опційно)</Label>
                       <Input
                         id="finish-time"
                         type="datetime-local"
@@ -764,6 +809,7 @@ function DriverPage() {
                         variant="destructive"
                         onClick={handleFinishTrip}
                         disabled={finishTripMutation.isPending}
+                        className="w-full sm:w-auto"
                       >
                         {finishTripMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         <Square className="mr-2 h-4 w-4" />
@@ -777,38 +823,45 @@ function DriverPage() {
 
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Scheduled Trips List */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Заплановані рейси</CardTitle>
-                  <CardDescription>Оберіть рейс для запуску</CardDescription>
+              <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2.5 text-lg">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+                      <Calendar className="h-5 w-5 text-blue-500" />
+                    </div>
+                    Заплановані рейси
+                  </CardTitle>
+                  <CardDescription className="mt-1">Оберіть рейс для запуску</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {scheduledTripsLoading ? (
                     <TableSkeleton rows={5} cols={5} />
                   ) : scheduledTrips && scheduledTrips.length > 0 ? (
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                       {scheduledTrips.map((trip) => (
                         <div
                           key={trip.id}
-                          className={`flex items-center justify-between p-4 rounded-lg border ${
+                          className={`flex items-center justify-between p-4 rounded-lg border transition-all duration-200 ${
                             trip.status === 'scheduled'
-                              ? 'border-border hover:border-primary/50 cursor-pointer'
+                              ? 'border-border hover:border-primary/50 hover:bg-muted/30'
                               : trip.status === 'in_progress'
-                              ? 'border-success/50 bg-success/5'
-                              : 'border-muted bg-muted/20'
+                              ? 'border-success/50 bg-gradient-to-r from-success/10 to-transparent'
+                              : 'border-muted bg-muted/20 opacity-60'
                           }`}
                         >
-                          <div className="space-y-1 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Badge>{trip.routeNumber}</Badge>
+                          <div className="space-y-2 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className="text-sm">{trip.routeNumber}</Badge>
                               <Badge variant="outline">{directionLabels[trip.direction]}</Badge>
                               <TripStatusBadge status={trip.status} />
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              Транспорт: {trip.fleetNumber} • {trip.transportType}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                              <span className="font-mono">{trip.fleetNumber || 'Не призначено'}</span>
+                              <span>•</span>
+                              <span>{trip.transportType}</span>
                             </div>
-                            <div className="text-sm">
-                              <span className="text-muted-foreground">Плановий час:</span>{' '}
+                            <div className="flex items-center gap-2 text-sm">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                               <span className="font-medium">
                                 {new Date(trip.plannedStartsAt).toLocaleTimeString('uk-UA', {
                                   hour: '2-digit',
@@ -816,7 +869,7 @@ function DriverPage() {
                                 })}
                                 {trip.plannedEndsAt && (
                                   <>
-                                    {' - '}
+                                    {' — '}
                                     {new Date(trip.plannedEndsAt).toLocaleTimeString('uk-UA', {
                                       hour: '2-digit',
                                       minute: '2-digit',
@@ -831,11 +884,13 @@ function DriverPage() {
                               onClick={() => handleStartTrip(trip.id)}
                               disabled={startTripMutation.isPending}
                               size="sm"
+                              className="ml-3 shrink-0"
                             >
-                              {startTripMutation.isPending && (
+                              {startTripMutation.isPending ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Play className="mr-2 h-4 w-4" />
                               )}
-                              <Play className="mr-2 h-4 w-4" />
                               Почати
                             </Button>
                           )}
@@ -843,28 +898,32 @@ function DriverPage() {
                       ))}
                     </div>
                   ) : (
-                    <EmptyState
-                      icon={Calendar}
-                      title="Немає запланованих рейсів"
-                      description="Диспетчер ще не створив рейси для вас"
-                    />
+                    <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-lg">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+                        <Calendar className="h-7 w-7 text-muted-foreground" />
+                      </div>
+                      <p className="font-medium text-muted-foreground">Немає запланованих рейсів</p>
+                      <p className="text-sm text-muted-foreground/70 mt-1">Диспетчер ще не створив рейси для вас</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
 
               {/* Passenger Count */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    <CardTitle>Кількість пасажирів</CardTitle>
-                  </div>
-                  <CardDescription>Введення пасажиропотоку за рейс</CardDescription>
+              <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2.5 text-lg">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10">
+                      <Users className="h-5 w-5 text-amber-500" />
+                    </div>
+                    Кількість пасажирів
+                  </CardTitle>
+                  <CardDescription className="mt-1">Введення пасажиропотоку за рейс</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Рейс</Label>
+                      <Label className="text-sm">Рейс</Label>
                       <Select
                         value={resolvedPassengerTripId || undefined}
                         onValueChange={(value) => setPassengerTripId(value)}
@@ -884,19 +943,19 @@ function DriverPage() {
 
                     {selectedPassengerTrip && (
                       <>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label>Маршрут</Label>
-                            <Input value={selectedPassengerTrip.route.number} readOnly />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="p-3 rounded-lg bg-muted/50">
+                            <p className="text-xs text-muted-foreground mb-1">Маршрут</p>
+                            <p className="font-semibold">{selectedPassengerTrip.route.number}</p>
                           </div>
-                          <div className="space-y-2">
-                            <Label>Транспорт</Label>
-                            <Input value={selectedPassengerTrip.vehicle.fleetNumber} readOnly />
+                          <div className="p-3 rounded-lg bg-muted/50">
+                            <p className="text-xs text-muted-foreground mb-1">Транспорт</p>
+                            <p className="font-semibold font-mono">{selectedPassengerTrip.vehicle.fleetNumber}</p>
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          <Label htmlFor="passenger-count">Кількість пасажирів *</Label>
+                          <Label htmlFor="passenger-count" className="text-sm">Кількість пасажирів *</Label>
                           <Input
                             id="passenger-count"
                             type="number"
@@ -904,6 +963,7 @@ function DriverPage() {
                             value={passengerCount}
                             onChange={(e) => setPassengerCount(e.target.value)}
                             placeholder="Введіть кількість"
+                            className="text-lg font-semibold"
                           />
                         </div>
 
@@ -915,6 +975,7 @@ function DriverPage() {
                             passengerCount === ''
                           }
                           className="w-full"
+                          size="lg"
                         >
                           {passengerCountMutation.isPending && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -922,6 +983,15 @@ function DriverPage() {
                           Зберегти
                         </Button>
                       </>
+                    )}
+
+                    {!selectedPassengerTrip && (
+                      <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed rounded-lg">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                          <Users className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">Оберіть рейс для введення даних</p>
+                      </div>
                     )}
                   </div>
                 </CardContent>

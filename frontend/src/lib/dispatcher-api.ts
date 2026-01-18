@@ -23,6 +23,13 @@ export interface DispatcherScheduleListItem {
   intervalMin: number;
   vehicleId: number | null;
   fleetNumber: string | null;
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
 }
 
 export interface DispatcherScheduleStop {
@@ -84,9 +91,11 @@ export interface DispatcherAssignment {
 export interface DispatcherActiveTrip {
   id: number;
   routeNumber: string;
-  fleetNumber: string;
-  driverName: string;
-  startsAt: string;
+  fleetNumber: string | null;
+  fullName: string;
+  plannedStartsAt: string;
+  actualStartsAt: string;
+  startDelayMin: number | null;
 }
 
 export interface DispatcherTrip {
@@ -115,15 +124,13 @@ export interface CreateTripPayload {
   plannedEndsAt?: string;
 }
 
-export interface GenerateDailyTripsPayload {
-  routeId: number;
-  vehicleId: number;
-  driverId: number;
-  date: string;
-  startTime: string;
-  endTime: string;
-  intervalMin: number;
-  tripDurationMin?: number;
+export interface DispatcherRouteDriver {
+  id: number;
+  fullName: string;
+  login: string;
+  phone: string;
+  fleetNumber: string;
+  assignedAt: string;
 }
 
 export interface DispatcherDashboard {
@@ -187,6 +194,13 @@ export interface CreateSchedulePayload {
   workStartTime: string;
   workEndTime: string;
   intervalMin: number;
+  monday?: boolean;
+  tuesday?: boolean;
+  wednesday?: boolean;
+  thursday?: boolean;
+  friday?: boolean;
+  saturday?: boolean;
+  sunday?: boolean;
 }
 
 export interface UpdateSchedulePayload {
@@ -199,6 +213,13 @@ export interface UpdateSchedulePayload {
   workStartTime?: string;
   workEndTime?: string;
   intervalMin?: number;
+  monday?: boolean;
+  tuesday?: boolean;
+  wednesday?: boolean;
+  thursday?: boolean;
+  friday?: boolean;
+  saturday?: boolean;
+  sunday?: boolean;
 }
 
 export interface AssignDriverPayload {
@@ -218,6 +239,10 @@ export function getDispatcherDashboard() {
 
 export function listDispatcherRoutes() {
   return apiGet<DispatcherRoute[]>('/dispatcher/routes');
+}
+
+export function listDispatcherDriversByRoute(routeId: number) {
+  return apiGet<DispatcherRouteDriver[]>(`/dispatcher/routes/${routeId}/drivers`);
 }
 
 export function listDispatcherSchedules() {
@@ -291,10 +316,6 @@ export function listDispatcherTrips(status?: string) {
 
 export function createDispatcherTrip(payload: CreateTripPayload) {
   return apiPost<{ id: number }>('/dispatcher/trips', payload);
-}
-
-export function generateDispatcherDailyTrips(payload: GenerateDailyTripsPayload) {
-  return apiPost<{ count: number }>('/dispatcher/trips/generate', payload);
 }
 
 export function cancelDispatcherTrip(id: number) {

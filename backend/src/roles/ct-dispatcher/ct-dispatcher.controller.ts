@@ -12,7 +12,7 @@ import {
 import { CtDispatcherService } from './ct-dispatcher.service';
 import { AssignDriverDto } from './dto/assign-driver.dto';
 import { CreateDispatcherScheduleDto } from './dto/create-schedule.dto';
-import { CreateTripDto, GenerateDailyTripsDto } from './dto/create-trip.dto';
+import { CreateTripDto } from './dto/create-trip.dto';
 import { DetectDeviationDto } from './dto/deviation.dto';
 import { UpdateDispatcherScheduleDto } from './dto/update-schedule.dto';
 
@@ -73,6 +73,11 @@ export class CtDispatcherController {
     return this.ctDispatcherService.getRoutePoints(routeId);
   }
 
+  @Get('routes/:routeId/drivers')
+  listDriversByRoute(@Param('routeId', ParseIntPipe) routeId: number) {
+    return this.ctDispatcherService.listDriversByRoute(routeId);
+  }
+
   @Get('drivers')
   listDrivers() {
     return this.ctDispatcherService.listDrivers();
@@ -123,11 +128,6 @@ export class CtDispatcherController {
         ? new Date(payload.plannedEndsAt)
         : undefined,
     });
-  }
-
-  @Post('trips/generate')
-  generateDailyTrips(@Body() payload: GenerateDailyTripsDto) {
-    return this.ctDispatcherService.generateDailyTrips(payload);
   }
 
   @Delete('trips/:id')

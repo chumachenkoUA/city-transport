@@ -6,7 +6,7 @@ export const Route = createFileRoute('/passenger')({
 
 function PassengerLayout() {
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container mx-auto py-8 px-4 max-w-7xl">
       <Outlet />
     </div>
   )

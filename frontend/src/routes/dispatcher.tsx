@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -44,6 +45,7 @@ import {
   listDispatcherAssignments,
   listDispatcherDeviations,
   listDispatcherDrivers,
+  listDispatcherDriversByRoute,
   listDispatcherRoutes,
   listDispatcherSchedules,
   listDispatcherVehicles,
@@ -51,7 +53,6 @@ import {
   getDispatcherDashboard,
   listDispatcherTrips,
   createDispatcherTrip,
-  generateDispatcherDailyTrips,
   cancelDispatcherTrip,
   deleteDispatcherTrip,
   type DispatcherDirection,
@@ -96,6 +97,15 @@ function DispatcherPage() {
   const [createStartTime, setCreateStartTime] = useState('')
   const [createEndTime, setCreateEndTime] = useState('')
   const [createInterval, setCreateInterval] = useState('')
+  const [createDays, setCreateDays] = useState({
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+    sunday: false,
+  })
 
   // Schedule update form
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null)
@@ -104,6 +114,15 @@ function DispatcherPage() {
   const [updateStartTime, setUpdateStartTime] = useState<string | null>(null)
   const [updateEndTime, setUpdateEndTime] = useState<string | null>(null)
   const [updateInterval, setUpdateInterval] = useState<string | null>(null)
+  const [updateDays, setUpdateDays] = useState<{
+    monday?: boolean;
+    tuesday?: boolean;
+    wednesday?: boolean;
+    thursday?: boolean;
+    friday?: boolean;
+    saturday?: boolean;
+    sunday?: boolean;
+  } | null>(null)
 
   // Assignment form
   const [selectedDriverId, setSelectedDriverId] = useState('')
@@ -132,15 +151,6 @@ function DispatcherPage() {
 
   // Assignments filters
   const [assignmentSearch, setAssignmentSearch] = useState('')
-
-  // Generate trips form
-  const [genRouteId, setGenRouteId] = useState('')
-  const [genVehicleId, setGenVehicleId] = useState('')
-  const [genDriverId, setGenDriverId] = useState('')
-  const [genDate, setGenDate] = useState('')
-  const [genStartTime, setGenStartTime] = useState('')
-  const [genEndTime, setGenEndTime] = useState('')
-  const [genInterval, setGenInterval] = useState('')
 
   // Queries
   const { data: dashboard, isLoading: dashboardLoading } = useQuery({
@@ -221,10 +231,12 @@ function DispatcherPage() {
       setUpdateStartTime(null)
       setUpdateEndTime(null)
       setUpdateInterval(null)
+      setUpdateDays(null)
       return
     }
     setUpdateRouteId(String(selectedSchedule.routeId))
     setUpdateVehicleId(selectedSchedule.vehicleId ? String(selectedSchedule.vehicleId) : '')
+    setUpdateDays(null)
   }, [selectedSchedule?.id])
 
   // Filtered vehicles
@@ -238,16 +250,23 @@ function DispatcherPage() {
     return vehicles.filter((v) => v.routeId === Number(updateRouteId))
   }, [vehicles, updateRouteId])
 
+  // Get drivers assigned to selected route for trip creation
+  const { data: tripRouteDrivers } = useQuery({
+    queryKey: ['dispatcher-route-drivers', tripRouteId],
+    queryFn: () => listDispatcherDriversByRoute(Number(tripRouteId)),
+    enabled: !!tripRouteId,
+  })
+
+  // Reset driver selection when route changes
+  useEffect(() => {
+    setTripDriverId('')
+  }, [tripRouteId])
+
   // Get vehicle assigned to selected driver
   const selectedDriverAssignment = useMemo(() => {
-    if (!tripDriverId || !assignments) return null
-    return assignments.find((a) => a.driverId === Number(tripDriverId)) ?? null
-  }, [tripDriverId, assignments])
-
-  const genVehicles = useMemo(() => {
-    if (!vehicles || !genRouteId) return vehicles
-    return vehicles.filter((v) => v.routeId === Number(genRouteId))
-  }, [vehicles, genRouteId])
+    if (!tripDriverId || !tripRouteDrivers) return null
+    return tripRouteDrivers.find((d) => d.id === Number(tripDriverId)) ?? null
+  }, [tripDriverId, tripRouteDrivers])
 
   const selectedAssignmentVehicle = useMemo(() => {
     if (!vehicles?.length || !selectedVehicleId) return null
@@ -370,6 +389,15 @@ function DispatcherPage() {
       setCreateStartTime('')
       setCreateEndTime('')
       setCreateInterval('')
+      setCreateDays({
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
+        saturday: false,
+        sunday: false,
+      })
       toast.success('Розклад створено успішно!')
     },
     onError: (error: Error) => {
@@ -387,6 +415,7 @@ function DispatcherPage() {
       setUpdateStartTime(null)
       setUpdateEndTime(null)
       setUpdateInterval(null)
+      setUpdateDays(null)
       toast.success('Розклад оновлено успішно!')
     },
     onError: (error: Error) => {
@@ -454,25 +483,6 @@ function DispatcherPage() {
     },
   })
 
-  const generateTripsMutation = useMutation({
-    mutationFn: generateDispatcherDailyTrips,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['dispatcher-trips'] })
-      queryClient.invalidateQueries({ queryKey: ['dispatcher-dashboard'] })
-      setGenRouteId('')
-      setGenVehicleId('')
-      setGenDriverId('')
-      setGenDate('')
-      setGenStartTime('')
-      setGenEndTime('')
-      setGenInterval('')
-      toast.success(`Створено ${data.count} рейсів!`)
-    },
-    onError: (error: Error) => {
-      toast.error('Помилка генерації рейсів', { description: error.message })
-    },
-  })
-
   const cancelTripMutation = useMutation({
     mutationFn: cancelDispatcherTrip,
     onSuccess: () => {
@@ -509,6 +519,7 @@ function DispatcherPage() {
       workStartTime: createStartTime,
       workEndTime: createEndTime,
       intervalMin: Number(createInterval),
+      ...createDays,
     })
   }
 
@@ -523,6 +534,9 @@ function DispatcherPage() {
     if (updateStartTime) payload.workStartTime = updateStartTime
     if (updateEndTime) payload.workEndTime = updateEndTime
     if (updateInterval) payload.intervalMin = Number(updateInterval)
+    if (updateDays) {
+      Object.assign(payload, updateDays)
+    }
 
     if (Object.keys(payload).length === 0) {
       toast.error('Змініть хоча б одне поле')
@@ -572,21 +586,6 @@ function DispatcherPage() {
     })
   }
 
-  const handleGenerateTrips = () => {
-    if (!genRouteId || !genVehicleId || !genDriverId || !genDate || !genStartTime || !genEndTime || !genInterval) {
-      toast.error('Заповніть всі обов\'язкові поля')
-      return
-    }
-    generateTripsMutation.mutate({
-      routeId: Number(genRouteId),
-      vehicleId: Number(genVehicleId),
-      driverId: Number(genDriverId),
-      date: genDate,
-      startTime: genStartTime,
-      endTime: genEndTime,
-      intervalMin: Number(genInterval),
-    })
-  }
 
   // Dashboard stats
   const dashboardStats = useMemo(() => {
@@ -673,21 +672,49 @@ function DispatcherPage() {
                 <CardContent>
                   {activeTrips && activeTrips.length > 0 ? (
                     <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                      {activeTrips.map((trip) => (
-                        <div
-                          key={trip.id}
-                          className="flex items-center justify-between p-3 rounded-lg border"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <Badge>{trip.routeNumber}</Badge>
-                              <Badge variant="outline">{trip.fleetNumber}</Badge>
+                      {activeTrips.map((trip) => {
+                        const delay = trip.startDelayMin
+                        let delayVariant: 'secondary' | 'success' | 'warning' | 'destructive' = 'secondary'
+                        let delayText = '—'
+
+                        if (delay !== null) {
+                          if (delay <= 2) {
+                            delayVariant = 'success'
+                            delayText = 'Вчасно'
+                          } else if (delay <= 5) {
+                            delayVariant = 'warning'
+                            delayText = `+${Math.round(delay)} хв`
+                          } else {
+                            delayVariant = 'destructive'
+                            delayText = `+${Math.round(delay)} хв`
+                          }
+                        }
+
+                        const startTime = trip.actualStartsAt
+                          ? new Date(trip.actualStartsAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
+                          : '—'
+
+                        return (
+                          <div
+                            key={trip.id}
+                            className="flex items-center justify-between p-3 rounded-lg border"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Badge>{trip.routeNumber}</Badge>
+                                {trip.fleetNumber && (
+                                  <Badge variant="outline">{trip.fleetNumber}</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{trip.fullName}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">{trip.driverName}</p>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-sm font-medium">{startTime}</span>
+                              <Badge variant={delayVariant}>{delayText}</Badge>
+                            </div>
                           </div>
-                          <Badge variant="success">Активний</Badge>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <EmptyState
@@ -765,16 +792,27 @@ function DispatcherPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="trip-driver">Водій *</Label>
-                    <Select value={tripDriverId} onValueChange={setTripDriverId}>
+                    <Select
+                      value={tripDriverId}
+                      onValueChange={setTripDriverId}
+                      disabled={!tripRouteId}
+                    >
                       <SelectTrigger id="trip-driver">
-                        <SelectValue placeholder="Оберіть водія" />
+                        <SelectValue
+                          placeholder={tripRouteId ? 'Оберіть водія' : 'Спочатку оберіть маршрут'}
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {drivers?.map((driver) => (
+                        {tripRouteDrivers?.map((driver) => (
                           <SelectItem key={driver.id} value={String(driver.id)}>
-                            {driver.fullName} • {driver.login}
+                            {driver.fullName} • {driver.fleetNumber}
                           </SelectItem>
                         ))}
+                        {tripRouteId && tripRouteDrivers?.length === 0 && (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            Немає водіїв на цьому маршруті
+                          </div>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -786,11 +824,6 @@ function DispatcherPage() {
                       readOnly
                       className="bg-muted cursor-not-allowed"
                     />
-                    {tripDriverId && !selectedDriverAssignment && (
-                      <p className="text-sm text-destructive">
-                        Водій не має призначеного транспорту
-                      </p>
-                    )}
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
@@ -826,121 +859,6 @@ function DispatcherPage() {
                 </div>
               </FormSection>
 
-              {/* Generate Daily Trips */}
-              <FormSection
-                title="Генерація рейсів"
-                description="Створити всі рейси на день за інтервалом"
-              >
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="gen-route">Маршрут *</Label>
-                    <Select value={genRouteId} onValueChange={setGenRouteId}>
-                      <SelectTrigger id="gen-route">
-                        <SelectValue placeholder="Оберіть маршрут" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {routes?.map((route) => (
-                          <SelectItem key={route.id} value={String(route.id)}>
-                            {route.number} • {directionLabels[route.direction]} •{' '}
-                            {route.transportTypeName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="gen-vehicle">Транспорт *</Label>
-                    <Select
-                      value={genVehicleId}
-                      onValueChange={setGenVehicleId}
-                      disabled={!genRouteId}
-                    >
-                      <SelectTrigger id="gen-vehicle">
-                        <SelectValue
-                          placeholder={genRouteId ? 'Оберіть транспорт' : 'Спочатку оберіть маршрут'}
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {genVehicles?.map((vehicle) => (
-                          <SelectItem key={vehicle.id} value={String(vehicle.id)}>
-                            {vehicle.fleetNumber}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="gen-driver">Водій *</Label>
-                    <Select value={genDriverId} onValueChange={setGenDriverId}>
-                      <SelectTrigger id="gen-driver">
-                        <SelectValue placeholder="Оберіть водія" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {drivers?.map((driver) => (
-                          <SelectItem key={driver.id} value={String(driver.id)}>
-                            {driver.fullName} • {driver.login}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="gen-date">Дата *</Label>
-                    <Input
-                      id="gen-date"
-                      type="date"
-                      value={genDate}
-                      onChange={(e) => setGenDate(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="gen-start">Початок роботи *</Label>
-                      <Input
-                        id="gen-start"
-                        type="time"
-                        value={genStartTime}
-                        onChange={(e) => setGenStartTime(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gen-end">Кінець роботи *</Label>
-                      <Input
-                        id="gen-end"
-                        type="time"
-                        value={genEndTime}
-                        onChange={(e) => setGenEndTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="gen-interval">Інтервал (хв) *</Label>
-                    <Input
-                      id="gen-interval"
-                      type="number"
-                      min="1"
-                      value={genInterval}
-                      onChange={(e) => setGenInterval(e.target.value)}
-                      placeholder="15"
-                    />
-                  </div>
-
-                  <Button
-                    onClick={handleGenerateTrips}
-                    disabled={generateTripsMutation.isPending}
-                    className="w-full"
-                  >
-                    {generateTripsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Clock className="mr-2 h-4 w-4" />
-                    Згенерувати рейси
-                  </Button>
-                </div>
-              </FormSection>
             </div>
 
             {/* Trips List */}
@@ -1229,6 +1147,37 @@ function DispatcherPage() {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label>Дні тижня</Label>
+                    <div className="flex flex-wrap gap-4">
+                      {[
+                        { key: 'monday', label: 'Пн' },
+                        { key: 'tuesday', label: 'Вт' },
+                        { key: 'wednesday', label: 'Ср' },
+                        { key: 'thursday', label: 'Чт' },
+                        { key: 'friday', label: 'Пт' },
+                        { key: 'saturday', label: 'Сб' },
+                        { key: 'sunday', label: 'Нд' },
+                      ].map(({ key, label }) => (
+                        <div key={key} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`create-${key}`}
+                            checked={createDays[key as keyof typeof createDays]}
+                            onCheckedChange={(checked) =>
+                              setCreateDays((prev) => ({ ...prev, [key]: !!checked }))
+                            }
+                          />
+                          <Label
+                            htmlFor={`create-${key}`}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <Button
                     onClick={handleCreateSchedule}
                     disabled={createScheduleMutation.isPending}
@@ -1453,6 +1402,44 @@ function DispatcherPage() {
                           value={displayUpdateInterval}
                           onChange={(e) => setUpdateInterval(e.target.value)}
                         />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Дні тижня</Label>
+                        <div className="flex flex-wrap gap-4">
+                          {[
+                            { key: 'monday', label: 'Пн' },
+                            { key: 'tuesday', label: 'Вт' },
+                            { key: 'wednesday', label: 'Ср' },
+                            { key: 'thursday', label: 'Чт' },
+                            { key: 'friday', label: 'Пт' },
+                            { key: 'saturday', label: 'Сб' },
+                            { key: 'sunday', label: 'Нд' },
+                          ].map(({ key, label }) => {
+                            const dayKey = key as keyof typeof updateDays
+                            const isChecked = updateDays?.[dayKey] ?? selectedSchedule?.[dayKey] ?? false
+                            return (
+                              <div key={key} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`update-${key}`}
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) =>
+                                    setUpdateDays((prev) => ({
+                                      ...prev,
+                                      [key]: !!checked,
+                                    }))
+                                  }
+                                />
+                                <Label
+                                  htmlFor={`update-${key}`}
+                                  className="text-sm font-normal cursor-pointer"
+                                >
+                                  {label}
+                                </Label>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
 
                       <Button

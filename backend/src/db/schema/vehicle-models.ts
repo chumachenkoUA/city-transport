@@ -1,5 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, bigserial, varchar, integer, bigint, check } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  bigserial,
+  varchar,
+  integer,
+  bigint,
+  check,
+} from 'drizzle-orm/pg-core';
 import { transportTypes } from './transport-types';
 
 export const vehicleModels = pgTable(

@@ -20,6 +20,9 @@ export const routes = pgTable(
     number: varchar('number', { length: 10 }).notNull(),
     direction: varchar('direction', { length: 10 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
+    // Self-reference to pair forward ↔ reverse routes
+    // Allows vehicle assigned to one direction to be used for the paired direction
+    pairedRouteId: bigint('paired_route_id', { mode: 'number' }),
   },
   (table) => ({
     routesTransportTypeNumberDirectionUnique: unique(

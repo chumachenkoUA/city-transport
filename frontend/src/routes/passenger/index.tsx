@@ -120,14 +120,14 @@ function PassengerDashboard() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header with greeting */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
             {profile ? `Вітаємо, ${profile.fullName.split(' ')[0]}!` : 'Пасажирський кабінет'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             Керуйте своїми поїздками, карткою та штрафами в одному місці.
           </p>
         </div>
@@ -135,26 +135,26 @@ function PassengerDashboard() {
 
       {/* Profile Card */}
       {profile && (
-        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
-          <CardContent className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <User className="h-7 w-7 text-primary" />
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardContent className="flex flex-col sm:flex-row items-start sm:items-center gap-5 p-5">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 ring-2 ring-primary/10">
+              <User className="h-8 w-8 text-primary" />
             </div>
-            <div className="flex-1 grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">{profile.fullName}</span>
+            <div className="flex-1 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="flex items-center gap-2.5">
+                <User className="h-4 w-4 text-primary/70" />
+                <span className="text-sm font-semibold">{profile.fullName}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2.5">
+                <Mail className="h-4 w-4 text-muted-foreground/70" />
                 <span className="text-sm text-muted-foreground">{profile.email}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2.5">
+                <Phone className="h-4 w-4 text-muted-foreground/70" />
                 <span className="text-sm text-muted-foreground">{profile.phone}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2.5">
+                <CalendarDays className="h-4 w-4 text-muted-foreground/70" />
                 <span className="text-sm text-muted-foreground">
                   З {new Date(profile.registeredAt).toLocaleDateString('uk-UA')}
                 </span>
@@ -166,35 +166,40 @@ function PassengerDashboard() {
 
       {/* Top Section: Card & Balance */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="col-span-full lg:col-span-2 overflow-hidden relative border-primary/20 bg-gradient-to-br from-card to-primary/5">
-          <div className="absolute top-0 right-0 p-3 opacity-10 pointer-events-none">
-            <CreditCard className="w-32 h-32" />
+        <Card className="col-span-full lg:col-span-2 overflow-hidden relative border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 shadow-sm hover:shadow-lg transition-all duration-300">
+          <div className="absolute top-0 right-0 p-3 opacity-5 pointer-events-none">
+            <CreditCard className="w-36 h-36" />
           </div>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-primary" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2.5 text-lg">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
               Транспортна картка
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="mt-1">
               Інформація про баланс та поповнення
             </CardDescription>
           </CardHeader>
           <CardContent>
             {!card ? (
-              <div className="text-center py-4">
+              <div className="text-center py-8">
+                <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-full bg-muted mb-4">
+                  <CreditCard className="h-8 w-8 text-muted-foreground" />
+                </div>
                 <p className="text-muted-foreground mb-4">У вас немає активної картки</p>
                 <Button variant="outline">Отримати картку</Button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Номер картки</p>
-                    <p className="text-2xl font-mono font-bold tracking-wider">{card.cardNumber}</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Номер картки</p>
+                    <p className="text-2xl font-mono font-bold tracking-widest">{card.cardNumber}</p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Баланс</p>
-                    <p className="text-4xl font-bold text-primary">{card.balance} <span className="text-lg font-normal text-muted-foreground">грн</span></p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Баланс</p>
+                    <p className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">{card.balance} <span className="text-lg font-normal text-muted-foreground">грн</span></p>
                   </div>
                   <div className="w-full sm:w-auto">
                      <TopUpDialog card={card} />
@@ -227,28 +232,28 @@ function PassengerDashboard() {
           </CardContent>
         </Card>
 
-        {/* Stats Card (Example) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-               <History className="h-5 w-5 text-blue-500" />
+        {/* Stats Card */}
+        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2.5 text-lg">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+                <History className="h-5 w-5 text-blue-500" />
+              </div>
                Статистика
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Всього поїздок</span>
-                <span className="font-bold text-lg">{trips?.length || 0}</span>
+          <CardContent className="space-y-0">
+             <div className="flex justify-between items-center py-4 border-b">
+                <span className="text-muted-foreground text-sm">Всього поїздок</span>
+                <span className="font-bold text-2xl">{trips?.length || 0}</span>
              </div>
-             <Separator />
-             <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Всього штрафів</span>
-                <span className="font-bold text-lg">{fines?.length || 0}</span>
+             <div className="flex justify-between items-center py-4 border-b">
+                <span className="text-muted-foreground text-sm">Всього штрафів</span>
+                <span className="font-bold text-2xl">{fines?.length || 0}</span>
              </div>
-             <Separator />
-             <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Очікують сплати</span>
-                <span className="font-bold text-lg text-destructive">
+             <div className="flex justify-between items-center py-4">
+                <span className="text-muted-foreground text-sm">Очікують сплати</span>
+                <span className={`font-bold text-2xl ${(fines?.filter(f => f.status === 'Очікує сплати').length || 0) > 0 ? 'text-destructive' : ''}`}>
                   {fines?.filter(f => f.status === 'Очікує сплати').length || 0}
                 </span>
              </div>
@@ -259,45 +264,50 @@ function PassengerDashboard() {
       {/* Main Content: Trips and Fines */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Trips History - Takes up 2 columns */}
-        <Card className="lg:col-span-2 h-fit">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Ticket className="h-5 w-5 text-emerald-500" />
+        <Card className="lg:col-span-2 h-fit shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2.5 text-lg">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+                <Ticket className="h-5 w-5 text-emerald-500" />
+              </div>
               Історія поїздок
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="mt-1">
               Останні ваші поїздки громадським транспортом
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border max-h-[500px] overflow-auto">
+            <div className="rounded-lg border max-h-[500px] overflow-auto">
               <Table>
                 <TableHeader className="bg-muted/50 sticky top-0">
                   <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Маршрут</TableHead>
-                    <TableHead>Транспорт</TableHead>
-                    <TableHead className="text-right">Вартість</TableHead>
+                    <TableHead className="font-semibold">Дата</TableHead>
+                    <TableHead className="font-semibold">Маршрут</TableHead>
+                    <TableHead className="font-semibold">Транспорт</TableHead>
+                    <TableHead className="text-right font-semibold">Вартість</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {trips?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center h-32 text-muted-foreground">
-                        Історія поїздок порожня
+                      <TableCell colSpan={4} className="text-center h-40 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <Ticket className="h-8 w-8 text-muted-foreground/50" />
+                          <span>Історія поїздок порожня</span>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
                     trips?.map((trip) => (
-                      <TableRow key={trip.id}>
-                        <TableCell className="font-medium">
+                      <TableRow key={trip.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="font-medium text-sm">
                           {new Date(trip.startedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{trip.routeNumber}</Badge>
+                          <Badge variant="outline" className="font-mono">{trip.routeNumber}</Badge>
                         </TableCell>
-                        <TableCell>{trip.transportType}</TableCell>
-                        <TableCell className="text-right font-medium">-{trip.cost} грн</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{trip.transportType}</TableCell>
+                        <TableCell className="text-right font-semibold text-red-500/80">-{trip.cost} грн</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -308,21 +318,26 @@ function PassengerDashboard() {
         </Card>
 
         {/* Fines Section - Takes up 1 column */}
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
+        <Card className="h-fit shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2.5 text-lg">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-destructive/10">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+              </div>
               Штрафи
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="mt-1">
               Статус ваших штрафів та оплата
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {fines?.length === 0 ? (
-               <div className="flex flex-col items-center justify-center h-32 text-muted-foreground border-2 border-dashed rounded-lg">
-                 <CheckCircle2 className="h-8 w-8 mb-2 text-emerald-500" />
-                 <p>У вас немає штрафів</p>
+               <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20">
+                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 mb-3">
+                   <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+                 </div>
+                 <p className="font-medium">У вас немає штрафів</p>
+                 <p className="text-xs text-muted-foreground/70 mt-1">Так тримати!</p>
                </div>
             ) : (
               <div className="space-y-4 max-h-[500px] overflow-auto pr-1">
@@ -336,13 +351,15 @@ function PassengerDashboard() {
       </div>
 
       {/* Complaint/Suggestion Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquarePlus className="h-5 w-5 text-blue-500" />
+      <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2.5 text-lg">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+              <MessageSquarePlus className="h-5 w-5 text-blue-500" />
+            </div>
             Скарга або пропозиція
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="mt-1">
             Маєте зауваження щодо роботи транспорту? Напишіть нам!
           </CardDescription>
         </CardHeader>
@@ -361,35 +378,33 @@ function FineItem({ fine, card }: { fine: Fine, card: PassengerCard | null | und
   const isPaid = fine.status === 'Сплачено' || fine.status === 'Оплачено' || fine.status === 'PAID';
 
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 relative overflow-hidden">
-       {isPending && <div className="absolute left-0 top-0 bottom-0 w-1 bg-destructive"></div>}
-       {isPaid && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>}
-       
-       <div className="flex justify-between items-start mb-2 pl-2">
-          <span className="font-mono text-xs text-muted-foreground">#{fine.id}</span>
-          <Badge variant={isPending ? 'destructive' : isPaid ? 'secondary' : 'outline'}>
+    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4 relative overflow-hidden hover:shadow-md transition-shadow duration-200">
+       {isPending && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-destructive to-destructive/70 rounded-l-xl"></div>}
+       {isPaid && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-emerald-500 to-emerald-500/70 rounded-l-xl"></div>}
+
+       <div className="flex justify-between items-start mb-3 pl-2">
+          <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">#{fine.id}</span>
+          <Badge variant={isPending ? 'destructive' : isPaid ? 'secondary' : 'outline'} className="text-xs">
             {fine.status}
           </Badge>
        </div>
-       
+
        <div className="pl-2 space-y-3">
           <div>
-            <p className="text-2xl font-bold">{fine.amount} грн</p>
-            <p className="text-sm text-muted-foreground">{fine.reason}</p>
+            <p className="text-2xl font-bold">{fine.amount} <span className="text-base font-normal text-muted-foreground">грн</span></p>
+            <p className="text-sm text-muted-foreground mt-1">{fine.reason}</p>
           </div>
-          
-          <p className="text-xs text-muted-foreground">
+
+          <p className="text-xs text-muted-foreground/80">
              {new Date(fine.issuedAt).toLocaleString('uk-UA')}
           </p>
 
-          <div className="flex gap-2 pt-2">
-            {isPending && (
-              <>
-                <PayFineDialog fine={fine} card={card} />
-                <AppealSheet fineId={fine.id} />
-              </>
-            )}
-          </div>
+          {isPending && (
+            <div className="flex gap-2 pt-2">
+              <PayFineDialog fine={fine} card={card} />
+              <AppealSheet fineId={fine.id} />
+            </div>
+          )}
        </div>
     </div>
   )

@@ -133,7 +133,9 @@ export async function ensureSeedData(): Promise<SeedData> {
           [login],
         );
         if (!roleExists.rows[0]) {
-          await client.query(`CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`);
+          await client.query(
+            `CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`,
+          );
           await client.query(`GRANT ct_passenger_role TO ${login}`);
         }
       }
@@ -146,7 +148,9 @@ export async function ensureSeedData(): Promise<SeedData> {
           [login],
         );
         if (!roleExists.rows[0]) {
-          await client.query(`CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`);
+          await client.query(
+            `CREATE ROLE ${login} LOGIN PASSWORD '${PASSWORD}'`,
+          );
           await client.query(`GRANT ct_driver_role TO ${login}`);
         }
       }

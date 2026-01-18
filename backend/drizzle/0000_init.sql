@@ -248,12 +248,14 @@ CREATE TABLE "route_stops" (
 -- Створюється: ct_municipality_role через municipality_api.create_route()
 -- direction: 'forward' (прямий) або 'reverse' (зворотній)
 -- UNIQUE(transport_type_id, number, direction) - один номер маршруту може мати 2 напрямки
+-- paired_route_id - зв'язок з парним маршрутом (forward ↔ reverse) для дозволу використання транспорту в обох напрямках
 CREATE TABLE "routes" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"transport_type_id" bigint NOT NULL,
 	"number" varchar(10) NOT NULL,
 	"direction" varchar(10) NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
+	"paired_route_id" bigint,
 	CONSTRAINT "routes_transport_type_number_direction_unique" UNIQUE("transport_type_id","number","direction"),
 	CONSTRAINT "routes_direction_check" CHECK ("direction" in ('forward', 'reverse'))
 );
@@ -536,6 +538,7 @@ ALTER TABLE "route_stops" ADD CONSTRAINT "route_stops_stop_id_stops_id_fk" FOREI
 ALTER TABLE "route_stops" ADD CONSTRAINT "route_stops_prev_route_stop_id_route_stops_id_fk" FOREIGN KEY ("prev_route_stop_id") REFERENCES "public"."route_stops"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "route_stops" ADD CONSTRAINT "route_stops_next_route_stop_id_route_stops_id_fk" FOREIGN KEY ("next_route_stop_id") REFERENCES "public"."route_stops"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "routes" ADD CONSTRAINT "routes_transport_type_id_transport_types_id_fk" FOREIGN KEY ("transport_type_id") REFERENCES "public"."transport_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "routes" ADD CONSTRAINT "routes_paired_route_id_routes_id_fk" FOREIGN KEY ("paired_route_id") REFERENCES "public"."routes"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "salary_payments" ADD CONSTRAINT "salary_payments_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "schedules" ADD CONSTRAINT "schedules_route_id_routes_id_fk" FOREIGN KEY ("route_id") REFERENCES "public"."routes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "schedules" ADD CONSTRAINT "schedules_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "public"."vehicles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -586,3 +589,71 @@ RETURNS text AS $$
   SELECT LPAD((total_minutes::int / 60 % 24)::text, 2, '0') || ':' ||
          LPAD((total_minutes::int % 60)::text, 2, '0');
 $$ LANGUAGE SQL IMMUTABLE;
+
+-- ============================================================================
+-- TRIGGERS
+-- ============================================================================
+
+-- Auto-pair routes (forward ↔ reverse) on INSERT/UPDATE
+-- Split into BEFORE (set own paired_route_id) and AFTER (update partner)
+
+-- BEFORE INSERT: Set paired_route_id for the new route
+CREATE OR REPLACE FUNCTION public.pair_routes_before_fn()
+RETURNS TRIGGER AS $$
+DECLARE
+  opposite_direction varchar(10);
+  paired_id bigint;
+BEGIN
+  -- Determine opposite direction
+  IF NEW.direction = 'forward' THEN
+    opposite_direction := 'reverse';
+  ELSIF NEW.direction = 'reverse' THEN
+    opposite_direction := 'forward';
+  ELSE
+    RETURN NEW;
+  END IF;
+
+  -- Find paired route (same number + transport_type, opposite direction)
+  SELECT id INTO paired_id
+  FROM public.routes
+  WHERE number = NEW.number
+    AND transport_type_id = NEW.transport_type_id
+    AND direction = opposite_direction
+  LIMIT 1;
+
+  -- Set paired_route_id for current route
+  IF paired_id IS NOT NULL THEN
+    NEW.paired_route_id := paired_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- AFTER INSERT: Update the paired route to point back
+CREATE OR REPLACE FUNCTION public.pair_routes_after_fn()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update paired route to point back (only if we have a paired route)
+  IF NEW.paired_route_id IS NOT NULL THEN
+    UPDATE public.routes
+    SET paired_route_id = NEW.id
+    WHERE id = NEW.paired_route_id
+      AND (paired_route_id IS NULL OR paired_route_id != NEW.id);
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER routes_auto_pair_before_trigger
+  BEFORE INSERT OR UPDATE OF number, direction, transport_type_id
+  ON public.routes
+  FOR EACH ROW
+  EXECUTE FUNCTION public.pair_routes_before_fn();
+
+CREATE TRIGGER routes_auto_pair_after_trigger
+  AFTER INSERT OR UPDATE OF number, direction, transport_type_id
+  ON public.routes
+  FOR EACH ROW
+  EXECUTE FUNCTION public.pair_routes_after_fn();

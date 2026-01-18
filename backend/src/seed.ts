@@ -543,6 +543,7 @@ export async function seedDatabase() {
       }
     }
     console.log(`✅ Seeded ${routeCounter} Routes.`);
+    // Note: paired_route_id is set automatically by routes_auto_pair_trigger
 
     // H. Create Users & Roles
     console.log('👥 Seeding Users...');
@@ -571,148 +572,211 @@ export async function seedDatabase() {
     const driverSeeds = [
       {
         login: 'driver1',
-        email: 'driver1@ct.com',
-        phone: '+380991112233',
-        fullName: 'Petrenko Petro',
-        driverLicenseNumber: 'ABC123456',
+        email: 'petro.kovalenko@ct.lviv.ua',
+        phone: '+380671234567',
+        fullName: 'Коваленко Петро Іванович',
+        driverLicenseNumber: 'ВАА123456',
         licenseCategories: ['B', 'D'],
-        passportData: { series: 'AA', number: '123456' },
+        passportData: { series: 'КА', number: '123456' },
       },
       {
         login: 'driver2',
-        email: 'driver2@ct.com',
-        phone: '+380991112234',
-        fullName: 'Kovalchuk Andrii',
-        driverLicenseNumber: 'DEF654321',
+        email: 'andrii.shevchenko@ct.lviv.ua',
+        phone: '+380672345678',
+        fullName: 'Шевченко Андрій Миколайович',
+        driverLicenseNumber: 'ВАВ234567',
         licenseCategories: ['B', 'D'],
-        passportData: { series: 'AB', number: '234567' },
+        passportData: { series: 'КВ', number: '234567' },
       },
       {
         login: 'driver3',
-        email: 'driver3@ct.com',
-        phone: '+380991112235',
-        fullName: 'Shevchenko Olha',
-        driverLicenseNumber: 'GHI987654',
+        email: 'olha.melnyk@ct.lviv.ua',
+        phone: '+380673456789',
+        fullName: 'Мельник Ольга Василівна',
+        driverLicenseNumber: 'ВАС345678',
         licenseCategories: ['B', 'C', 'D'],
-        passportData: { series: 'AC', number: '345678' },
+        passportData: { series: 'КС', number: '345678' },
       },
       {
         login: 'driver4',
-        email: 'driver4@ct.com',
-        phone: '+380991112236',
-        fullName: 'Melnyk Ivan',
-        driverLicenseNumber: 'JKL123789',
+        email: 'ivan.bondarenko@ct.lviv.ua',
+        phone: '+380674567890',
+        fullName: 'Бондаренко Іван Петрович',
+        driverLicenseNumber: 'ВАD456789',
         licenseCategories: ['B', 'D'],
-        passportData: { series: 'AD', number: '456789' },
+        passportData: { series: 'КD', number: '456789' },
       },
       {
         login: 'driver5',
-        email: 'driver5@ct.com',
-        phone: '+380991112237',
-        fullName: 'Tkachenko Yuliia',
-        driverLicenseNumber: 'MNO456123',
+        email: 'yuliia.tkachenko@ct.lviv.ua',
+        phone: '+380675678901',
+        fullName: 'Ткаченко Юлія Олександрівна',
+        driverLicenseNumber: 'ВАЕ567890',
         licenseCategories: ['B', 'D'],
-        passportData: { series: 'AE', number: '567890' },
+        passportData: { series: 'КЕ', number: '567890' },
       },
     ];
 
     const passengerSeeds = [
       {
         login: 'passenger1',
-        email: 'pass@ct.com',
-        phone: '+380501112233',
-        fullName: 'Ivanov Ivan',
+        email: 'ivan.ivanchenko@gmail.com',
+        phone: '+380501234567',
+        fullName: 'Іванченко Іван Васильович',
       },
       {
         login: 'passenger2',
-        email: 'passenger2@ct.com',
-        phone: '+380501112234',
-        fullName: 'Kravchenko Mariia',
+        email: 'mariia.kravchenko@gmail.com',
+        phone: '+380502345678',
+        fullName: 'Кравченко Марія Олексіївна',
       },
       {
         login: 'passenger3',
-        email: 'passenger3@ct.com',
-        phone: '+380501112235',
-        fullName: 'Bondarenko Oleksii',
+        email: 'oleksii.sydorenko@gmail.com',
+        phone: '+380503456789',
+        fullName: 'Сидоренко Олексій Ігорович',
       },
       {
         login: 'passenger4',
-        email: 'passenger4@ct.com',
-        phone: '+380501112236',
-        fullName: 'Poliakov Dmytro',
+        email: 'dmytro.poliakov@gmail.com',
+        phone: '+380504567890',
+        fullName: 'Поляков Дмитро Андрійович',
       },
       {
         login: 'passenger5',
-        email: 'passenger5@ct.com',
-        phone: '+380501112237',
-        fullName: 'Moroz Olena',
+        email: 'olena.moroz@gmail.com',
+        phone: '+380505678901',
+        fullName: 'Мороз Олена Сергіївна',
       },
       {
         login: 'passenger6',
-        email: 'passenger6@ct.com',
-        phone: '+380501112238',
-        fullName: 'Petrova Iryna',
+        email: 'iryna.petrova@gmail.com',
+        phone: '+380506789012',
+        fullName: 'Петрова Ірина Миколаївна',
       },
       {
         login: 'passenger7',
-        email: 'passenger7@ct.com',
-        phone: '+380501112239',
-        fullName: 'Savchenko Maksym',
+        email: 'maksym.savchenko@gmail.com',
+        phone: '+380507890123',
+        fullName: 'Савченко Максим Олегович',
       },
       {
         login: 'passenger8',
-        email: 'passenger8@ct.com',
-        phone: '+380501112240',
-        fullName: 'Zaitseva Viktoriia',
+        email: 'viktoriia.zaitseva@gmail.com',
+        phone: '+380508901234',
+        fullName: 'Зайцева Вікторія Павлівна',
       },
       {
         login: 'passenger9',
-        email: 'passenger9@ct.com',
-        phone: '+380501112241',
-        fullName: 'Honchar Oleh',
+        email: 'oleh.honcharenko@gmail.com',
+        phone: '+380509012345',
+        fullName: 'Гончаренко Олег Вікторович',
       },
       {
         login: 'passenger10',
-        email: 'passenger10@ct.com',
-        phone: '+380501112242',
-        fullName: 'Rudenko Sofia',
+        email: 'sofiia.rudenko@gmail.com',
+        phone: '+380670123456',
+        fullName: 'Руденко Софія Дмитрівна',
       },
       {
         login: 'passenger11',
-        email: 'passenger11@ct.com',
-        phone: '+380501112243',
-        fullName: 'Klymenko Pavlo',
+        email: 'pavlo.klymenko@gmail.com',
+        phone: '+380671234567',
+        fullName: 'Клименко Павло Романович',
       },
       {
         login: 'passenger12',
-        email: 'passenger12@ct.com',
-        phone: '+380501112244',
-        fullName: 'Koval Iryna',
+        email: 'iryna.koval@gmail.com',
+        phone: '+380672345678',
+        fullName: 'Коваль Ірина Юріївна',
       },
     ];
 
-    const extraDriverCount = 7;
-    for (let i = 0; i < extraDriverCount; i++) {
-      const index = i + 6;
+    // Generate 800 drivers total with Ukrainian names
+    const ukrainianFirstNamesMale = [
+      'Олександр', 'Андрій', 'Петро', 'Іван', 'Сергій', 'Василь', 'Михайло', 'Юрій',
+      'Володимир', 'Богдан', 'Тарас', 'Микола', 'Олег', 'Віктор', 'Роман', 'Дмитро',
+      'Максим', 'Артем', 'Євген', 'Павло', 'Денис', 'Віталій', 'Ігор', 'Анатолій',
+      'Степан', 'Григорій', 'Леонід', 'Борис', 'Ярослав', 'Назар', 'Руслан', 'Олексій',
+    ];
+    const ukrainianFirstNamesFemale = [
+      'Олена', 'Наталія', 'Ірина', 'Оксана', 'Тетяна', 'Людмила', 'Світлана', 'Марія',
+      'Галина', 'Юлія', 'Вікторія', 'Катерина', 'Анна', 'Ольга', 'Софія', 'Дарина',
+    ];
+    const ukrainianLastNames = [
+      'Коваленко', 'Шевченко', 'Бондаренко', 'Ткаченко', 'Кравченко', 'Олійник', 'Шевчук',
+      'Поліщук', 'Бойко', 'Ткачук', 'Мельник', 'Марченко', 'Григоренко', 'Кравчук',
+      'Савченко', 'Руденко', 'Петренко', 'Іванченко', 'Козак', 'Лисенко', 'Гриценко',
+      'Романенко', 'Кузьменко', 'Павленко', 'Федоренко', 'Назаренко', 'Тимошенко',
+      'Яременко', 'Захарченко', 'Демченко', 'Семенченко', 'Прокопенко', 'Остапенко',
+      'Власенко', 'Даниленко', 'Юрченко', 'Харченко', 'Василенко', 'Левченко', 'Сидоренко',
+    ];
+    const ukrainianPatronymicsMale = [
+      'Іванович', 'Петрович', 'Олександрович', 'Миколайович', 'Васильович', 'Андрійович',
+      'Сергійович', 'Михайлович', 'Юрійович', 'Володимирович', 'Богданович', 'Тарасович',
+      'Олегович', 'Вікторович', 'Романович', 'Дмитрович', 'Павлович', 'Ігорович',
+    ];
+    const ukrainianPatronymicsFemale = [
+      'Іванівна', 'Петрівна', 'Олександрівна', 'Миколаївна', 'Василівна', 'Андріївна',
+      'Сергіївна', 'Михайлівна', 'Юріївна', 'Володимирівна', 'Богданівна', 'Тарасівна',
+      'Олегівна', 'Вікторівна', 'Романівна', 'Дмитрівна', 'Павлівна', 'Ігорівна',
+    ];
+
+    // Generate 795 more drivers (total 800)
+    const totalDrivers = 800;
+    for (let i = 6; i <= totalDrivers; i++) {
+      const isFemale = i % 5 === 0; // ~20% female drivers
+      const firstName = isFemale
+        ? ukrainianFirstNamesFemale[i % ukrainianFirstNamesFemale.length]
+        : ukrainianFirstNamesMale[i % ukrainianFirstNamesMale.length];
+      const lastName = ukrainianLastNames[i % ukrainianLastNames.length];
+      const patronymic = isFemale
+        ? ukrainianPatronymicsFemale[i % ukrainianPatronymicsFemale.length]
+        : ukrainianPatronymicsMale[i % ukrainianPatronymicsMale.length];
+
+      const fullName = `${lastName} ${firstName} ${patronymic}`;
+      const seriesLetter = String.fromCharCode(65 + (i % 26)); // A-Z
+
       driverSeeds.push({
-        login: `driver${index}`,
-        email: `driver${index}@ct.com`,
-        phone: `+3809911122${index.toString().padStart(2, '0')}`,
-        fullName: `Driver ${index}`,
-        driverLicenseNumber: `DRV${index.toString().padStart(6, '0')}`,
+        login: `driver${i}`,
+        email: `driver${i}@ct.lviv.ua`,
+        phone: `+38067${String(1000000 + i).slice(0, 7)}`,
+        fullName,
+        driverLicenseNumber: `ВА${seriesLetter}${String(100000 + i).slice(0, 6)}`,
         licenseCategories: ['B', 'D'],
-        passportData: { series: 'AF', number: `${index}`.padStart(6, '0') },
+        passportData: { series: `К${seriesLetter}`, number: String(i).padStart(6, '0') },
       });
     }
+    console.log(`   Prepared ${driverSeeds.length} driver seeds`);
 
-    const extraPassengerCount = 18;
-    for (let i = 0; i < extraPassengerCount; i++) {
+    // Ukrainian names for extra passengers
+    const extraPassengerNames = [
+      'Литвиненко Анна Олегівна',
+      'Степаненко Богдан Вікторович',
+      'Федоренко Катерина Андріївна',
+      'Назаренко Артем Ігорович',
+      'Тимошенко Людмила Сергіївна',
+      'Яременко Олександра Миколаївна',
+      'Захарченко Євген Олександрович',
+      'Демченко Оксана Василівна',
+      'Семенченко Роман Петрович',
+      'Прокопенко Валентина Юріївна',
+      'Остапенко Ігор Тарасович',
+      'Власенко Світлана Ігорівна',
+      'Даниленко Микита Дмитрович',
+      'Юрченко Галина Олексіївна',
+      'Харченко Андрій Романович',
+      'Василенко Тетяна Миколаївна',
+      'Ковальчук Денис Сергійович',
+      'Левченко Марина Павлівна',
+    ];
+    for (let i = 0; i < extraPassengerNames.length; i++) {
       const index = i + 13;
       passengerSeeds.push({
         login: `passenger${index}`,
-        email: `passenger${index}@ct.com`,
-        phone: `+3805011122${index.toString().padStart(2, '0')}`,
-        fullName: `Passenger ${index}`,
+        email: `passenger${index}@gmail.com`,
+        phone: `+38050${(9000000 + index * 111).toString()}`,
+        fullName: extraPassengerNames[i],
       });
     }
 
@@ -757,12 +821,13 @@ export async function seedDatabase() {
     const passenger = passengers.find((item) => item.login === 'passenger1');
     const driver = drivers.find((item) => item.login === 'driver1');
 
+    // Generate realistic transport card numbers (like Lviv City Card)
     const cardSeeds: Array<typeof schema.transportCards.$inferInsert> =
       passengers.map((p, index) => ({
         userId: p.id,
-        cardNumber: `CARD-${String(index + 1).padStart(4, '0')}`,
+        cardNumber: `7700${String(1000000 + index * 12345).slice(0, 8)}${String(index).padStart(4, '0')}`,
         balance:
-          p.login === 'passenger1' ? '100.00' : randomInt(0, 500).toFixed(2),
+          p.login === 'passenger1' ? '150.00' : randomInt(10, 500).toFixed(2),
       }));
 
     if (cardSeeds.length > 0) {
@@ -790,81 +855,168 @@ export async function seedDatabase() {
       await db.insert(schema.cardTopUps).values(cardTopUps);
     }
 
-    // I. Vehicles & Active Data
-    console.log('🚌 Seeding Vehicles...');
-    const someRoutes = await db
+    // I. Vehicles & Active Data - 750 vehicles total
+    // Distribution: 120 trams, 100 trolleybuses, 530 buses
+    console.log('🚌 Seeding 750 Vehicles...');
+
+    const allRoutes = await db
       .select()
       .from(schema.routes)
-      .orderBy(asc(schema.routes.id))
-      .limit(8);
+      .orderBy(asc(schema.routes.id));
 
     const vehicles: Array<typeof schema.vehicles.$inferSelect> = [];
     const vehiclesByRoute = new Map<
       number,
       Array<typeof schema.vehicles.$inferSelect>
     >();
-    const vehicleModelsByType = new Map<number, number>();
+    const vehicleModelsByType = new Map<number, number[]>(); // Multiple models per type
 
-    const vehiclesPerRoute = 2;
-    let vehicleIndex = 0;
-    for (const route of someRoutes) {
-      const typeName = ttNameById.get(route.transportTypeId) || 'Автобус';
-      let modelId = vehicleModelsByType.get(route.transportTypeId);
+    // Fleet number prefixes by transport type (realistic Lviv style)
+    const fleetPrefixes: Record<string, string> = {
+      Трамвай: 'Т',
+      Тролейбус: 'ТБ',
+      Автобус: 'А',
+      Метро: 'М',
+    };
 
-      if (!modelId) {
+    // Vehicle models by transport type (realistic Ukrainian models)
+    const vehicleModelConfigs: Record<string, { name: string; capacity: number }[]> = {
+      Трамвай: [
+        { name: 'Електрон Т5L64', capacity: 180 },
+        { name: 'Tatra KT4SU', capacity: 150 },
+        { name: 'Tatra T4SU', capacity: 120 },
+        { name: 'Електрон Т3L44', capacity: 140 },
+      ],
+      Тролейбус: [
+        { name: 'Електрон Т19101', capacity: 115 },
+        { name: 'ЛАЗ Е183', capacity: 100 },
+        { name: 'БКМ 321', capacity: 105 },
+        { name: 'Богдан Т70117', capacity: 95 },
+      ],
+      Автобус: [
+        { name: 'МАЗ 203', capacity: 90 },
+        { name: 'Електрон А185', capacity: 100 },
+        { name: 'ЛАЗ А183', capacity: 85 },
+        { name: 'Mercedes Citaro', capacity: 95 },
+        { name: 'MAN Lions City', capacity: 90 },
+        { name: 'Богдан А144', capacity: 45 },
+        { name: 'Богдан А092', capacity: 30 },
+        { name: 'Рута 25 Next', capacity: 25 },
+      ],
+      Метро: [
+        { name: 'Метровагон 81-717', capacity: 300 },
+      ],
+    };
+
+    // Create vehicle models for each type
+    for (const [typeName, configs] of Object.entries(vehicleModelConfigs)) {
+      const typeId = Array.from(ttNameById.entries()).find(([, name]) => name === typeName)?.[0];
+      if (!typeId) continue;
+
+      const modelIds: number[] = [];
+      for (const config of configs) {
         const [model] = await db
           .insert(schema.vehicleModels)
           .values({
-            name: `Seed ${typeName} Model`,
-            typeId: route.transportTypeId,
-            capacity: getTransportCapacity(typeName),
-          })
-          .returning();
-        modelId = model.id;
-        vehicleModelsByType.set(route.transportTypeId, modelId);
-      }
-
-      for (let i = 0; i < vehiclesPerRoute; i++) {
-        const [vehicle] = await db
-          .insert(schema.vehicles)
-          .values({
-            fleetNumber: `SEED-${String(vehicleIndex + 1).padStart(3, '0')}`,
-            routeId: route.id,
-            vehicleModelId: modelId,
+            name: config.name,
+            typeId,
+            capacity: config.capacity,
           })
           .onConflictDoNothing()
           .returning();
-
-        if (vehicle) {
-          vehicles.push(vehicle);
-          const list = vehiclesByRoute.get(route.id) ?? [];
-          list.push(vehicle);
-          vehiclesByRoute.set(route.id, list);
-        }
-        vehicleIndex++;
+        if (model) modelIds.push(model.id);
       }
+      vehicleModelsByType.set(typeId, modelIds);
     }
 
-    // Create 1:1 driver-vehicle mapping (each driver gets exactly ONE vehicle)
+    // Target vehicle counts by type
+    const vehicleTargets: Record<string, number> = {
+      Трамвай: 120,
+      Тролейбус: 100,
+      Автобус: 530,
+    };
+
+    // Group routes by transport type
+    const routesByType = new Map<number, typeof allRoutes>();
+    for (const route of allRoutes) {
+      const list = routesByType.get(route.transportTypeId) ?? [];
+      list.push(route);
+      routesByType.set(route.transportTypeId, list);
+    }
+
+    // Create vehicles distributed across routes
+    let totalVehicleCount = 0;
+    for (const [typeId, routes] of routesByType.entries()) {
+      const typeName = ttNameById.get(typeId) || 'Автобус';
+      const targetCount = vehicleTargets[typeName] || 0;
+      if (targetCount === 0 || routes.length === 0) continue;
+
+      const modelIds = vehicleModelsByType.get(typeId) || [];
+      if (modelIds.length === 0) continue;
+
+      const prefix = fleetPrefixes[typeName] || 'ТЗ';
+      const vehiclesPerRouteBase = Math.floor(targetCount / routes.length);
+      let remainder = targetCount % routes.length;
+
+      for (const route of routes) {
+        const vehicleCount = vehiclesPerRouteBase + (remainder-- > 0 ? 1 : 0);
+
+        for (let i = 0; i < vehicleCount; i++) {
+          const modelId = modelIds[i % modelIds.length];
+          // Fleet number format: prefix-XXX where XXX is sequential number
+          const fleetNumber = `${prefix}-${String(totalVehicleCount + 1).padStart(4, '0')}`;
+
+          const [vehicle] = await db
+            .insert(schema.vehicles)
+            .values({
+              fleetNumber,
+              routeId: route.id,
+              vehicleModelId: modelId,
+            })
+            .onConflictDoNothing()
+            .returning();
+
+          if (vehicle) {
+            vehicles.push(vehicle);
+            const list = vehiclesByRoute.get(route.id) ?? [];
+            list.push(vehicle);
+            vehiclesByRoute.set(route.id, list);
+            totalVehicleCount++;
+          }
+        }
+      }
+      console.log(`   Created ${typeName}: ${totalVehicleCount} vehicles so far`);
+    }
+    console.log(`✅ Total vehicles created: ${vehicles.length}`);
+
+    // Create driver-vehicle mappings
+    // Assign 700 drivers to vehicles (leaving ~100 free drivers for flexibility)
+    // IMPORTANT: assignedAt must be BEFORE historical trips (60 days ago)
+    // so that view queries (assigned_at <= planned_starts_at) find the assignments
+    const assignmentDate = daysAgo(60);
+
     const driverVehicleMap = new Map<
       number,
       { vehicleId: number; routeId: number }
     >();
-    const assignableCount = Math.min(vehicles.length, drivers.length);
+
+    // Assign drivers to vehicles (1:1 mapping for first 700 drivers)
+    const driversToAssign = 700;
+    const assignableCount = Math.min(driversToAssign, vehicles.length, drivers.length);
+
+    // Batch insert for performance
+    const assignmentBatch: Array<typeof schema.driverVehicleAssignments.$inferInsert> = [];
 
     for (let index = 0; index < assignableCount; index++) {
       const driverEntry = drivers[index];
       const vehicle = vehicles[index];
       if (!driverEntry || !vehicle) continue;
 
-      await db
-        .insert(schema.driverVehicleAssignments)
-        .values({
-          driverId: driverEntry.id,
-          vehicleId: vehicle.id,
-          assignedAt: new Date(),
-        })
-        .onConflictDoNothing();
+      assignmentBatch.push({
+        driverId: driverEntry.id,
+        vehicleId: vehicle.id,
+        assignedAt: assignmentDate,
+      });
 
       // Store mapping for trip generation
       driverVehicleMap.set(driverEntry.id, {
@@ -873,9 +1025,17 @@ export async function seedDatabase() {
       });
     }
 
-    console.log(
-      `   Assigned ${assignableCount} drivers to vehicles (1:1 mapping)`,
-    );
+    // Insert in batches
+    if (assignmentBatch.length > 0) {
+      const batchSize = 100;
+      for (let i = 0; i < assignmentBatch.length; i += batchSize) {
+        const batch = assignmentBatch.slice(i, i + batchSize);
+        await db.insert(schema.driverVehicleAssignments).values(batch).onConflictDoNothing();
+      }
+    }
+
+    const freeDriversCount = drivers.length - assignableCount;
+    console.log(`✅ Assigned ${assignableCount} drivers to vehicles (leaving ${freeDriversCount} free drivers)`);
 
     // J. Passenger History (passenger1)
     console.log('🧾 Seeding passenger1 history...');
@@ -1076,7 +1236,7 @@ export async function seedDatabase() {
     console.log('📊 Seeding extended operational data...');
     const historicalTrips: Array<typeof schema.trips.$inferSelect> = [];
 
-    if (someRoutes.length > 0 && vehicles.length > 0 && drivers.length > 0) {
+    if (allRoutes.length > 0 && vehicles.length > 0 && drivers.length > 0) {
       // Generate ~300 historical completed trips over last 30 days
       const historicalTripCount = 300;
       const tripInserts: Array<typeof schema.trips.$inferInsert> = [];
@@ -1127,8 +1287,10 @@ export async function seedDatabase() {
       }
 
       // Create 3 active trips using driver-route assignments (1:1)
+      // IMPORTANT: Exclude driver1 as they will have their own demo schedule
       const activeTripsCount = Math.min(3, assignedDrivers.length);
       const usedDriverIds = new Set<number>();
+      if (driver) usedDriverIds.add(driver.id); // Reserve driver1 for demo schedule
 
       for (let i = 0; i < activeTripsCount; i++) {
         // Find an assigned driver not already in use for active trips
@@ -1214,12 +1376,18 @@ export async function seedDatabase() {
             : workStartHour;
 
         // Generate trips at regular intervals
+        // Filter out driver1 - they have their own demo schedule
+        const schedulableDrivers = driver
+          ? assignedDrivers.filter((a) => a.driverId !== driver.id)
+          : assignedDrivers;
+
         for (let hour = startHour; hour < workEndHour; hour++) {
           for (let minute = 0; minute < 60; minute += intervalMinutes) {
             // Use driver-route pairs from assignments (1:1 mapping)
+            if (schedulableDrivers.length === 0) continue;
             const tripIndex = scheduledTrips.length;
             const assignment =
-              assignedDrivers[tripIndex % assignedDrivers.length];
+              schedulableDrivers[tripIndex % schedulableDrivers.length];
             if (!assignment) continue;
 
             const plannedStartsAt = new Date(tripDate);
@@ -1256,23 +1424,226 @@ export async function seedDatabase() {
           await db.insert(schema.trips).values(batch);
         }
       }
+
+      // Create comprehensive demo schedule for driver1
+      console.log('🎯 Creating demo schedule for driver1...');
+      if (driver && driverVehicleMap.has(driver.id)) {
+        const driver1Assignment = driverVehicleMap.get(driver.id)!;
+        const driver1Trips: Array<typeof schema.trips.$inferInsert> = [];
+
+        // Create trips for driver1 for demonstration:
+        // - 5 completed trips in the past few days
+        // - 1 active trip (in_progress)
+        // - 8 scheduled trips for today (every hour from next hour)
+        // - 6 scheduled trips for tomorrow
+
+        // Past completed trips (last 5 days)
+        for (let daysBack = 1; daysBack <= 5; daysBack++) {
+          const tripDate = daysAgo(daysBack);
+          // Morning trip
+          tripDate.setHours(8, 0, 0, 0);
+          const morningStart = new Date(tripDate);
+          const morningDelay = randomInt(-3, 8);
+          const morningDuration = randomInt(40, 55);
+
+          driver1Trips.push({
+            routeId: driver1Assignment.routeId,
+            driverId: driver.id,
+            plannedStartsAt: morningStart,
+            plannedEndsAt: addMinutes(morningStart, morningDuration),
+            actualStartsAt: addMinutes(morningStart, morningDelay),
+            actualEndsAt: addMinutes(morningStart, morningDelay + morningDuration + randomInt(-5, 10)),
+            status: 'completed',
+            passengerCount: randomInt(25, 65),
+          });
+
+          // Afternoon trip
+          tripDate.setHours(14, 30, 0, 0);
+          const afternoonStart = new Date(tripDate);
+          const afternoonDelay = randomInt(-2, 10);
+          const afternoonDuration = randomInt(35, 50);
+
+          driver1Trips.push({
+            routeId: driver1Assignment.routeId,
+            driverId: driver.id,
+            plannedStartsAt: afternoonStart,
+            plannedEndsAt: addMinutes(afternoonStart, afternoonDuration),
+            actualStartsAt: addMinutes(afternoonStart, afternoonDelay),
+            actualEndsAt: addMinutes(afternoonStart, afternoonDelay + afternoonDuration + randomInt(-3, 8)),
+            status: 'completed',
+            passengerCount: randomInt(30, 70),
+          });
+        }
+
+        // Today's schedule for driver1
+        const todayForDriver1 = new Date(todayBase);
+        const driver1CurrentHour = now.getHours();
+
+        // Completed trips today (before current hour)
+        for (let hour = 6; hour < driver1CurrentHour - 1; hour += 2) {
+          const tripStart = new Date(todayForDriver1);
+          tripStart.setHours(hour, 0, 0, 0);
+          const delay = randomInt(-2, 8);
+          const duration = randomInt(40, 55);
+
+          driver1Trips.push({
+            routeId: driver1Assignment.routeId,
+            driverId: driver.id,
+            plannedStartsAt: tripStart,
+            plannedEndsAt: addMinutes(tripStart, duration),
+            actualStartsAt: addMinutes(tripStart, delay),
+            actualEndsAt: addMinutes(tripStart, delay + duration),
+            status: 'completed',
+            passengerCount: randomInt(20, 55),
+          });
+        }
+
+        // Active trip (current)
+        const activeStart = new Date(todayForDriver1);
+        activeStart.setHours(driver1CurrentHour - 1, 30, 0, 0);
+        const activeDelay = randomInt(2, 7);
+
+        driver1Trips.push({
+          routeId: driver1Assignment.routeId,
+          driverId: driver.id,
+          plannedStartsAt: activeStart,
+          plannedEndsAt: addMinutes(activeStart, 50),
+          actualStartsAt: addMinutes(activeStart, activeDelay),
+          actualEndsAt: null,
+          status: 'in_progress',
+          passengerCount: randomInt(15, 40),
+        });
+
+        // Scheduled trips for rest of today
+        for (let hour = driver1CurrentHour + 1; hour <= 21; hour += 2) {
+          const tripStart = new Date(todayForDriver1);
+          tripStart.setHours(hour, 0, 0, 0);
+          const duration = randomInt(40, 55);
+
+          driver1Trips.push({
+            routeId: driver1Assignment.routeId,
+            driverId: driver.id,
+            plannedStartsAt: tripStart,
+            plannedEndsAt: addMinutes(tripStart, duration),
+            actualStartsAt: null,
+            actualEndsAt: null,
+            status: 'scheduled',
+            passengerCount: 0,
+          });
+        }
+
+        // Scheduled trips for tomorrow
+        const tomorrowForDriver1 = new Date(todayBase);
+        tomorrowForDriver1.setDate(tomorrowForDriver1.getDate() + 1);
+
+        for (let hour = 6; hour <= 20; hour += 2) {
+          const tripStart = new Date(tomorrowForDriver1);
+          tripStart.setHours(hour, 0, 0, 0);
+          const duration = randomInt(40, 55);
+
+          driver1Trips.push({
+            routeId: driver1Assignment.routeId,
+            driverId: driver.id,
+            plannedStartsAt: tripStart,
+            plannedEndsAt: addMinutes(tripStart, duration),
+            actualStartsAt: null,
+            actualEndsAt: null,
+            status: 'scheduled',
+            passengerCount: 0,
+          });
+        }
+
+        // Insert driver1 trips
+        if (driver1Trips.length > 0) {
+          await db.insert(schema.trips).values(driver1Trips);
+          console.log(`   ✅ Created ${driver1Trips.length} trips for driver1 (completed: ${driver1Trips.filter(t => t.status === 'completed').length}, active: ${driver1Trips.filter(t => t.status === 'in_progress').length}, scheduled: ${driver1Trips.filter(t => t.status === 'scheduled').length})`);
+        }
+
+        // Generate GPS logs for driver1's active trip
+        const vehicleInfo = driverVehicleMap.get(driver.id);
+        if (vehicleInfo) {
+          const firstStopResult = (await db.execute(sql`
+            SELECT s.lon, s.lat
+            FROM ${sql.raw('route_stops')} rs
+            JOIN ${sql.raw('stops')} s ON s.id = rs.stop_id
+            WHERE rs.route_id = ${driver1Assignment.routeId}
+              AND rs.prev_route_stop_id IS NULL
+            LIMIT 1
+          `)) as unknown as { rows: Array<{ lon: string; lat: string }> };
+          const firstStop = firstStopResult.rows[0];
+
+          if (firstStop?.lon && firstStop?.lat) {
+            // Generate 10 GPS points for demo
+            for (let j = 0; j < 10; j++) {
+              await db.insert(schema.vehicleGpsLogs).values({
+                vehicleId: vehicleInfo.vehicleId,
+                lon: String(Number(firstStop.lon) + (Math.random() - 0.5) * 0.01),
+                lat: String(Number(firstStop.lat) + (Math.random() - 0.5) * 0.01),
+                recordedAt: addMinutes(new Date(), -j * 2),
+              });
+            }
+            console.log(`   ✅ Generated 10 GPS logs for driver1's vehicle`);
+          }
+        }
+      }
     }
 
     // L. Finance & Tickets
     console.log('💳 Seeding finance data...');
+
+    // Realistic expense descriptions by category
+    const expenseDescriptions: Record<string, string[]> = {
+      fuel: [
+        'Дизпаливо для автобусів (АЗС ОККО)',
+        'Паливо для службових авто',
+        'Електроенергія для тролейбусів',
+        'Електроенергія для трамваїв',
+      ],
+      maintenance: [
+        'Планове ТО автобусів МАЗ',
+        'Ремонт гальмівної системи',
+        'Заміна шин (сезонна)',
+        'Ремонт кондиціонерів',
+        'Діагностика електрообладнання',
+        'Заміна акумуляторів',
+      ],
+      other_expense: [
+        'Канцелярські товари',
+        'Миючі засоби для салонів',
+        'Спецодяг для водіїв',
+        'Оренда приміщення диспетчерської',
+        'Комунальні послуги депо',
+      ],
+    };
+
     const expensesCategories = ['fuel', 'maintenance', 'other_expense'];
-    const expensesToInsert: Array<typeof schema.financialTransactions.$inferInsert> = [];
-    const expensesCount = randomInt(20, 30);
+    const expensesToInsert: Array<
+      typeof schema.financialTransactions.$inferInsert
+    > = [];
+    const expensesCount = randomInt(30, 50);
 
     for (let i = 0; i < expensesCount; i++) {
       const category = randomChoice(expensesCategories);
+      const descriptions = expenseDescriptions[category] || ['Інші витрати'];
+      const description = randomChoice(descriptions);
+
+      // Realistic amounts by category
+      let amount: number;
+      if (category === 'fuel') {
+        amount = randomInt(5000, 25000);
+      } else if (category === 'maintenance') {
+        amount = randomInt(2000, 15000);
+      } else {
+        amount = randomInt(500, 5000);
+      }
+
       expensesToInsert.push({
         txType: 'expense',
         source: category,
-        amount: randomInt(500, 5000).toFixed(2),
-        description: category + ': Seed expense',
+        amount: amount.toFixed(2),
+        description,
         occurredAt: daysAgo(randomInt(1, 30)),
-        createdBy: 'seed',
+        createdBy: 'accountant1',
       });
     }
 
@@ -1280,29 +1651,38 @@ export async function seedDatabase() {
       await db.insert(schema.financialTransactions).values(expensesToInsert);
     }
 
+    // Generate salary payments for last 3 months
     const salaryPayments: Array<typeof schema.salaryPayments.$inferInsert> = [];
-    const previousMonth = new Date();
-    previousMonth.setMonth(previousMonth.getMonth() - 1);
 
-    for (const driverEntry of drivers) {
-      const rate = randomInt(120, 200);
-      const units = randomInt(120, 180);
-      salaryPayments.push({
-        driverId: driverEntry.id,
-        rate: rate.toFixed(2),
-        units,
-        total: (rate * units).toFixed(2),
-        paidAt: new Date(
-          previousMonth.getFullYear(),
-          previousMonth.getMonth(),
-          randomInt(20, 28),
-        ),
-      });
+    for (let monthsBack = 1; monthsBack <= 3; monthsBack++) {
+      const paymentMonth = new Date();
+      paymentMonth.setMonth(paymentMonth.getMonth() - monthsBack);
+
+      for (const driverEntry of drivers) {
+        // Realistic Ukrainian driver hourly rates (100-150 UAH/hour)
+        const rate = randomInt(100, 150);
+        // Typical monthly hours (160-200 hours)
+        const units = randomInt(160, 200);
+        const total = rate * units;
+
+        salaryPayments.push({
+          driverId: driverEntry.id,
+          rate: rate.toFixed(2),
+          units,
+          total: total.toFixed(2),
+          paidAt: new Date(
+            paymentMonth.getFullYear(),
+            paymentMonth.getMonth(),
+            randomInt(5, 10), // Salary paid 5-10th of next month
+          ),
+        });
+      }
     }
 
     if (salaryPayments.length > 0) {
       await db.insert(schema.salaryPayments).values(salaryPayments);
     }
+    console.log(`   Created ${salaryPayments.length} salary payments for ${drivers.length} drivers (3 months)`);
 
     // Get completed trips for ticket generation
     const ticketTrips = historicalTrips.length
@@ -1337,7 +1717,7 @@ export async function seedDatabase() {
         ticketsToInsert.push({
           tripId: trip.id,
           cardId: card.id,
-          price: randomChoice(['8.00', '10.00', '12.00']),
+          price: randomChoice(['10.00', '12.00', '14.00', '16.00']), // Realistic Lviv prices 2024-2025
           purchasedAt,
         });
       }
@@ -1349,13 +1729,15 @@ export async function seedDatabase() {
     console.log('🧾 Seeding fines and complaints...');
     if (ticketTrips.length > 0 && passengers.length > 0) {
       const fineStatuses: Array<(typeof schema.fines.$inferInsert)['status']> =
-        ['Очікує сплати', 'Оплачено', 'В процесі'];
+        ['Очікує сплати', 'Оплачено', 'В процесі', 'Відмінено'];
       const fineReasons = [
         'Проїзд без квитка',
-        'Непідтверджена оплата',
-        'Порушення правил перевезення',
+        'Непідтверджена оплата через термінал',
+        'Безквитковий проїзд при перевірці',
+        'Пошкодження майна транспортного засобу',
+        'Порушення правил перевезення багажу',
       ];
-      const fineCount = randomInt(12, 18);
+      const fineCount = randomInt(15, 25);
       const finesToInsert: Array<typeof schema.fines.$inferInsert> = [];
 
       for (let i = 0; i < fineCount; i++) {
@@ -1368,7 +1750,7 @@ export async function seedDatabase() {
           userId: user.id,
           tripId: trip.id,
           status: fineStatuses[i % fineStatuses.length],
-          amount: randomChoice(['60.00', '80.00', '50.00']),
+          amount: randomChoice(['170.00', '255.00', '340.00', '510.00']), // Ukrainian fine amounts (1-3 неоподатковуваних мінімумів)
           reason: fineReasons[i % fineReasons.length],
           issuedAt: addMinutes(tripStart, randomInt(5, 20)),
         });
@@ -1414,7 +1796,7 @@ export async function seedDatabase() {
     > = [];
 
     for (let i = 0; i < complaintsCount; i++) {
-      const route = someRoutes.length ? randomChoice(someRoutes) : undefined;
+      const route = allRoutes.length ? randomChoice(allRoutes) : undefined;
       const vehicle = vehicles.length ? randomChoice(vehicles) : undefined;
       const user = passengers.length ? randomChoice(passengers) : undefined;
       const isSuggestion =
@@ -1516,7 +1898,9 @@ export async function seedDatabase() {
     // === INCOMES (Доходи - державне фінансування) ===
     console.log('💰 Seeding incomes...');
 
-    const incomeEntries: Array<typeof schema.financialTransactions.$inferInsert> = [];
+    const incomeEntries: Array<
+      typeof schema.financialTransactions.$inferInsert
+    > = [];
 
     // Державне фінансування за останні 6 місяців
     for (let i = 0; i < 6; i++) {
@@ -1551,7 +1935,10 @@ export async function seedDatabase() {
       }
     }
 
-    await db.insert(schema.financialTransactions).values(incomeEntries).onConflictDoNothing();
+    await db
+      .insert(schema.financialTransactions)
+      .values(incomeEntries)
+      .onConflictDoNothing();
 
     console.log('🏁 Seed completed successfully!');
   } catch (e) {

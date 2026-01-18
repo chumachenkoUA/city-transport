@@ -147,6 +147,8 @@ type PlannedRouteOption = {
     lat: number;
     waitTimeMin: number;
   }>;
+  walkingTimeMin?: number;
+  walkingDistanceM?: number;
 };
 
 @Injectable()
@@ -1195,8 +1197,9 @@ export class CtGuestService {
   }
 
   private formatMinutes(minutesTotal: number) {
-    const hours = Math.floor(minutesTotal / 60) % 24;
-    const minutes = minutesTotal % 60;
+    const rounded = Math.round(minutesTotal);
+    const hours = Math.floor(rounded / 60) % 24;
+    const minutes = rounded % 60;
     return `${hours.toString().padStart(2, '0')}:${minutes
       .toString()
       .padStart(2, '0')}`;
@@ -1430,21 +1433,23 @@ export class CtGuestService {
   }): Promise<PlannedRouteOption[]> {
     const radius = payload.radius ?? 1000;
     const maxResults = payload.maxResults ?? 5;
-    // Higher transfer penalty to prefer direct routes (includes wait time + walking + uncertainty)
-    const transferPenaltyMin = payload.maxWaitMin ?? 12;
+    // Higher transfer penalty to STRONGLY prefer direct routes
+    // Includes: wait time (~5-10 min) + walking between stops (~3-5 min) + uncertainty (~5 min)
+    const transferPenaltyMin = payload.maxWaitMin ?? 20;
     const currentMinutes = this.getCurrentMinutes();
 
+    // Find more stops to increase chance of finding direct routes
     const stopsA = await this.findStopsNear(
       payload.lonA,
       payload.latA,
       radius,
-      maxResults,
+      10, // increased from maxResults
     );
     const stopsB = await this.findStopsNear(
       payload.lonB,
       payload.latB,
       radius,
-      maxResults,
+      10, // increased from maxResults
     );
 
     if (!stopsA.length || !stopsB.length) {
@@ -1457,7 +1462,7 @@ export class CtGuestService {
       startStopIds,
       endStopIds,
       transferPenaltyMin,
-      maxResults,
+      maxResults * 2, // Get more paths to filter later
     );
 
     if (pathRows.length === 0) {
@@ -1503,23 +1508,66 @@ export class CtGuestService {
         currentMinutes,
         transferPenaltyMin,
       );
-      if (option) {
+      if (option && option.segments.length > 0) {
+        // Calculate walking distance to first stop and from last stop
+        const firstStop = option.segments[0].fromStop;
+        const lastStop = option.segments[option.segments.length - 1].toStop;
+
+        // Get walking distance from point A to first stop
+        const walkToFirstM =
+          this.getDistance(
+            payload.latA,
+            payload.lonA,
+            firstStop.lat,
+            firstStop.lon,
+          ) * 1000;
+
+        // Get walking distance from last stop to point B
+        const walkFromLastM =
+          this.getDistance(
+            lastStop.lat,
+            lastStop.lon,
+            payload.latB,
+            payload.lonB,
+          ) * 1000;
+
+        const totalWalkingM = walkToFirstM + walkFromLastM;
+        // Walking speed ~5 km/h = 83 m/min
+        const walkingTimeMin = this.roundTo1(totalWalkingM / 83);
+
+        option.walkingDistanceM = Math.round(totalWalkingM);
+        option.walkingTimeMin = walkingTimeMin;
+        // Add walking time to total
+        option.totalTimeMin = this.roundTo1(
+          option.totalTimeMin + walkingTimeMin,
+        );
+
         options.push(option);
       }
     }
 
-    // Sort by weighted score: prefer direct routes over transfers
-    // Add 5 min penalty per transfer to make direct routes preferred when times are close
-    const TRANSFER_SORT_PENALTY = 5;
+    // Sort by weighted score: STRONGLY prefer direct routes over transfers
+    // Transfer penalty for sorting: 15 min per transfer
+    const TRANSFER_SORT_PENALTY = 15;
     options.sort((a, b) => {
+      // First priority: fewer transfers
+      if (a.transferCount !== b.transferCount) {
+        // If one is direct (0 transfers) and other has transfers, prefer direct
+        if (a.transferCount === 0 && b.transferCount > 0) return -1;
+        if (b.transferCount === 0 && a.transferCount > 0) return 1;
+      }
+
+      // Second priority: total time with heavy transfer penalty
       const scoreA = a.totalTimeMin + a.transferCount * TRANSFER_SORT_PENALTY;
       const scoreB = b.totalTimeMin + b.transferCount * TRANSFER_SORT_PENALTY;
       if (scoreA !== scoreB) {
         return scoreA - scoreB;
       }
+
       // If scores are equal, prefer fewer transfers
       return a.transferCount - b.transferCount;
     });
+
     return options.slice(0, maxResults);
   }
 

@@ -26,7 +26,9 @@ export const financialTransactions = pgTable(
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
     occurredAt: timestamp('occurred_at').notNull().defaultNow(),
     description: text('description'),
-    createdBy: text('created_by').notNull().default(sql`current_user`),
+    createdBy: text('created_by')
+      .notNull()
+      .default(sql`current_user`),
 
     // Прямі FK посилання на джерело операції (UNIQUE = one-to-one)
     ticketId: bigint('ticket_id', { mode: 'number' })

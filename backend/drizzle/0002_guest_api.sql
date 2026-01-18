@@ -34,8 +34,9 @@ CREATE OR REPLACE VIEW guest_api.v_stops AS
 SELECT id, name, lon, lat FROM public.stops;
 
 -- Активні маршрути з типом транспорту
+-- paired_route_id - посилання на парний маршрут (forward ↔ reverse)
 CREATE OR REPLACE VIEW guest_api.v_routes AS
-SELECT r.id, r.number, r.direction, r.transport_type_id, tt.name AS transport_type_name
+SELECT r.id, r.number, r.direction, r.transport_type_id, tt.name AS transport_type_name, r.paired_route_id
 FROM public.routes r
 JOIN public.transport_types tt ON tt.id = r.transport_type_id
 WHERE r.is_active = true;

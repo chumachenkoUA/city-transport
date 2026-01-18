@@ -81,7 +81,8 @@ export class CtDispatcherService {
       throw new BadRequestException('Route is required');
     }
 
-    if (vehicle.routeId !== route.id) {
+    // Vehicle can be used for its own route OR the paired route (forward ↔ reverse)
+    if (!this.isVehicleMatchingRoute(vehicle.routeId, route)) {
       throw new BadRequestException(
         'Vehicle route does not match the selected route',
       );
@@ -93,7 +94,14 @@ export class CtDispatcherService {
         ${vehicle.id},
         ${payload.workStartTime}::time,
         ${payload.workEndTime}::time,
-        ${payload.intervalMin}
+        ${payload.intervalMin},
+        ${payload.monday ?? true}::boolean,
+        ${payload.tuesday ?? true}::boolean,
+        ${payload.wednesday ?? true}::boolean,
+        ${payload.thursday ?? true}::boolean,
+        ${payload.friday ?? true}::boolean,
+        ${payload.saturday ?? false}::boolean,
+        ${payload.sunday ?? false}::boolean
       ) as "id"
     `)) as unknown as { rows: Array<{ id: number }> };
 
@@ -141,7 +149,14 @@ export class CtDispatcherService {
         work_end_time,
         interval_min,
         vehicle_id,
-        fleet_number
+        fleet_number,
+        monday,
+        tuesday,
+        wednesday,
+        thursday,
+        friday,
+        saturday,
+        sunday
       from dispatcher_api.v_schedules_list
       order by route_number
     `)) as unknown as {
@@ -156,6 +171,13 @@ export class CtDispatcherService {
         intervalMin: number;
         vehicleId: number | null;
         fleetNumber: string | null;
+        monday: boolean;
+        tuesday: boolean;
+        wednesday: boolean;
+        thursday: boolean;
+        friday: boolean;
+        saturday: boolean;
+        sunday: boolean;
       }>;
     };
 
@@ -170,6 +192,13 @@ export class CtDispatcherService {
       intervalMin: number;
       vehicleId: number | null;
       fleetNumber: string | null;
+      monday: boolean;
+      tuesday: boolean;
+      wednesday: boolean;
+      thursday: boolean;
+      friday: boolean;
+      saturday: boolean;
+      sunday: boolean;
     }>;
   }
 
@@ -228,6 +257,41 @@ export class CtDispatcherService {
       fullName: string;
       phone: string;
       driverLicenseNumber: string;
+    }>;
+  }
+
+  async listDriversByRoute(routeId: number) {
+    const result = (await this.dbService.db.execute(sql`
+      SELECT DISTINCT ON (dva.driver_id)
+        dva.driver_id as id,
+        d.full_name,
+        d.login,
+        d.phone,
+        v.fleet_number,
+        dva.assigned_at
+      FROM public.driver_vehicle_assignments dva
+      JOIN public.drivers d ON d.id = dva.driver_id
+      JOIN public.vehicles v ON v.id = dva.vehicle_id
+      WHERE v.route_id = ${routeId}
+      ORDER BY dva.driver_id, dva.assigned_at DESC
+    `)) as unknown as {
+      rows: Array<{
+        id: number;
+        fullName: string;
+        login: string;
+        phone: string;
+        fleetNumber: string;
+        assignedAt: Date;
+      }>;
+    };
+
+    return transformToCamelCase(result.rows) as Array<{
+      id: number;
+      fullName: string;
+      login: string;
+      phone: string;
+      fleetNumber: string;
+      assignedAt: Date;
     }>;
   }
 
@@ -300,7 +364,7 @@ export class CtDispatcherService {
       rows: Array<{
         id: number;
         routeNumber: string;
-        fleetNumber: string;
+        fleetNumber: string | null;
         fullName: string;
         plannedStartsAt: Date;
         actualStartsAt: Date;
@@ -311,7 +375,7 @@ export class CtDispatcherService {
     return transformToCamelCase(result.rows) as Array<{
       id: number;
       routeNumber: string;
-      fleetNumber: string;
+      fleetNumber: string | null;
       fullName: string;
       plannedStartsAt: Date;
       actualStartsAt: Date;
@@ -353,30 +417,6 @@ export class CtDispatcherService {
     `)) as unknown as { rows: Array<{ id: number }> };
 
     return { id: result.rows[0]?.id };
-  }
-
-  async generateDailyTrips(payload: {
-    routeId: number;
-    driverId: number;
-    date: string;
-    startTime: string;
-    endTime: string;
-    intervalMin: number;
-    tripDurationMin?: number;
-  }) {
-    const result = (await this.dbService.db.execute(sql`
-      select dispatcher_api.generate_daily_trips(
-        ${payload.routeId}::bigint,
-        ${payload.driverId}::bigint,
-        ${payload.date}::date,
-        ${payload.startTime}::time,
-        ${payload.endTime}::time,
-        ${payload.intervalMin}::integer,
-        ${payload.tripDurationMin ?? 60}::integer
-      ) as "count"
-    `)) as unknown as { rows: Array<{ count: number }> };
-
-    return { count: result.rows[0]?.count ?? 0 };
   }
 
   async cancelTrip(tripId: number) {
@@ -454,7 +494,8 @@ export class CtDispatcherService {
       allowMissing: true,
     });
 
-    if (vehicle && route && vehicle.routeId !== route.id) {
+    // Vehicle can be used for its own route OR the paired route (forward ↔ reverse)
+    if (vehicle && route && !this.isVehicleMatchingRoute(vehicle.routeId, route)) {
       throw new BadRequestException(
         'Vehicle route does not match the selected route',
       );
@@ -467,7 +508,14 @@ export class CtDispatcherService {
         ${vehicle?.id ?? null}::bigint,
         ${payload.workStartTime ?? null}::time,
         ${payload.workEndTime ?? null}::time,
-        ${payload.intervalMin ?? null}::integer
+        ${payload.intervalMin ?? null}::integer,
+        ${payload.monday ?? null}::boolean,
+        ${payload.tuesday ?? null}::boolean,
+        ${payload.wednesday ?? null}::boolean,
+        ${payload.thursday ?? null}::boolean,
+        ${payload.friday ?? null}::boolean,
+        ${payload.saturday ?? null}::boolean,
+        ${payload.sunday ?? null}::boolean
       )
     `);
 
@@ -688,13 +736,33 @@ export class CtDispatcherService {
 
   // --- Helpers ---
 
+  /**
+   * Check if vehicle can be used for the given route.
+   * Vehicle matches if:
+   * - vehicleRouteId === route.id (same route)
+   * - vehicleRouteId === route.pairedRouteId (paired route, e.g., forward ↔ reverse)
+   */
+  private isVehicleMatchingRoute(
+    vehicleRouteId: number,
+    route: { id: number; pairedRouteId?: number | null },
+  ): boolean {
+    if (vehicleRouteId === route.id) {
+      return true;
+    }
+    if (route.pairedRouteId && vehicleRouteId === route.pairedRouteId) {
+      return true;
+    }
+    return false;
+  }
+
   private async findRouteById(routeId: number) {
     const result = (await this.dbService.db.execute(sql`
       select
         id,
         number,
         transport_type_id,
-        direction
+        direction,
+        paired_route_id
       from guest_api.v_routes
       where id = ${routeId}
       limit 1
@@ -704,6 +772,7 @@ export class CtDispatcherService {
         number: string;
         transportTypeId: number;
         direction: string;
+        pairedRouteId: number | null;
       }>;
     };
 
@@ -713,6 +782,7 @@ export class CtDispatcherService {
         number: string;
         transportTypeId: number;
         direction: string;
+        pairedRouteId: number | null;
       }>
     )[0];
     if (!route) {
@@ -744,7 +814,8 @@ export class CtDispatcherService {
         id,
         number,
         transport_type_id,
-        direction
+        direction,
+        paired_route_id
       from guest_api.v_routes
       where ${whereClause}
       ${orderClause}
@@ -755,6 +826,7 @@ export class CtDispatcherService {
         number: string;
         transportTypeId: number;
         direction: string;
+        pairedRouteId: number | null;
       }>;
     };
 
@@ -764,6 +836,7 @@ export class CtDispatcherService {
         number: string;
         transportTypeId: number;
         direction: string;
+        pairedRouteId: number | null;
       }>
     )[0];
     if (!route) {
