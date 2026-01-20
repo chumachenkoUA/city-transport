@@ -79,7 +79,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-export const Route = createFileRoute('/passenger/')({
+export const Route = createFileRoute('/passenger')({
   component: PassengerDashboard,
 })
 
@@ -113,14 +113,17 @@ function PassengerDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container mx-auto py-8 px-4 max-w-7xl">
+        <div className="flex h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="container mx-auto py-8 px-4 max-w-7xl">
+      <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header with greeting */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -367,6 +370,7 @@ function PassengerDashboard() {
           <ComplaintForm />
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }
