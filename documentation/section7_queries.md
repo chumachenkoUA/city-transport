@@ -1,8 +1,10 @@
-# 7 ЗАПИТИ ДО БАЗИ ДАНИХ ДЛЯ РОЗВ-ЯЗАННЯ ПОСТАВЛЕНИХ ЗАДАЧ
+# 7 ЗАПИТИ ДО БАЗИ ДАНИХ ДЛЯ РОЗВ’ЯЗАННЯ ПОСТАВЛЕНИХ ЗАДАЧ
 
-У розділі наведено приклади SQL-запитів і викликів функцій, що реалізують задачі користувачів системи міського транспорту. Доступ до даних організовано через VIEW і SECURITY DEFINER функції відповідних API-схем, тому приклади орієнтовані саме на ці об-єкти. Запити згруповано за ролями користувачів і відповідають задачам з документа "Задачі користувачів а також опис сутностей".
+У розділі наведено приклади SQL-запитів і викликів функцій, що реалізують задачі користувачів системи міського транспорту. Доступ до даних організовано через VIEW і SECURITY DEFINER функції відповідних API-схем, тому приклади орієнтовані саме на ці об’єкти. Запити згруповано за ролями користувачів і відповідають задачам з документа "Задачі користувачів а також опис сутностей".
 
 ## 7.1 Гість
+
+Для розв’язання задач ролі гість використовуються запити SELECT до представлень (VIEW) та виклики збережених функцій `guest_api.find_nearby_stops()`, `guest_api.plan_route()` і `guest_api.submit_complaint()`. У прикладах показано роботу з `guest_api.v_routes`, `guest_api.v_schedules` та функціями планування і подання звернень.
 
 Задача: перегляд найближчих зупинок за координатами користувача.
 
@@ -68,11 +70,13 @@ SELECT guest_api.submit_complaint(
 
 Лістинг 7.4 - Подання скарги або пропозиції гостем
 
-Функція `guest_api.submit_complaint` приймає тип звернення, текст, контактні дані та опціональні дані про маршрут і транспорт. Запис створюється у `public.complaints_suggestions` зі статусом "Подано" і поточним часом. Для гостя user_id дорівнює NULL, що відповідає анонімному зверненню. Параметри :route_number, :transport_type та :vehicle_number дозволяють пов-язати скаргу з конкретним маршрутом або транспортом.
+Функція `guest_api.submit_complaint` приймає тип звернення, текст, контактні дані та опціональні дані про маршрут і транспорт. Запис створюється у `public.complaints_suggestions` зі статусом "Подано" і поточним часом. Для гостя user_id дорівнює NULL, що відповідає анонімному зверненню. Параметри :route_number, :transport_type та :vehicle_number дозволяють пов’язати скаргу з конкретним маршрутом або транспортом.
 
 Джерело: 0002_guest_api.sql
 
 ## 7.2 Пасажир
+
+Для розв’язання задач ролі пасажир використовуються запити SELECT до VIEW та виклики функцій `passenger_api.submit_fine_appeal()` і `passenger_api.pay_fine()`. У прикладах показано `passenger_api.v_my_cards`, `passenger_api.v_my_trips`, апеляцію та оплату штрафу, а також політику RLS.
 
 Задача: переглянути транспортну картку та баланс.
 
@@ -97,7 +101,7 @@ ORDER BY purchased_at DESC;
 
 Лістинг 7.6 - Перегляд історії поїздок
 
-`passenger_api.v_my_trips` об-єднує квитки, рейси та маршрути, тому пасажир одразу отримує контекст поїздки. Вибірка обмежена поточним користувачем через session_user. Поля route_number і transport_type зручні для відображення у застосунку. Сортування за purchased_at DESC показує останні поїздки першими.
+`passenger_api.v_my_trips` об’єднує квитки, рейси та маршрути, тому пасажир одразу отримує контекст поїздки. Вибірка обмежена поточним користувачем через session_user. Поля route_number і transport_type зручні для відображення у застосунку. Сортування за purchased_at DESC показує останні поїздки першими.
 
 Джерело: 0003_passenger_api.sql
 
@@ -144,6 +148,8 @@ USING (user_id = (SELECT id FROM users WHERE login = session_user));
 Джерело: 0001_api_structure.sql
 
 ## 7.3 Водій
+
+Для розв’язання задач ролі водій використовуються SELECT до `driver_api.v_my_today_schedule` і `guest_api.v_route_stops_ordered`, а також виклики функцій `driver_api.start_trip()` та `driver_api.finish_trip()`. У прикладах демонструються графік, зупинки маршруту та фіксація початку і завершення рейсу.
 
 Задача: перегляд робочого графіка на сьогодні.
 
@@ -201,6 +207,8 @@ SELECT driver_api.finish_trip(:ended_at) AS trip_id;
 
 ## 7.4 Диспетчер
 
+Для розв’язання задач ролі диспетчер використовуються виклики функцій `dispatcher_api.create_schedule()` і `dispatcher_api.assign_driver_v2()`, а також SELECT до `dispatcher_api.v_schedules_list` і `dispatcher_api.v_vehicle_monitoring`. У прикладах показано створення розкладу, перегляд розкладів, призначення водія та моніторинг транспорту.
+
 Задача: створення нового розкладу.
 
 ```sql
@@ -237,7 +245,7 @@ WHERE id = :schedule_id;
 
 Лістинг 7.15 - Перегляд розкладу за ідентифікатором
 
-`dispatcher_api.v_schedules_list` об-єднує розклади з маршрутами та транспортом. Умовою WHERE відбирається потрібний запис за :schedule_id. Поля work_start_time, work_end_time та interval_min відповідають основним параметрам руху. Це дозволяє показати деталі розкладу без прямого доступу до `public.schedules`.
+`dispatcher_api.v_schedules_list` об’єднує розклади з маршрутами та транспортом. Умовою WHERE відбирається потрібний запис за :schedule_id. Поля work_start_time, work_end_time та interval_min відповідають основним параметрам руху. Це дозволяє показати деталі розкладу без прямого доступу до `public.schedules`.
 
 Джерело: 0005_dispatcher_api.sql
 
@@ -269,6 +277,8 @@ ORDER BY fleet_number;
 Джерело: 0005_dispatcher_api.sql
 
 ## 7.5 Контролер
+
+Для розв’язання задач ролі контролер використовуються виклики функцій `controller_api.check_card()`, `controller_api.get_active_trips()` та `controller_api.issue_fine()`. У прикладах показано перевірку картки, пошук активних рейсів і реєстрацію штрафу.
 
 Задача: перевірка транспортної картки пасажира.
 
@@ -317,6 +327,10 @@ SELECT controller_api.issue_fine(
 
 ## 7.6 Менеджер
 
+Для розв’язання задач ролі менеджер використовуються виклики функцій `manager_api.hire_driver()`, `manager_api.add_vehicle_v2()` та `manager_api.create_staff_user()`. У прикладах показано найм водія, додавання транспорту та створення облікового запису персоналу.
+
+### Аналітичні задачі
+
 Задача: прийняття на роботу водія.
 
 ```sql
@@ -346,7 +360,7 @@ SELECT manager_api.add_vehicle_v2(:fleet_number, :model_id, :route_id, NULL) AS 
 
 Лістинг 7.22 - Додавання транспортного засобу
 
-`manager_api.add_vehicle_v2` створює запис у `public.vehicles`. Функція перевіряє існування моделі та відповідного типу транспорту. Параметр :route_id пов-язує транспорт з маршрутом і використовується у плануванні рейсів. Повернений vehicle_id застосовується у розкладах і призначеннях водіїв.
+`manager_api.add_vehicle_v2` створює запис у `public.vehicles`. Функція перевіряє існування моделі та відповідного типу транспорту. Параметр :route_id пов’язує транспорт з маршрутом і використовується у плануванні рейсів. Повернений vehicle_id застосовується у розкладах і призначеннях водіїв.
 
 Джерело: 0007_manager_api.sql
 
@@ -370,6 +384,10 @@ SELECT manager_api.create_staff_user(
 Джерело: 0007_manager_api.sql
 
 ## 7.7 Представник мерії
+
+Для розв’язання задач ролі представник мерії використовуються виклики функцій `municipality_api.create_stop()`, `municipality_api.create_route_full()` та `municipality_api.get_passenger_flow()`, а також SELECT до `municipality_api.v_complaints_dashboard`. У прикладах показано створення зупинок і маршрутів, аналіз пасажиропотоку та перегляд звернень.
+
+### Аналітичні задачі
 
 Задача: створення зупинки.
 
@@ -397,7 +415,7 @@ SELECT municipality_api.create_route_full(
 
 Лістинг 7.25 - Створення маршруту з зупинками і точками
 
-Функція `municipality_api.create_route_full` створює запис у `public.routes` і наповнює таблиці `public.route_stops` та `public.route_points`. Параметри :stops_json і :points_json містять масиви зупинок та координат точок, що надходять з інтерфейсу планування. У процесі створюються зв-язки prev/next між зупинками і точками. Після вставки виконується `municipality_api.recalculate_route_stop_distances` для обчислення відстаней.
+Функція `municipality_api.create_route_full` створює запис у `public.routes` і наповнює таблиці `public.route_stops` та `public.route_points`. Параметри :stops_json і :points_json містять масиви зупинок та координат точок, що надходять з інтерфейсу планування. У процесі створюються зв’язки prev/next між зупинками і точками. Після вставки виконується `municipality_api.recalculate_route_stop_distances` для обчислення відстаней.
 
 Джерело: 0008_municipality_api.sql
 
@@ -414,6 +432,8 @@ FROM municipality_api.get_passenger_flow(:start_date, :end_date, :route_number, 
 
 Джерело: 0008_municipality_api.sql
 
+Далі наведено окремий приклад перегляду звернень через VIEW, який не є викликом функції.
+
 Задача: перегляд скарг і пропозицій за період.
 
 ```sql
@@ -425,11 +445,15 @@ ORDER BY created_at DESC;
 
 Лістинг 7.27 - Перегляд звернень громадян
 
-`municipality_api.v_complaints_dashboard` об-єднує скарги з маршрутами та транспортом. Фільтр за періодом дозволяє отримати звернення за потрібний інтервал. Поля route_number і transport_type допомагають групувати звернення по маршрутах. Цей запит використовується для аналізу якості перевезень.
+`municipality_api.v_complaints_dashboard` об’єднує скарги з маршрутами та транспортом. Фільтр за періодом дозволяє отримати звернення за потрібний інтервал. Поля route_number і transport_type допомагають групувати звернення по маршрутах. Цей запит використовується для аналізу якості перевезень.
 
 Джерело: 0008_municipality_api.sql
 
 ## 7.8 Бухгалтер
+
+Для розв’язання задач ролі бухгалтер використовуються виклики функцій `accountant_api.upsert_budget()`, `accountant_api.add_expense()` та `accountant_api.pay_salary()`, а також SELECT до `accountant_api.v_financial_report`. У прикладах показано оновлення бюджету, облік витрат, формування звіту та нарахування зарплати.
+
+### Аналітичні задачі
 
 Задача: введення або коригування місячного бюджету.
 
@@ -455,6 +479,8 @@ SELECT accountant_api.add_expense(:category, :amount, :description, :occurred_at
 
 Джерело: 0006_accountant_api.sql
 
+Далі наведено приклад читання звіту через VIEW як окремий запит аналітики.
+
 Задача: формування фінансового звіту.
 
 ```sql
@@ -470,6 +496,8 @@ ORDER BY report_date, category;
 
 Джерело: 0006_accountant_api.sql
 
+Повертаємось до викликів функцій для змін даних.
+
 Задача: нарахування заробітної плати водію.
 
 ```sql
@@ -479,6 +507,17 @@ SELECT accountant_api.pay_salary(:driver_id, :rate, :units, NULL) AS salary_paym
 Лістинг 7.31 - Нарахування зарплати
 
 Функція `accountant_api.pay_salary` створює запис у `public.salary_payments`. Вона обчислює суму з параметрів :rate і :units, якщо :total не задано. Вставка у salary_payments запускає тригер `trg_salary_expense` AFTER INSERT ON public.salary_payments, який додає витрату у `public.financial_transactions`. Повернений salary_payment_id використовується для історії виплат.
+
+Джерело: 0006_accountant_api.sql
+
+```sql
+INSERT INTO public.salary_payments (driver_id, rate, units, total, paid_at)
+VALUES (:driver_id, :rate, :units, :total, :paid_at);
+```
+
+Лістинг 7.32 - DML-запит, що запускає тригер trg_salary_expense
+
+Цей INSERT створює запис у `public.salary_payments` і запускає тригер `trg_salary_expense` AFTER INSERT. У результаті тригер викликає функцію `public.trg_salary_to_ft` та додає витрату у `public.financial_transactions`. Значення параметрів надходять з інтерфейсу бухгалтера під час виплати зарплати.
 
 Джерело: 0006_accountant_api.sql
 

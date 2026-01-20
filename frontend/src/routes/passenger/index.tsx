@@ -301,7 +301,7 @@ function PassengerDashboard() {
                     trips?.map((trip) => (
                       <TableRow key={trip.id} className="hover:bg-muted/30 transition-colors">
                         <TableCell className="font-medium text-sm">
-                          {new Date(trip.startedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
+                          {new Date(trip.purchasedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="font-mono">{trip.routeNumber}</Badge>

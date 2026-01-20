@@ -27,6 +27,16 @@ interface LoginResponse {
   roles: string[]
 }
 
+const ROLE_ROUTES = [
+  { role: 'ct_manager_role', path: '/manager' },
+  { role: 'ct_dispatcher_role', path: '/dispatcher' },
+  { role: 'ct_municipality_role', path: '/municipality' },
+  { role: 'ct_accountant_role', path: '/accountant' },
+  { role: 'ct_controller_role', path: '/controller' },
+  { role: 'ct_driver_role', path: '/driver' },
+  { role: 'ct_passenger_role', path: '/passenger' },
+] as const
+
 function LoginPage() {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -45,23 +55,8 @@ function LoginPage() {
 
       // Small delay for success animation
       setTimeout(() => {
-        if (data.roles.includes('ct_manager_role')) {
-          navigate({ to: '/manager' })
-        } else if (data.roles.includes('ct_dispatcher_role')) {
-          navigate({ to: '/dispatcher' })
-        } else if (data.roles.includes('ct_municipality_role')) {
-          navigate({ to: '/municipality' })
-        } else if (data.roles.includes('ct_accountant_role')) {
-          navigate({ to: '/accountant' })
-        } else if (data.roles.includes('ct_controller_role')) {
-          navigate({ to: '/controller' })
-        } else if (data.roles.includes('ct_driver_role')) {
-          navigate({ to: '/driver' })
-        } else if (data.roles.includes('ct_passenger_role')) {
-          navigate({ to: '/passenger' })
-        } else {
-          navigate({ to: '/' })
-        }
+        const route = ROLE_ROUTES.find(r => data.roles.includes(r.role))
+        navigate({ to: route?.path ?? '/' })
       }, 500)
     },
     onError: (err: Error) => {

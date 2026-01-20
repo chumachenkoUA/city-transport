@@ -26,7 +26,6 @@ type MyTripRow = {
   price: string;
   route_number: string;
   transport_type: string;
-  starts_at: string;
 };
 
 type MyFineRow = {
@@ -209,7 +208,7 @@ export class CtPassengerService {
 
   async getMyTrips() {
     const result = (await this.dbService.db.execute(sql`
-      select ticket_id, purchased_at, price, route_number, transport_type, starts_at 
+      select ticket_id, purchased_at, price, route_number, transport_type
       from passenger_api.v_my_trips
     `)) as unknown as { rows: MyTripRow[] };
 
@@ -218,8 +217,7 @@ export class CtPassengerService {
       routeNumber: row.route_number,
       transportType: row.transport_type,
       cost: row.price,
-      startedAt: row.starts_at,
-      endedAt: null,
+      purchasedAt: row.purchased_at,
     }));
   }
 

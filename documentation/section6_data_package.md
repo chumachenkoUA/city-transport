@@ -85,8 +85,7 @@ ALTER TABLE "tickets" ADD CONSTRAINT "tickets_card_id_transport_cards_id_fk" FOR
 ```sql
 CREATE OR REPLACE VIEW passenger_api.v_my_trips WITH (security_barrier = true) AS
 SELECT t.id as ticket_id, t.purchased_at, t.price, r.number AS route_number,
-       tt.name AS transport_type,
-       COALESCE(tr.actual_starts_at, tr.planned_starts_at) AS starts_at
+       tt.name AS transport_type
 FROM public.tickets t
 JOIN public.transport_cards tc ON tc.id = t.card_id
 JOIN public.users u ON u.id = tc.user_id
@@ -99,7 +98,7 @@ ORDER BY t.purchased_at DESC;
 
 Лістинг 6.4 - Приклад представлення passenger_api.v_my_trips
 
-Представлення passenger_api.v_my_trips надає пасажиру читання власної історії поїздок без доступу до базових таблиць. Опція security_barrier = true блокує оптимізатору переміщення умов у запит і захищає від витоків через leaky views. Фільтрація WHERE u.login = session_user прив'язує результат до поточного PostgreSQL користувача, що відповідає архітектурі thick database. JOIN по transport_cards і users гарантує, що обираються лише квитки, які належать цьому пасажиру. Дані рейсу підтягуються через trips і routes, а тип транспорту - через transport_types, щоб повернути бізнес-орієнтовані атрибути. COALESCE(tr.actual_starts_at, tr.planned_starts_at) підставляє фактичний старт, якщо він відомий, інакше плановий час. ORDER BY t.purchased_at DESC формує історію від останніх покупок, що зручно для клієнтського інтерфейсу.
+Представлення passenger_api.v_my_trips надає пасажиру читання власної історії поїздок без доступу до базових таблиць. Опція security_barrier = true блокує оптимізатору переміщення умов у запит і захищає від витоків через leaky views. Фільтрація WHERE u.login = session_user прив'язує результат до поточного PostgreSQL користувача, що відповідає архітектурі thick database. JOIN по transport_cards і users гарантує, що обираються лише квитки, які належать цьому пасажиру. Дані рейсу підтягуються через trips і routes, а тип транспорту - через transport_types, щоб повернути бізнес-орієнтовані атрибути. Представлення повертає базовий набір полів для історії покупок без додаткових розрахунків часу рейсу. ORDER BY t.purchased_at DESC формує історію від останніх покупок, що зручно для клієнтського інтерфейсу.
 
 Джерело: 0003_passenger_api.sql
 

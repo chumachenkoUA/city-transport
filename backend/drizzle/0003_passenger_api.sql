@@ -28,8 +28,7 @@ WHERE u.login = session_user;
 
 CREATE OR REPLACE VIEW passenger_api.v_my_trips WITH (security_barrier = true) AS
 SELECT t.id as ticket_id, t.purchased_at, t.price, r.number AS route_number,
-       tt.name AS transport_type,
-       COALESCE(tr.actual_starts_at, tr.planned_starts_at) AS starts_at
+       tt.name AS transport_type
 FROM public.tickets t
 JOIN public.transport_cards tc ON tc.id = t.card_id
 JOIN public.users u ON u.id = tc.user_id

@@ -26,8 +26,7 @@ export interface Trip {
   routeNumber: string;
   transportType: string;
   cost: string;
-  startedAt: string;
-  endedAt?: string;
+  purchasedAt: string;
 }
 
 export interface Fine {
